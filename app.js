@@ -3,7 +3,7 @@
 const S = {
   slides: [], sel: 0, page: 0, themeKey: 'torn_kraft', stripW: 0.81, stripY: 64, stripX: 0, view: 'live', autoExport: false, exportFmt: 'image', deckScale: 1, anchor: 'middle',
   custom: null, customMode: 'dark', customDim: null, fileName: '簡報',
-  fonts: { head: 'theme', body: 'theme' }, localFonts: [], lineGap: null, live: {}, liveScope: 'all',
+  fonts: { head: 'theme', body: 'theme', scr: 'same' }, shadow: false, blocks: false, localFonts: [], lineGap: null, live: {}, liveScope: 'all',
 };
 const $ = id => document.getElementById(id);
 const measureCtx = mk(10, 10).getContext('2d');
@@ -12,13 +12,42 @@ const NO_START = new Set('，。、；：！？」』）》〉,.;:!?)”’…'.
 const NO_END = new Set('「『（《〈([“‘'.split(''));
 
 // ---------- 取得目前主題（含自訂背景圖）----------
+const LN = 1.448; // Noto 系列字型的單行高度（PowerPoint「多行 1.0」的基準）
+const lumOf = hex => { const h = String(hex).replace('#', ''); if (h.length < 6) return .5; const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16); return (.299 * r + .587 * g + .114 * b) / 255; };
+const imgCache = new Map();
+function loadBgImg(src) {
+  return new Promise(res => {
+    if (imgCache.has(src)) return res(imgCache.get(src));
+    const im = new Image();
+    im.onload = () => { const c = mk(32, 18), x = c.getContext('2d'); x.drawImage(im, 0, 0, 32, 18); const d = x.getImageData(0, 0, 32, 18).data; let t = 0; for (let i = 0; i < d.length; i += 4) t += .299 * d[i] + .587 * d[i + 1] + .114 * d[i + 2]; const e = { im, lum: t / (d.length / 4) / 255 }; imgCache.set(src, e); res(e); };
+    im.onerror = () => res(null); im.src = src;
+  });
+}
+function slideBgTheme(bg) {
+  if (bg.t === 'theme' && THEMES[bg.k]) return Object.assign({ key: bg.k }, THEMES[bg.k]);
+  if (bg.t === 'color') {
+    const dark = lumOf(bg.c) < .5, base = THEMES[dark ? 'dusk' : 'paper'];
+    return Object.assign({}, base, { name: '純色', key: 'color:' + bg.c, flat: true, dark, ownVariants: false, bg(c) { c.fillStyle = bg.c; c.fillRect(0, 0, W, H); } });
+  }
+  if (bg.t === 'img') {
+    const e = imgCache.get(bg.src), dark = e ? e.lum < .55 : true, base = THEMES[dark ? 'dusk' : 'paper'], dim = bg.dim == null ? .45 : bg.dim;
+    return Object.assign({}, base, { name: '圖片', key: 'img:' + bg.src.length + ':' + dim + (e ? 1 : 0), flat: true, dark, ownVariants: false,
+      bg(c) {
+        if (e) { const im = e.im, sc = Math.max(W / im.width, H / im.height), w = im.width * sc, h = im.height * sc; c.drawImage(im, (W - w) / 2, (H - h) / 2, w, h); }
+        else { c.fillStyle = '#222'; c.fillRect(0, 0, W, H); }
+        c.fillStyle = dark ? `rgba(10,8,6,${dim})` : `rgba(255,255,255,${dim})`; c.fillRect(0, 0, W, H);
+      } });
+  }
+  return null;
+}
 const dimOf = () => S.customDim == null ? (S.customMode === 'light' ? .62 : .58) : S.customDim;
-function curTheme() {
+function curTheme(slide) {
+  if (slide && slide.bg) { const t = slideBgTheme(slide.bg); if (t) return t; }
   if (S.custom) {
     const base = THEMES[S.customMode === 'dark' ? 'dusk' : 'paper'];
     const light = S.customMode === 'light';
     return Object.assign({}, base, {
-      name: '自訂背景', key: 'custom',
+      name: '自訂背景', key: 'custom', flat: true,
       bg(c) {
         const im = S.custom, sc = Math.max(W / im.width, H / im.height), w = im.width * sc, h = im.height * sc;
         c.drawImage(im, (W - w) / 2, (H - h) / 2, w, h);
@@ -29,12 +58,12 @@ function curTheme() {
   return Object.assign({ key: S.themeKey }, THEMES[S.themeKey]);
 }
 const bgCache = new Map();
-function getBg(v, p = 0) {
-  const t = curTheme(), key = [t.key, v, p % 2, S.customMode, S.custom ? S.custom.src.length : '', dimOf()].join('|');
+function getBg(v, p = 0, slide) {
+  const t = curTheme(slide), key = [t.key, v, p % 2, S.customMode, S.custom ? S.custom.src.length : '', dimOf()].join('|');
   if (!bgCache.has(key)) {
     const c = mk(W, H), x = c.getContext('2d');
-    if (v === 'spot' && t.key !== 'custom') drawSpot(x, t, p % 2);
-    else { t.bg.call(t, x, t.ownVariants ? v : (v === 'title' ? 'title' : 'content')); if (!t.ownVariants && t.key !== 'custom') decorate(x, t, v, p); }
+    if (v === 'spot' && !t.flat) drawSpot(x, t, p % 2);
+    else { t.bg.call(t, x, t.ownVariants ? v : (v === 'title' ? 'title' : 'content')); if (!t.ownVariants && !t.flat) decorate(x, t, v, p); }
     bgCache.set(key, c);
   }
   return bgCache.get(key);
@@ -65,8 +94,10 @@ function fontOpt(id) {
   const f = S.localFonts.find(x => 'L:' + x.fam === id);
   return f && f.ok !== false ? { id, label: '本機：' + f.name, stack: `"${f.fam}","Noto Sans TC",sans-serif`, w: 400, rw: 400, face: f.name, bold: false } : null;
 }
-const fnt = (weight, size, head, red) => {
-  const o = fontOpt(head ? S.fonts.head : S.fonts.body);
+const isScripture = runs => { const t = runs.map(r => r.t).join(''); return /[（(][^）)]{1,14}\d+\s*[:：]\s*\d/.test(t) || /^\s*[「『]/.test(t); };
+const fontIdOf = (head, scr) => head ? S.fonts.head : (scr && S.fonts.scr && S.fonts.scr !== 'same' ? S.fonts.scr : S.fonts.body);
+const fnt = (weight, size, head, red, scr) => {
+  const o = fontOpt(fontIdOf(head, scr));
   if (o) return `${red ? o.rw : o.w} ${size}px ${o.stack}`;
   return `${weight} ${size}px ${head && isSerif() ? SERIF : FONT}`;
 };
@@ -78,7 +109,8 @@ function layout(paras, size, maxW, o) {
     const head = o.headRule(pi, paras);
     const fs = head ? Math.round(size * o.headScale) : size;
     const wt = head ? 700 : 500;
-    const base = fnt(wt, fs, head, false), redf = fnt(700, fs, head, true);
+    const scr = !head && isScripture(runs);
+    const base = fnt(wt, fs, head, false, scr), redf = fnt(700, fs, head, true, scr);
     const flat = [];
     runs.forEach(r => tokenize(r.t.replace(/[\n\v]/g, ' ')).forEach(tk => flat.push({ t: tk, red: r.red })));
     let cur = [], cw = 0;
@@ -87,13 +119,13 @@ function layout(paras, size, maxW, o) {
       if (cur.length && cw + w > maxW && !NO_START.has(tk.t)) {
         const carry = [];
         while (cur.length && NO_END.has(cur[cur.length - 1].t)) carry.unshift(cur.pop());
-        lines.push({ pi, segs: cur, size: fs, head, w: cw });
+        lines.push({ pi, segs: cur, size: fs, head, scr, w: cw });
         cur = carry; cw = carry.reduce((a, s) => a + tw(s.red ? redf : base, s.t), 0);
       }
       if (tk.t === ' ' && !cur.length) continue;
       cur.push(tk); cw += w;
     }
-    if (cur.length) lines.push({ pi, segs: cur, size: fs, head, w: cw });
+    if (cur.length) lines.push({ pi, segs: cur, size: fs, head, scr, w: cw });
   });
   lines.forEach(l => { l.h = l.size * o.lineGap; });
   return lines;
@@ -105,12 +137,15 @@ function blockH(lines, o) {
 }
 function drawLines(c, lines, x, y, o, T, align = 'left', boxW = 0) {
   c.textBaseline = 'middle';
+  const shadowOn = !!o.shadow && lumOf(T.text) > .6;
   lines.forEach((l, i) => {
-    const wt = l.head ? 700 : 500, base = fnt(wt, l.size, l.head, false), redf = fnt(700, l.size, l.head, true);
+    const wt = l.head ? 700 : 500, base = fnt(wt, l.size, l.head, false, l.scr), redf = fnt(700, l.size, l.head, true, l.scr);
     let px = align === 'center' ? x + (boxW - l.w) / 2 : align === 'right' ? x + boxW - l.w : x;
     const cy = y + l.h / 2;
     l.segs.forEach(s => {
-      c.font = s.red ? redf : base; c.fillStyle = s.red ? T.red : T.text; c.fillText(s.t, px, cy);
+      c.font = s.red ? redf : base; c.fillStyle = (l.head && o.headColor) ? o.headColor : s.red ? T.red : T.text;
+      if (shadowOn) { c.shadowColor = 'rgba(0,0,0,.6)'; c.shadowBlur = 12; c.shadowOffsetY = 3; }
+      c.fillText(s.t, px, cy); if (shadowOn) { c.shadowColor = 'transparent'; c.shadowBlur = 0; c.shadowOffsetY = 0; }
       px += tw(s.red ? redf : base, s.t);
     });
     y += l.h; if (lines[i + 1] && lines[i + 1].pi !== l.pi) y += l.size * o.paraGap;
@@ -122,7 +157,7 @@ const plain = p => p.map(r => r.t).join('');
 function liveOpts(isTitle, v) {
   return {
     headRule: (pi, ps) => v === 'spark' ? false : isTitle ? pi === 0 : (pi === 0 && ps.length > 1 && plain(ps[0]).length <= 28),
-    headScale: isTitle ? 1.9 : 1.16, lineGap: S.lineGap || 1.42, paraGap: .45,
+    headScale: isTitle ? 1.9 : 1.16, lineGap: S.lineGap || 1.1 * LN, paraGap: .45, shadow: S.shadow,
   };
 }
 function liveCfg(slide, isTitle, v) {
@@ -163,10 +198,10 @@ function deckSize() {
   return _deck.val;
 }
 function drawLive(cv, slide, idx, noText) {
-  const v = autoVariant(slide, idx), T = slideTheme(curTheme(), v), c = cv.getContext('2d');
+  const v = autoVariant(slide, idx), T = slideTheme(curTheme(slide), v), c = cv.getContext('2d');
   const isTitle = v === 'title', isSpark = v === 'spark';
   c.clearRect(0, 0, W, H);
-  c.drawImage(getBg(v, idx), 0, 0);
+  c.drawImage(getBg(v, idx, slide), 0, 0);
   const o = liveOpts(isTitle, v), fs = slide.fs || 1, L = liveCfg(slide, isTitle, v), sf = safeOf(T, v);
   let paras = slide.paras, numeral = null;
   if (v === 'num') {
@@ -184,6 +219,17 @@ function drawLive(cv, slide, idx, noText) {
   const x = (align === 'left' && !isTitle && !isSpark ? 160 : (W - maxW - shift) / 2) + L.dx + shift;
   const y = ((S.anchor === 'top' && !isTitle && !isSpark) ? sf.t + 24 : Math.max(sf.t, sf.t + (maxH - h) / 2 - 6)) + L.dy;
   const numSize = numeral ? Math.round(lines[0].size * 2.1) : 0, numX = x - shift + 6, numY = numeral ? y + lines[0].h / 2 + lines[0].size * .1 : 0;
+  if (S.blocks && !isTitle && !isSpark) {
+    const gs = textGroups(lines, y, o), multi = gs.length > 1; let anyHead = false;
+    gs.forEach(g => {
+      if (!(g.head || (g.scr && multi))) return;
+      const bw = Math.max(...g.lines.map(l => l.w)), bx = align === 'center' ? x + (maxW - bw) / 2 : align === 'right' ? x + maxW - bw : x;
+      c.beginPath(); if (c.roundRect) c.roundRect(bx - 36, g.y - 9, bw + 72, g.h + 18, 14); else c.rect(bx - 36, g.y - 9, bw + 72, g.h + 18);
+      if (g.head) { anyHead = true; c.fillStyle = hexA(T.accent, .94); } else c.fillStyle = hexA(T.text, .09);
+      c.fill();
+    });
+    o.headColor = anyHead ? (lumOf(T.accent) > .55 ? '#1E1914' : '#FBF6EC') : null;
+  }
   if (!noText) {
     drawLines(c, lines, x, y, o, T, align, maxW);
     if (numeral) { c.font = `italic 700 ${numSize}px ${SERIF}`; c.fillStyle = T.accent; c.textBaseline = 'middle'; c.fillText(numeral, numX, numY); }
@@ -194,7 +240,7 @@ function drawLive(cv, slide, idx, noText) {
 // ---------- 長條版 ----------
 const STRIP = { padL: 100, padR: 140, padT: 46, padB: 46, maxH: 340 };
 function stripOpts() {
-  return { headRule: (pi, ps) => pi === 0 && ps.length > 1, headScale: 1.2, lineGap: S.lineGap ? Math.max(1.1, S.lineGap - .1) : 1.4, paraGap: .3 };
+  return { headRule: (pi, ps) => pi === 0 && ps.length > 1, headScale: 1.2, lineGap: Math.max(1.2, (S.lineGap || 1.1 * LN) - .2), paraGap: .3 };
 }
 function stripPages(slide) {
   const o = stripOpts(), cardW = Math.round(W * S.stripW), tw_ = cardW - STRIP.padL - STRIP.padR;
@@ -283,7 +329,7 @@ async function ensureFonts() {
   const fresh = [...all].filter(ch => !loadedChars.has(ch)); if (!fresh.length) return false;
   const sample = fresh.join(''); fresh.forEach(ch => loadedChars.add(ch));
   const jobs = [400, 500, 700].map(w => document.fonts.load(`${w} 40px "Noto Sans TC"`, sample)).concat([document.fonts.load('700 40px "Noto Serif TC"', sample)]);
-  for (const id of [S.fonts.head, S.fonts.body]) { const o = fontOpt(id); if (o) [o.w, o.rw].forEach(w => jobs.push(document.fonts.load(`${w} 40px ${o.stack}`, sample))); }
+  for (const id of [S.fonts.head, S.fonts.body, S.fonts.scr]) { const o = fontOpt(id); if (o) [o.w, o.rw].forEach(w => jobs.push(document.fonts.load(`${w} 40px ${o.stack}`, sample))); }
   try { await Promise.allSettled(jobs); } catch (e) { }
   wcache.clear(); return true;
 }
@@ -328,7 +374,7 @@ function select(i) {
   const sl = S.slides[i];
   $('txt').value = sl.paras.map(paraToStr).join('\n');
   $('fs').value = Math.round((sl.fs || 1) * 100); $('sfs').value = Math.round((sl.sfs || 1) * 100);
-  syncOut(); renderMain();
+  syncOut(); renderMain(); syncSlideBgUI();
   const th = document.querySelectorAll('.thumb')[i]; if (th) th.scrollIntoView({ block: 'nearest' });
 }
 const VIEW_HINT = {
@@ -359,7 +405,7 @@ function editLive(key, val) {
 function syncOut() {
   syncLiveUI();
   $('fsO').textContent = $('fs').value + '%'; $('sfsO').textContent = $('sfs').value + '%';
-  $('lineGapO').textContent = S.lineGap ? S.lineGap.toFixed(2) : '預設'; $('stripXO').textContent = S.stripX; $('stripX').value = S.stripX; $('stripY').value = S.stripY; $('stripYO').textContent = S.stripY; $('stripWO').textContent = Math.round(S.stripW * 100) + '%';
+  $('lineGapO').textContent = (S.lineGap ? S.lineGap / LN : 1.1).toFixed(2); $('lineGap').value = S.lineGap ? S.lineGap / LN : 1.1; $('stripXO').textContent = S.stripX; $('stripX').value = S.stripX; $('stripY').value = S.stripY; $('stripYO').textContent = S.stripY; $('stripWO').textContent = Math.round(S.stripW * 100) + '%';
 }
 const HUE = {
   paper: 'warm', dusk: 'cool', morning: 'warm', olive: 'green', minimal: 'neutral', burgundy: 'warm', sage: 'green', terracotta: 'warm',
@@ -442,13 +488,14 @@ async function registerLocal(name, fam) {
   return f;
 }
 function buildFontSelects() {
-  [['fontHead', 'head'], ['fontBody', 'body']].forEach(([id, k]) => {
+  [['fontHead', 'head'], ['fontBody', 'body'], ['fontScr', 'scr']].forEach(([id, k]) => {
+    const first = k === 'scr' ? 'same' : 'theme';
     const sel = $(id); sel.innerHTML = '';
     const add = (v, t, dis) => { const o = document.createElement('option'); o.value = v; o.textContent = t; if (dis) o.disabled = true; sel.appendChild(o); };
-    add('theme', '跟著背景主題');
+    add(first, k === 'scr' ? '跟內文一樣' : '跟著背景主題');
     FONT_OPTS.forEach(o => add(o.id, o.label));
     S.localFonts.forEach(f => add('L:' + f.fam, '本機：' + f.name + (f.ok === false ? '（找不到）' : ''), f.ok === false));
-    sel.value = fontOpt(S.fonts[k]) || S.fonts[k] === 'theme' ? S.fonts[k] : 'theme';
+    sel.value = (fontOpt(S.fonts[k]) || S.fonts[k] === first) ? S.fonts[k] : first;
   });
 }
 async function afterFontChange() {
@@ -475,13 +522,13 @@ function renderLocalList() {
 }
 
 // ---------- 記住上次的樣式 ----------
-const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, deckScale: S.deckScale, anchor: S.anchor, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
+const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, deckScale: S.deckScale, anchor: S.anchor, shadow: S.shadow, blocks: S.blocks, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
 async function applyStyle(v) {
   if (!v) return;
-  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: !!v.autoExport, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: v.anchor || 'middle' });
+  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: !!v.autoExport, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: v.anchor || 'middle', shadow: !!v.shadow, blocks: !!v.blocks });
   if (v.fonts) S.fonts = v.fonts;
   for (const f of (v.localFonts || [])) await registerLocal(f.name, f.fam);
-  if (S.lineGap) $('lineGap').value = S.lineGap;
+  $('optShadow').checked = !!S.shadow; $('optBlocks').checked = !!S.blocks;
   $('stripW').value = Math.round(S.stripW * 100); $('autoExport').checked = S.autoExport; $('exportFmt').value = S.exportFmt; $('deckScale').value = Math.round(S.deckScale * 100);
   buildFontSelects(); buildThemes(); syncOut();
 }
@@ -493,7 +540,9 @@ let saveT;
 function save() {
   clearTimeout(saveT); saveT = setTimeout(() => {
     try { localStorage.setItem('ppt-web-style', JSON.stringify(styleObj())); } catch (e) { }
-    try { localStorage.setItem('ppt-web-v1', JSON.stringify({ slides: S.slides, themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, live: S.live, fileName: S.fileName, fonts: S.fonts, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) })); } catch (e) { }
+    const mk1 = sl => ({ slides: sl, themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, live: S.live, fileName: S.fileName, fonts: S.fonts, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
+    try { localStorage.setItem('ppt-web-v1', JSON.stringify(mk1(S.slides))); }
+    catch (e) { try { localStorage.setItem('ppt-web-v1', JSON.stringify(mk1(S.slides.map(x => x.bg && x.bg.t === 'img' ? Object.assign({}, x, { bg: undefined }) : x)))); } catch (e2) { } }
   }, 300);
 }
 let redrawT;
@@ -504,6 +553,7 @@ function redrawSoon() { clearTimeout(redrawT); redrawT = setTimeout(renderMain, 
 async function start(slides, name, live) {
   S.slides = slides; S.live = live || {}; S.sel = 0; S.page = 0; S.fileName = name.replace(/\.pptx$/i, '');
   $('drop').hidden = true; $('editor').hidden = false; $('viewHint').textContent = VIEW_HINT[S.view]; $('sideEmpty').hidden = true; $('sideBody').hidden = false; $('btnExport').disabled = false; $('btnZip').disabled = false;
+  await Promise.all(slides.filter(x => x.bg && x.bg.t === 'img').map(x => loadBgImg(x.bg.src)));
   await ensureFonts(); bgCache.clear(); buildCats(); buildThemes(); buildList(); select(0); save();
 }
 async function loadFile(f) {
@@ -563,32 +613,32 @@ const PX_IN = 144, inch = px => +(px / PX_IN).toFixed(4), ptOf = px => +(px * .5
 function textGroups(lines, y, o) {
   const gs = []; let cur = null;
   lines.forEach((l, i) => {
-    if (!cur || cur.pi !== l.pi) { cur = { pi: l.pi, y, size: l.size, head: l.head, lines: [], h: 0 }; gs.push(cur); }
+    if (!cur || cur.pi !== l.pi) { cur = { pi: l.pi, y, size: l.size, head: l.head, scr: l.scr, lines: [], h: 0 }; gs.push(cur); }
     cur.lines.push(l); cur.h += l.h; y += l.h;
     if (lines[i + 1] && lines[i + 1].pi !== l.pi) y += l.size * o.paraGap;
   });
   return gs;
 }
-function faceOf(head) {
-  const o = fontOpt(head ? S.fonts.head : S.fonts.body);
+function faceOf(head, scr) {
+  const o = fontOpt(fontIdOf(head, scr));
   if (o) return { face: o.face, bold: !!o.bold };
   return { face: head && isSerif() ? 'Noto Serif TC' : 'Noto Sans TC', bold: !!head };
 }
 function addTextGroups(sl, lines, y, o, x, w, align, T) {
   textGroups(lines, y, o).forEach(g => {
-    const f = faceOf(g.head), runs = [];
+    const f = faceOf(g.head, g.scr), runs = [], sh = !!o.shadow && lumOf(T.text) > .6;
     g.lines.forEach((l, li) => {
       let last = null;
       l.segs.forEach(s => {
         const key = s.red ? 'r' : 't';
         if (last && last.key === key && !last.fresh) { last.run.text += s.t; return; }
-        const opt = { color: hexNo(s.red ? T.red : T.text), bold: f.bold || !!s.red, fontFace: f.face };
+        const opt = { color: hexNo((g.head && o.headColor) ? o.headColor : s.red ? T.red : T.text), bold: f.bold || !!s.red, fontFace: f.face };
         if (li > 0 && !last) opt.softBreakBefore = true;
         const run = { text: s.t, options: opt }; runs.push(run); last = { key, run };
       });
     });
     const slack = w * .14, bx = align === 'center' ? x - slack / 2 : align === 'right' ? x - slack : x;
-    sl.addText(runs, { x: inch(bx), y: inch(g.y), w: inch(w + slack), h: inch(g.h), margin: 0, valign: 'top', align, fontSize: ptOf(g.size), lineSpacing: ptOf(g.lines[0].h), wrap: true, fit: 'none' });
+    sl.addText(runs, { x: inch(bx), y: inch(g.y), w: inch(w + slack), h: inch(g.h), margin: 0, valign: 'top', align, fontSize: ptOf(g.size), lineSpacingMultiple: +(g.lines[0].h / (g.size * LN)).toFixed(2), wrap: true, fit: 'none', ...(sh ? { shadow: { type: 'outer', color: '000000', opacity: .6, blur: 6, offset: 2, angle: 90 } } : {}) });
   });
 }
 async function exportEditable() {
@@ -654,8 +704,8 @@ $('btnDel').onclick = () => {
 };
 $('fs').oninput = () => { S.slides[S.sel].fs = $('fs').value / 100; syncOut(); redrawSoon(); };
 $('sfs').oninput = () => { S.slides[S.sel].sfs = $('sfs').value / 100; syncOut(); redrawSoon(); };
-$('lineGap').oninput = () => { S.lineGap = +$('lineGap').value; wcache.clear(); syncOut(); S.page = 0; redrawSoon(); };
-$('lineGapReset').onclick = () => { S.lineGap = null; $('lineGap').value = 1.5; wcache.clear(); syncOut(); S.page = 0; redrawSoon(); };
+$('lineGap').oninput = () => { S.lineGap = +$('lineGap').value * LN; wcache.clear(); syncOut(); S.page = 0; redrawSoon(); };
+$('lineGapReset').onclick = () => { S.lineGap = null; $('lineGap').value = 1.1; wcache.clear(); syncOut(); S.page = 0; redrawSoon(); };
 $('stripY').oninput = () => { S.stripY = +$('stripY').value; syncOut(); redrawSoon(); };
 $('stripW').oninput = () => { S.stripW = $('stripW').value / 100; syncOut(); S.page = 0; redrawSoon(); };
 $('stripW').onchange = () => buildList();
@@ -675,9 +725,55 @@ document.querySelectorAll('#bgMode .pill').forEach(b => b.onclick = () => {
 $('bgDim').oninput = () => { S.customDim = $('bgDim').value / 100; syncBgUi(); bgCache.clear(); redrawSoon(); saveBg(); };
 syncBgUi();
 
+// ---------- 單頁背景 ----------
+const SW = ['#FFFFFF', '#F4EFE6', '#E6E8EB', '#2A2C30', '#111214'];
+function syncSlideBgUI() {
+  const sl = S.slides[S.sel]; if (!sl || !$('slBgType')) return; const b = sl.bg;
+  $('slBgType').value = b ? b.t : '';
+  $('slBgColor').hidden = !(b && b.t === 'color'); $('slBgTheme').hidden = !(b && b.t === 'theme'); $('slBgImg').hidden = !(b && b.t === 'img');
+  if (b && b.t === 'color') document.querySelectorAll('#slBgColor .sw').forEach(x => x.classList.toggle('sel', x.dataset.c.toLowerCase() === b.c.toLowerCase()));
+  if (b && b.t === 'theme') $('slBgThemeSel').value = b.k;
+  if (b && b.t === 'img') { const d = Math.round((b.dim == null ? .45 : b.dim) * 100); $('slBgDim').value = d; $('slBgDimO').textContent = d + '%'; }
+}
+function setSlideBg(b) {
+  const sl = S.slides[S.sel]; if (!sl) return;
+  if (b) sl.bg = b; else delete sl.bg;
+  syncSlideBgUI(); renderMain(); renderThumb(S.sel); save();
+}
+(function buildSlideBgUI() {
+  const box = $('slBgColor');
+  SW.forEach(c => { const b = document.createElement('button'); b.className = 'sw'; b.dataset.c = c; b.style.background = c; b.title = c; b.onclick = () => setSlideBg({ t: 'color', c }); box.appendChild(b); });
+  const pick = document.createElement('input'); pick.type = 'color'; pick.value = '#F4EFE6'; pick.title = '自選顏色'; pick.oninput = () => setSlideBg({ t: 'color', c: pick.value }); box.appendChild(pick);
+  const sel = $('slBgThemeSel'); Object.entries(THEMES).forEach(([k, t]) => { const o = document.createElement('option'); o.value = k; o.textContent = t.name; sel.appendChild(o); });
+  sel.onchange = () => setSlideBg({ t: 'theme', k: sel.value });
+  $('slBgType').onchange = () => {
+    const sl = S.slides[S.sel], v = $('slBgType').value, cur = sl.bg;
+    if (!v) return setSlideBg(null);
+    if (v === 'color') return setSlideBg({ t: 'color', c: cur && cur.t === 'color' ? cur.c : '#F4EFE6' });
+    if (v === 'theme') return setSlideBg({ t: 'theme', k: cur && cur.t === 'theme' ? cur.k : S.themeKey });
+    if (v === 'img') { if (cur && cur.t === 'img') return; syncSlideBgUI(); $('slBgFile').click(); }
+  };
+  $('slBgPick').onclick = () => $('slBgFile').click();
+  $('slBgFile').onchange = e => {
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    const im = new Image();
+    im.onload = async () => {
+      const c = mk(1280, 720), x = c.getContext('2d'), sc = Math.max(1280 / im.width, 720 / im.height);
+      x.drawImage(im, (1280 - im.width * sc) / 2, (720 - im.height * sc) / 2, im.width * sc, im.height * sc);
+      const src = c.toDataURL('image/jpeg', .78); await loadBgImg(src);
+      const cur = S.slides[S.sel].bg; setSlideBg({ t: 'img', src, dim: cur && cur.t === 'img' && cur.dim != null ? cur.dim : .45 });
+    };
+    im.src = URL.createObjectURL(f);
+  };
+  $('slBgDim').oninput = () => { const sl = S.slides[S.sel]; if (sl.bg && sl.bg.t === 'img') { sl.bg.dim = $('slBgDim').value / 100; syncSlideBgUI(); redrawSoon(); } };
+  $('optShadow').onchange = () => { S.shadow = $('optShadow').checked; redrawSoon(); };
+  $('optBlocks').onchange = () => { S.blocks = $('optBlocks').checked; redrawSoon(); };
+})();
+
 // ---------- 啟動：還原上次內容 ----------
 $('fontHead').onchange = e => { S.fonts.head = e.target.value; afterFontChange(); };
 $('fontBody').onchange = e => { S.fonts.body = e.target.value; afterFontChange(); };
+$('fontScr').onchange = e => { S.fonts.scr = e.target.value; afterFontChange(); };
 $('btnLocalAdd').onclick = async () => { const f = await addLocalFontByName($('localName').value); if (f && f.ok) { $('localName').value = ''; save(); } };
 $('localName').onkeydown = e => { if (e.key === 'Enter') $('btnLocalAdd').click(); };
 $('localFilter').oninput = renderLocalList;

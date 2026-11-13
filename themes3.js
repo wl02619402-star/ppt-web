@@ -16,7 +16,7 @@ function autoVariant(sl, idx) {
   return ['plain', 'band', 'rule', 'brackets', 'plain', 'rule'][idx % 6];
 }
 function slideTheme(T, v) {
-  return v === 'spot' ? Object.assign({}, T, { text: '#F7F0E6', red: '#FF9C86', dark: true }) : T;
+  return v === 'spot' && !T.flat ? Object.assign({}, T, { text: '#F7F0E6', red: '#FF9C86', dark: true }) : T;
 }
 
 // ---- 通用裝飾（疊在任何一套背景上）----

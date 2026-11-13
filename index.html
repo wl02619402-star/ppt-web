@@ -147,6 +147,10 @@ input[type=range]{width:100%;accent-color:var(--ink2);margin:0}
 .bgup.has{border-style:solid;border-color:var(--accent)}
 .bgthumb{width:96px;flex:none}.bgthumb canvas{display:block;width:100%;aspect-ratio:16/9;outline:1px solid var(--line2)}
 .bgup-body{flex:1;min-width:0}
+.chk{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13px}
+.sw{width:28px;height:28px;border-radius:4px;border:1px solid var(--line2);padding:0}
+.sw.sel{outline:2px solid var(--accent);outline-offset:1px}
+input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2);background:none}
 .themes{max-height:360px;overflow-y:auto;padding-right:4px}
 
 #toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,8px);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:4px;font-size:13px;opacity:0;transition:.2s;pointer-events:none;z-index:20}
@@ -245,6 +249,23 @@ input[type=range]{width:100%;accent-color:var(--ink2);margin:0}
           <div class="hint">同一套背景會依內容自動換版型：標題頁、短句、編號重點、一般頁。想自己指定就在這裡選。</div>
         </div>
         <div class="sec">
+          <h3>這一頁的背景</h3>
+          <select id="slBgType">
+            <option value="">跟全部頁面一樣</option>
+            <option value="color">純色（只放圖片的頁面用）</option>
+            <option value="theme">換成別的背景</option>
+            <option value="img">用自己的圖</option>
+          </select>
+          <div id="slBgColor" class="row" style="margin-top:8px" hidden></div>
+          <div id="slBgTheme" style="margin-top:8px" hidden><select id="slBgThemeSel"></select></div>
+          <div id="slBgImg" style="margin-top:8px" hidden>
+            <div class="row"><button class="btn small" id="slBgPick">選擇圖片…</button></div>
+            <label class="slider">遮罩<input type="range" id="slBgDim" min="0" max="90" step="5"><output id="slBgDimO"></output></label>
+          </div>
+          <input type="file" id="slBgFile" accept="image/*" hidden>
+          <div class="hint">只有這一頁會換，其他頁不變。</div>
+        </div>
+        <div class="sec">
           <h3>頁面</h3>
           <div class="row">
             <button class="btn small" id="btnAdd">新增一頁</button>
@@ -282,7 +303,8 @@ input[type=range]{width:100%;accent-color:var(--ink2);margin:0}
         <div class="sec">
           <h3>字型</h3>
           <label class="field">標題<select id="fontHead"></select></label>
-          <label class="field">內文與經文<select id="fontBody"></select></label>
+          <label class="field">內文<select id="fontBody"></select></label>
+          <label class="field">經文（含經節出處的段落）<select id="fontScr"></select></label>
           <details class="more">
             <summary>用電腦裡裝的字型（金萱、凝書體…）</summary>
             <div class="hint" style="margin:8px 0">這類付費字型無法放進網站，但只要裝在這台電腦，就能在這裡加入。匯出的圖片已經含字型，ProPresenter 那台不用裝。</div>
@@ -291,11 +313,14 @@ input[type=range]{width:100%;accent-color:var(--ink2);margin:0}
             <input id="localFilter" type="text" placeholder="搜尋字型名稱" hidden style="margin-top:8px">
             <div class="row" id="localList" style="margin-top:8px"></div>
           </details>
+          <label class="chk"><input type="checkbox" id="optShadow"> 文字加陰影（背景很亂時用，深色字不會加）</label>
+          <label class="chk"><input type="checkbox" id="optBlocks"> 標題與經文用色塊區分</label>
         </div>
         <div class="sec">
           <h3>行距</h3>
-          <label class="slider">行距<input type="range" id="lineGap" min="1.1" max="1.9" step="0.05" value="1.5"><output id="lineGapO"></output></label>
-          <div class="row"><button class="btn small" id="lineGapReset">還原預設</button></div>
+          <label class="slider">行距<input type="range" id="lineGap" min="0.8" max="1.5" step="0.05" value="1.1"><output id="lineGapO"></output></label>
+          <div class="hint">對應 PowerPoint 的「多行」倍數，規範建議 1.1 到 1.3。整份簡報共用一個，行距才會一致。</div>
+          <div class="row" style="margin-top:8px"><button class="btn small" id="lineGapReset">還原預設</button></div>
         </div>
       </div>
 
@@ -359,8 +384,8 @@ input[type=range]{width:100%;accent-color:var(--ink2);margin:0}
 <div id="prog"><div><div id="progT">處理中…</div><i><b id="progB"></b></i></div></div>
 <script src="themes.js?v=20"></script>
 <script src="themes2.js?v=20"></script>
-<script src="themes3.js?v=21"></script>
-<script src="app.js?v=21"></script>
+<script src="themes3.js?v=22"></script>
+<script src="app.js?v=22"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
