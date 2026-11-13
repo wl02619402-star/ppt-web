@@ -2,7 +2,7 @@
 // ---------- 狀態 ----------
 const S = {
   slides: [], sel: 0, page: 0, themeKey: 'torn_kraft', stripW: 0.81, stripY: 64, stripX: 0, view: 'live', autoExport: false, exportFmt: 'image', deckScale: 1, anchor: 'middle',
-  custom: null, customMode: 'dark', fileName: '簡報',
+  custom: null, customMode: 'dark', customDim: null, fileName: '簡報',
   fonts: { head: 'theme', body: 'theme' }, localFonts: [], lineGap: null, live: {}, liveScope: 'all',
 };
 const $ = id => document.getElementById(id);
@@ -12,6 +12,7 @@ const NO_START = new Set('，。、；：！？」』）》〉,.;:!?)”’…'.
 const NO_END = new Set('「『（《〈([“‘'.split(''));
 
 // ---------- 取得目前主題（含自訂背景圖）----------
+const dimOf = () => S.customDim == null ? (S.customMode === 'light' ? .62 : .58) : S.customDim;
 function curTheme() {
   if (S.custom) {
     const base = THEMES[S.customMode === 'dark' ? 'dusk' : 'paper'];
@@ -21,7 +22,7 @@ function curTheme() {
       bg(c) {
         const im = S.custom, sc = Math.max(W / im.width, H / im.height), w = im.width * sc, h = im.height * sc;
         c.drawImage(im, (W - w) / 2, (H - h) / 2, w, h);
-        c.fillStyle = light ? 'rgba(255,255,255,.62)' : 'rgba(10,8,6,.58)'; c.fillRect(0, 0, W, H);
+        const a = dimOf(); c.fillStyle = light ? `rgba(255,255,255,${a})` : `rgba(10,8,6,${a})`; c.fillRect(0, 0, W, H);
       }
     });
   }
@@ -29,11 +30,11 @@ function curTheme() {
 }
 const bgCache = new Map();
 function getBg(v, p = 0) {
-  const t = curTheme(), key = [t.key, v, p % 2, S.customMode, S.custom ? S.custom.src.length : ''].join('|');
+  const t = curTheme(), key = [t.key, v, p % 2, S.customMode, S.custom ? S.custom.src.length : '', dimOf()].join('|');
   if (!bgCache.has(key)) {
     const c = mk(W, H), x = c.getContext('2d');
-    if (v === 'spot') drawSpot(x, t, p % 2);
-    else { t.bg.call(t, x, t.ownVariants ? v : (v === 'title' ? 'title' : 'content')); if (!t.ownVariants) decorate(x, t, v, p); }
+    if (v === 'spot' && t.key !== 'custom') drawSpot(x, t, p % 2);
+    else { t.bg.call(t, x, t.ownVariants ? v : (v === 'title' ? 'title' : 'content')); if (!t.ownVariants && t.key !== 'custom') decorate(x, t, v, p); }
     bgCache.set(key, c);
   }
   return bgCache.get(key);
@@ -403,7 +404,33 @@ function buildThemes() {
 }
 function getBgFor(k) { const c = mk(W, H); THEMES[k].bg.call(THEMES[k], c.getContext('2d'), 'content'); return c; }
 function afterThemeChange() { bgCache.clear(); buildThemes(); buildList(); renderMain(); save(); }
-function clearCustom(redraw = true) { S.custom = null; $('btnBgClear').hidden = true; $('bgMode').hidden = true; if (redraw) afterThemeChange(); }
+function clearCustom(redraw = true) { S.custom = null; try { localStorage.removeItem('ppt-web-bg'); } catch (e) { } syncBgUi(); if (redraw) afterThemeChange(); }
+function syncBgUi() {
+  const has = !!S.custom;
+  $('bgCtl').hidden = !has; $('bgThumb').hidden = !has; $('bgUp').classList.toggle('has', has);
+  $('btnBg').textContent = has ? '換一張背景圖…' : '用自己的背景圖…';
+  $('bgHint').textContent = has ? '已套用到每一頁，重新整理也會記住' : '會套用到每一頁，自動壓暗讓字清楚';
+  document.querySelectorAll('#bgMode .pill').forEach(x => x.classList.toggle('sel', x.dataset.m === S.customMode));
+  $('bgDim').value = Math.round(dimOf() * 100); $('bgDimO').textContent = Math.round(dimOf() * 100) + '%';
+  if (has) { const c = $('bgThumbCv').getContext('2d'), im = S.custom, sc = Math.max(320 / im.width, 180 / im.height); c.drawImage(im, (320 - im.width * sc) / 2, (180 - im.height * sc) / 2, im.width * sc, im.height * sc); c.fillStyle = S.customMode === 'light' ? `rgba(255,255,255,${dimOf()})` : `rgba(10,8,6,${dimOf()})`; c.fillRect(0, 0, 320, 180); }
+}
+let bgSaveT;
+function saveBg() {
+  clearTimeout(bgSaveT); bgSaveT = setTimeout(() => {
+    if (!S.custom) return;
+    try {
+      const c = mk(1920, 1080), x = c.getContext('2d'), im = S.custom, sc = Math.max(1920 / im.width, 1080 / im.height);
+      x.drawImage(im, (1920 - im.width * sc) / 2, (1080 - im.height * sc) / 2, im.width * sc, im.height * sc);
+      localStorage.setItem('ppt-web-bg', JSON.stringify({ src: c.toDataURL('image/jpeg', .82), mode: S.customMode, dim: S.customDim }));
+    } catch (e) { }
+  }, 400);
+}
+function loadSavedBg() {
+  try {
+    const v = JSON.parse(localStorage.getItem('ppt-web-bg') || 'null'); if (!v || !v.src) return;
+    const im = new Image(); im.onload = () => { S.custom = im; S.customMode = v.mode || 'dark'; S.customDim = v.dim == null ? null : v.dim; syncBgUi(); afterThemeChange(); }; im.src = v.src;
+  } catch (e) { }
+}
 
 // ---------- 字型選單 ----------
 async function registerLocal(name, fam) {
@@ -638,14 +665,15 @@ $('btnExport').onclick = () => exportByFormat().catch(e => { console.error(e); $
 $('btnBg').onclick = () => $('bgFile').click();
 $('bgFile').onchange = e => {
   const f = e.target.files[0]; if (!f) return; const im = new Image();
-  im.onload = () => { S.custom = im; $('btnBgClear').hidden = false; $('bgMode').hidden = false; afterThemeChange(); };
+  im.onload = () => { S.custom = im; syncBgUi(); afterThemeChange(); saveBg(); };
   im.src = URL.createObjectURL(f); e.target.value = '';
 };
 $('btnBgClear').onclick = () => clearCustom();
 document.querySelectorAll('#bgMode .pill').forEach(b => b.onclick = () => {
-  S.customMode = b.dataset.m; document.querySelectorAll('#bgMode .pill').forEach(x => x.classList.toggle('sel', x === b)); afterThemeChange();
+  S.customMode = b.dataset.m; S.customDim = null; syncBgUi(); afterThemeChange(); saveBg();
 });
-document.querySelector('#bgMode .pill[data-m=dark]').classList.add('sel');
+$('bgDim').oninput = () => { S.customDim = $('bgDim').value / 100; syncBgUi(); bgCache.clear(); redrawSoon(); saveBg(); };
+syncBgUi();
 
 // ---------- 啟動：還原上次內容 ----------
 $('fontHead').onchange = e => { S.fonts.head = e.target.value; afterFontChange(); };
@@ -710,6 +738,7 @@ document.addEventListener('keydown', e => {
     const v = JSON.parse(localStorage.getItem('ppt-web-v1') || 'null');
     const st = JSON.parse(localStorage.getItem('ppt-web-style') || 'null') || (v && v.themeKey ? v : null);
     if (st) { await applyStyle(st); showStyleNote(true); }
+    loadSavedBg();
     await renderEmptyPreview();
     if (v && v.slides && v.slides.length) {
       const b = document.createElement('button'); b.className = 'btn'; b.textContent = `繼續上次的「${v.fileName}」`;

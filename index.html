@@ -143,7 +143,11 @@ input[type=range]{width:100%;accent-color:var(--ink2);margin:0}
 .tcard.sel canvas{outline:2px solid var(--accent)}
 .tcard span{display:block;font-size:12px;margin-top:4px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tcard.sel span{color:var(--ink)}
-.customrow{margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
+.bgup{display:flex;gap:12px;align-items:center;padding:12px;border:1px dashed var(--line2);border-radius:4px}
+.bgup.has{border-style:solid;border-color:var(--accent)}
+.bgthumb{width:96px;flex:none}.bgthumb canvas{display:block;width:100%;aspect-ratio:16/9;outline:1px solid var(--line2)}
+.bgup-body{flex:1;min-width:0}
+.themes{max-height:360px;overflow-y:auto;padding-right:4px}
 
 #toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,8px);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:4px;font-size:13px;opacity:0;transition:.2s;pointer-events:none;z-index:20}
 #toast.on{opacity:1;transform:translate(-50%,0)}
@@ -253,6 +257,29 @@ input[type=range]{width:100%;accent-color:var(--ink2);margin:0}
       <div class="pane" id="pLook" hidden>
         <div class="note">這裡的設定，現場版和線上版會一起套用</div>
         <div class="sec">
+          <h3>背景</h3>
+          <div class="bgup" id="bgUp">
+            <div class="bgthumb" id="bgThumb" hidden><canvas id="bgThumbCv" width="320" height="180"></canvas></div>
+            <div class="bgup-body">
+              <button class="btn small" id="btnBg">用自己的背景圖…</button>
+              <div class="hint" id="bgHint" style="margin-top:4px">會套用到每一頁，自動壓暗讓字清楚</div>
+            </div>
+          </div>
+          <div id="bgCtl" hidden>
+            <div class="row" id="bgMode" style="margin-top:8px">
+              <span class="hint" style="margin:0 4px 0 0">字色</span>
+              <button class="pill" data-m="dark">白字</button>
+              <button class="pill" data-m="light">深字</button>
+              <button class="btn small" id="btnBgClear" style="margin-left:auto">取消背景圖</button>
+            </div>
+            <label class="slider">遮罩<input type="range" id="bgDim" min="0" max="90" step="5"><output id="bgDimO"></output></label>
+          </div>
+          <input type="file" id="bgFile" accept="image/*" hidden>
+          <div class="themebar" style="margin-top:16px"><span id="themeCount"></span></div>
+          <div class="cats" id="themeCats"></div>
+          <div class="themes" id="themes"></div>
+        </div>
+        <div class="sec">
           <h3>字型</h3>
           <label class="field">標題<select id="fontHead"></select></label>
           <label class="field">內文與經文<select id="fontBody"></select></label>
@@ -269,24 +296,6 @@ input[type=range]{width:100%;accent-color:var(--ink2);margin:0}
           <h3>行距</h3>
           <label class="slider">行距<input type="range" id="lineGap" min="1.1" max="1.9" step="0.05" value="1.5"><output id="lineGapO"></output></label>
           <div class="row"><button class="btn small" id="lineGapReset">還原預設</button></div>
-        </div>
-        <div class="sec">
-          <h3>背景</h3>
-          <div class="themebar"><span id="themeCount"></span></div>
-          <div class="cats" id="themeCats"></div>
-          <div class="themes" id="themes"></div>
-          <div class="customrow">
-            <div class="row">
-              <button class="btn small" id="btnBg">用自己的背景圖…</button>
-              <button class="btn small" id="btnBgClear" hidden>取消背景圖</button>
-              <input type="file" id="bgFile" accept="image/*" hidden>
-            </div>
-            <div class="row" id="bgMode" style="margin-top:8px" hidden>
-              <span class="hint" style="margin:0 4px 0 0">圖片上的字</span>
-              <button class="pill" data-m="dark">白字（深色罩）</button>
-              <button class="pill" data-m="light">深字（淺色罩）</button>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -350,8 +359,8 @@ input[type=range]{width:100%;accent-color:var(--ink2);margin:0}
 <div id="prog"><div><div id="progT">處理中…</div><i><b id="progB"></b></i></div></div>
 <script src="themes.js?v=20"></script>
 <script src="themes2.js?v=20"></script>
-<script src="themes3.js?v=20"></script>
-<script src="app.js?v=20"></script>
+<script src="themes3.js?v=21"></script>
+<script src="app.js?v=21"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
