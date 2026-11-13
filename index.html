@@ -223,6 +223,11 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
           </div>
         </div>
         <div class="sec">
+          <h3>這一頁的版型</h3>
+          <select id="variantSel"></select>
+          <div class="hint">同一套背景會依內容自動換版型：標題頁、短句、編號重點、一般頁。想自己指定就在這裡選。</div>
+        </div>
+        <div class="sec">
           <h3>頁面</h3>
           <div class="row">
             <button class="btn small" id="btnAdd">新增一頁</button>
@@ -320,9 +325,10 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
 
 <div id="toast"></div>
 <div id="prog"><div><div id="progT">處理中…</div><i><b id="progB"></b></i></div></div>
-<script src="themes.js?v=11"></script>
-<script src="themes2.js?v=11"></script>
-<script src="app.js?v=11"></script>
+<script src="themes.js?v=12"></script>
+<script src="themes2.js?v=12"></script>
+<script src="themes3.js?v=12"></script>
+<script src="app.js?v=12"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));

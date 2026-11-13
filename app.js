@@ -1,7 +1,7 @@
 'use strict';
 // ---------- 狀態 ----------
 const S = {
-  slides: [], sel: 0, page: 0, themeKey: 'paper', stripW: 0.81, stripY: 64, stripX: 0, view: 'live', autoExport: false,
+  slides: [], sel: 0, page: 0, themeKey: 'torn_kraft', stripW: 0.81, stripY: 64, stripX: 0, view: 'live', autoExport: false,
   custom: null, customMode: 'dark', fileName: '簡報',
   fonts: { head: 'theme', body: 'theme' }, localFonts: [], lineGap: null, live: {}, liveScope: 'all',
 };
@@ -28,9 +28,14 @@ function curTheme() {
   return Object.assign({ key: S.themeKey }, THEMES[S.themeKey]);
 }
 const bgCache = new Map();
-function getBg(kind) {
-  const t = curTheme(), key = t.key + kind + S.customMode + (S.custom ? S.custom.src.length : '');
-  if (!bgCache.has(key)) { const c = mk(W, H); t.bg(c.getContext('2d'), kind); bgCache.set(key, c); }
+function getBg(v, p = 0) {
+  const t = curTheme(), key = [t.key, v, p % 2, S.customMode, S.custom ? S.custom.src.length : ''].join('|');
+  if (!bgCache.has(key)) {
+    const c = mk(W, H), x = c.getContext('2d');
+    if (v === 'spot') drawSpot(x, t, p % 2);
+    else { t.bg.call(t, x, t.ownVariants ? v : (v === 'title' ? 'title' : 'content')); if (!t.ownVariants) decorate(x, t, v, p); }
+    bgCache.set(key, c);
+  }
   return bgCache.get(key);
 }
 
@@ -113,29 +118,45 @@ function drawLines(c, lines, x, y, o, T, align = 'left', boxW = 0) {
 const plain = p => p.map(r => r.t).join('');
 
 // ---------- 現場版 ----------
-function liveOpts(isTitle) {
+function liveOpts(isTitle, v) {
   return {
-    headRule: (pi, ps) => isTitle ? pi === 0 : (pi === 0 && ps.length > 1 && plain(ps[0]).length <= 28),
+    headRule: (pi, ps) => v === 'spark' ? false : isTitle ? pi === 0 : (pi === 0 && ps.length > 1 && plain(ps[0]).length <= 28),
     headScale: isTitle ? 1.9 : 1.16, lineGap: S.lineGap || 1.5, paraGap: .5,
   };
 }
-function liveCfg(slide, isTitle) {
+function liveCfg(slide, isTitle, v) {
   const m = Object.assign({ dx: 0, dy: 0, w: null, align: null }, S.live, (slide && slide.lv) || {});
-  return { dx: m.dx, dy: m.dy, w: m.w || (isTitle ? 1500 : 1560), align: m.align || (isTitle ? 'center' : 'left') };
+  const mid = isTitle || v === 'spark';
+  return { dx: m.dx, dy: m.dy, w: m.w || (isTitle ? 1500 : v === 'spark' ? 1300 : 1560), align: m.align || (mid ? 'center' : 'left') };
+}
+function stripLead(runs, n) {
+  const out = []; let left = n;
+  for (const r of runs) { if (left >= r.t.length) { left -= r.t.length; continue; } out.push({ t: r.t.slice(left), red: r.red }); left = 0; }
+  return out.length ? out : [{ t: ' ', red: false }];
 }
 function drawLive(cv, slide, idx) {
-  const T = curTheme(), c = cv.getContext('2d'), isTitle = idx === 0;
+  const v = autoVariant(slide, idx), T = slideTheme(curTheme(), v), c = cv.getContext('2d');
+  const isTitle = v === 'title', isSpark = v === 'spark';
   c.clearRect(0, 0, W, H);
-  c.drawImage(getBg(isTitle ? 'title' : 'content'), 0, 0);
-  const o = liveOpts(isTitle), fs = slide.fs || 1, L = liveCfg(slide, isTitle);
-  const maxW = L.w, maxH = isTitle ? 560 : 790;
-  let size = Math.round((isTitle ? 56 : 76) * fs), lines;
-  for (; size >= 30; size -= 2) { lines = layout(slide.paras, size, maxW, o); if (blockH(lines, o) <= maxH) break; }
+  c.drawImage(getBg(v, idx), 0, 0);
+  const o = liveOpts(isTitle, v), fs = slide.fs || 1, L = liveCfg(slide, isTitle, v);
+  let paras = slide.paras, numeral = null;
+  if (v === 'num') {
+    const m = ptext(paras[0]).match(NUM_RE);
+    if (m) { numeral = /[１-９]/.test(m[1]) ? String(m[1].charCodeAt(0) - 0xFF10) : m[1]; paras = paras.map((p, i) => i ? p : stripLead(p, m[0].length)); }
+  }
+  const shift = numeral ? 150 : 0, maxW = L.w - shift, maxH = isTitle ? 560 : isSpark ? 700 : 790;
+  const base = isTitle ? 56 : isSpark ? 92 : 76;
+  let size = Math.round(base * fs), lines;
+  for (; size >= 30; size -= 2) { lines = layout(paras, size, maxW, o); if (blockH(lines, o) <= maxH) break; }
   const h = blockH(lines, o);
-  const x = (isTitle ? (W - maxW) / 2 : 160) + L.dx;
-  const y = (isTitle ? Math.max(120, (H * .72 - h) / 2 + 40) : Math.max(110, (H - h) / 2 - 10)) + L.dy;
+  const x = ((isTitle || isSpark) ? (W - L.w) / 2 : 160) + L.dx + shift;
+  const y = (isTitle ? Math.max(120, (H * .72 - h) / 2 + 40) : isSpark ? (H - h) / 2 - 10 : Math.max(110, (H - h) / 2 - 10)) + L.dy;
   drawLines(c, lines, x, y, o, T, L.align, maxW);
-  return { shrunk: size < Math.round((isTitle ? 56 : 76) * fs) };
+  if (numeral) {
+    c.font = `italic 700 ${Math.round(lines[0].size * 2.1)}px ${SERIF}`; c.fillStyle = T.accent; c.textBaseline = 'middle'; c.fillText(numeral, x - shift + 6, y + lines[0].h / 2 + lines[0].size * .1);
+  }
+  return { shrunk: size < Math.round(base * fs) };
 }
 
 // ---------- 長條版 ----------
@@ -244,7 +265,13 @@ function renderMain() {
   $('miniLive').getContext('2d').drawImage($('cvLive'), 0, 0, 320, 180); const mc = $('miniStrip').getContext('2d'); mc.clearRect(0, 0, 320, 180); mc.drawImage($('cvStrip'), 0, 0, 320, 180);
   const pg = $('pages'); pg.innerHTML = '';
   if (S.view === 'strip' && n > 1) for (let i = 0; i < n; i++) { const b = document.createElement('button'); b.className = 'pill' + (i === S.page ? ' sel' : ''); b.textContent = `第${i + 1}張`; b.onclick = () => { S.page = i; renderMain(); }; pg.appendChild(b); }
-  renderThumb(S.sel);
+  renderThumb(S.sel); syncVariantUI();
+}
+function syncVariantUI() {
+  const sl = S.slides[S.sel], sel = $('variantSel'); if (!sl || !sel) return;
+  const auto = autoVariant(Object.assign({}, sl, { variant: 'auto' }), S.sel);
+  if (!sel.options.length) Object.entries(VARIANT_LABELS).forEach(([k, t]) => { const o = document.createElement('option'); o.value = k; o.textContent = t; sel.appendChild(o); });
+  sel.options[0].textContent = `自動（${VARIANT_LABELS[auto]}）`; sel.value = sl.variant || 'auto';
 }
 function renderThumb(i) {
   const cv = thumbCv.get(i); if (!cv) return;
@@ -284,7 +311,7 @@ function setView(v) {
 }
 function syncLiveUI() {
   const sl = S.slides[S.sel]; if (!sl) return;
-  const L = liveCfg(sl, S.sel === 0);
+  const vv = autoVariant(sl, S.sel), L = liveCfg(sl, vv === 'title', vv);
   $('lvX').value = L.dx; $('lvXO').textContent = L.dx; $('lvY').value = L.dy; $('lvYO').textContent = L.dy; $('lvW').value = L.w; $('lvWO').textContent = L.w;
   document.querySelectorAll('#lvAlign .pill').forEach(b => b.classList.toggle('sel', b.dataset.a === L.align));
   document.querySelectorAll('#lvScope .pill').forEach(b => b.classList.toggle('sel', b.dataset.s === S.liveScope));
@@ -390,7 +417,7 @@ function renderLocalList() {
 const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, live: S.live, fonts: S.fonts, autoExport: S.autoExport, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
 async function applyStyle(v) {
   if (!v) return;
-  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'paper', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, live: v.live || {}, autoExport: !!v.autoExport });
+  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, live: v.live || {}, autoExport: !!v.autoExport });
   if (v.fonts) S.fonts = v.fonts;
   for (const f of (v.localFonts || [])) await registerLocal(f.name, f.fam);
   if (S.lineGap) $('lineGap').value = S.lineGap;
@@ -528,6 +555,7 @@ $('btnLocalPick').onclick = async () => {
   try { _localAll = await window.queryLocalFonts(); $('localFilter').hidden = false; renderLocalList(); }
   catch (e) { toast('沒有取得字型清單的權限，可以改用輸入名稱'); }
 };
+$('variantSel').onchange = () => { const sl = S.slides[S.sel]; sl.variant = $('variantSel').value; syncOut(); renderMain(); save(); };
 $('lvX').oninput = () => editLive('dx', +$('lvX').value);
 $('lvY').oninput = () => editLive('dy', +$('lvY').value);
 $('lvW').oninput = () => editLive('w', +$('lvW').value);
@@ -544,7 +572,7 @@ function attachDrag(cv, get, set) {
   const end = () => { drag = null; cv.style.cursor = 'grab'; }; cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
 }
 const snap4 = v => Math.round(v / 4) * 4, clampN = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-attachDrag($('cvLive'), () => { const L = liveCfg(S.slides[S.sel], S.sel === 0); return { dx: L.dx, dy: L.dy }; },
+attachDrag($('cvLive'), () => { const vv = autoVariant(S.slides[S.sel], S.sel), L = liveCfg(S.slides[S.sel], vv === 'title', vv); return { dx: L.dx, dy: L.dy }; },
   (s, mx, my) => { editLive('dx', clampN(snap4(s.dx + mx), -900, 900)); editLive('dy', clampN(snap4(s.dy + my), -600, 600)); });
 attachDrag($('cvStrip'), () => ({ x: S.stripX, y: S.stripY }),
   (s, mx, my) => { S.stripX = clampN(snap4(s.x + mx), -700, 700); S.stripY = clampN(snap4(s.y - my), 0, 700); syncOut(); redrawSoon(); });
