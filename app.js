@@ -1,7 +1,7 @@
 'use strict';
 // ---------- 狀態 ----------
 const S = {
-  slides: [], sel: 0, page: 0, themeKey: 'paper', stripW: 0.81, stripY: 64,
+  slides: [], sel: 0, page: 0, themeKey: 'paper', stripW: 0.81, stripY: 64, stripX: 0, view: 'live',
   custom: null, customMode: 'dark', fileName: '簡報',
   fonts: { head: 'theme', body: 'theme' }, localFonts: [], lineGap: null, live: {}, liveScope: 'all',
 };
@@ -164,7 +164,7 @@ function drawStrip(cv, slide, page) {
   const { pages, o, cardW } = stripPages(slide);
   page = Math.min(page, pages.length - 1);
   const lines = pages[page], h = Math.round(blockH(lines, o) + STRIP.padT + STRIP.padB);
-  const x0 = Math.round((W - cardW) / 2), y0 = H - h - S.stripY;
+  const x0 = Math.max(0, Math.min(W - cardW, Math.round((W - cardW) / 2) + S.stripX)), y0 = Math.max(0, H - h - S.stripY);
   const card = drawCard(T, cardW, h, 1);
   c.save(); c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 24; c.shadowOffsetY = 8;
   c.drawImage(card, x0, y0, cardW, h); c.restore();
@@ -239,10 +239,11 @@ const thumbCv = new Map();
 function renderMain() {
   const sl = S.slides[S.sel]; if (!sl) return;
   const r = drawLive($('cvLive'), sl, S.sel);
-  $('capLive').textContent = r.shrunk ? '字多，已自動縮小' : '';
+  $('capLive').textContent = S.view === 'live' && r.shrunk ? '字多，已自動縮小' : '';
   const n = drawStrip($('cvStrip'), sl, S.page);
+  $('miniLive').getContext('2d').drawImage($('cvLive'), 0, 0, 320, 180); const mc = $('miniStrip').getContext('2d'); mc.clearRect(0, 0, 320, 180); mc.drawImage($('cvStrip'), 0, 0, 320, 180);
   const pg = $('pages'); pg.innerHTML = '';
-  if (n > 1) for (let i = 0; i < n; i++) { const b = document.createElement('button'); b.className = 'pill' + (i === S.page ? ' sel' : ''); b.textContent = `第${i + 1}張`; b.onclick = () => { S.page = i; renderMain(); }; pg.appendChild(b); }
+  if (S.view === 'strip' && n > 1) for (let i = 0; i < n; i++) { const b = document.createElement('button'); b.className = 'pill' + (i === S.page ? ' sel' : ''); b.textContent = `第${i + 1}張`; b.onclick = () => { S.page = i; renderMain(); }; pg.appendChild(b); }
   renderThumb(S.sel);
 }
 function renderThumb(i) {
@@ -270,6 +271,17 @@ function select(i) {
   syncOut(); renderMain();
   const th = document.querySelectorAll('.thumb')[i]; if (th) th.scrollIntoView({ block: 'nearest' });
 }
+const VIEW_HINT = {
+  live: '現場版：投在教會大螢幕的整頁畫面。可以在畫面上拖曳文字。',
+  strip: '線上版：直播時疊在影像上，背景透明，只有一條字幕。可以在畫面上拖曳字幕條。',
+};
+function setView(v) {
+  S.view = v;
+  document.querySelectorAll('.view').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  $('frameLive').hidden = v !== 'live'; $('frameStrip').hidden = v !== 'strip';
+  $('posLive').hidden = v !== 'live'; $('posStrip').hidden = v !== 'strip';
+  $('viewHint').textContent = VIEW_HINT[v]; renderMain();
+}
 function syncLiveUI() {
   const sl = S.slides[S.sel]; if (!sl) return;
   const L = liveCfg(sl, S.sel === 0);
@@ -285,7 +297,7 @@ function editLive(key, val) {
 function syncOut() {
   syncLiveUI();
   $('fsO').textContent = $('fs').value + '%'; $('sfsO').textContent = $('sfs').value + '%';
-  $('lineGapO').textContent = S.lineGap ? S.lineGap.toFixed(2) : '預設'; $('stripYO').textContent = S.stripY; $('stripWO').textContent = Math.round(S.stripW * 100) + '%';
+  $('lineGapO').textContent = S.lineGap ? S.lineGap.toFixed(2) : '預設'; $('stripXO').textContent = S.stripX; $('stripX').value = S.stripX; $('stripY').value = S.stripY; $('stripYO').textContent = S.stripY; $('stripWO').textContent = Math.round(S.stripW * 100) + '%';
 }
 const HUE = {
   paper: 'warm', dusk: 'cool', morning: 'warm', olive: 'green', minimal: 'neutral', burgundy: 'warm', sage: 'green', terracotta: 'warm',
@@ -378,7 +390,7 @@ function renderLocalList() {
 let saveT;
 function save() {
   clearTimeout(saveT); saveT = setTimeout(() => {
-    try { localStorage.setItem('ppt-web-v1', JSON.stringify({ slides: S.slides, themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, lineGap: S.lineGap, live: S.live, fileName: S.fileName, fonts: S.fonts, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) })); } catch (e) { }
+    try { localStorage.setItem('ppt-web-v1', JSON.stringify({ slides: S.slides, themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, live: S.live, fileName: S.fileName, fonts: S.fonts, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) })); } catch (e) { }
   }, 300);
 }
 let redrawT;
@@ -387,7 +399,7 @@ function redrawSoon() { clearTimeout(redrawT); redrawT = setTimeout(renderMain, 
 // ---------- 載入 ----------
 async function start(slides, name) {
   S.slides = slides; S.sel = 0; S.page = 0; S.fileName = name.replace(/\.pptx$/i, '');
-  $('drop').hidden = true; $('editor').hidden = false; $('sideEmpty').hidden = true; $('sideBody').hidden = false; $('btnExport').disabled = false;
+  $('drop').hidden = true; $('editor').hidden = false; $('viewHint').textContent = VIEW_HINT[S.view]; $('sideEmpty').hidden = true; $('sideBody').hidden = false; $('btnExport').disabled = false;
   await ensureFonts(); bgCache.clear(); buildCats(); buildThemes(); buildList(); select(0); save();
 }
 async function loadFile(f) {
@@ -503,25 +515,26 @@ $('lvReset').onclick = () => {
   if (S.liveScope === 'slide') delete S.slides[S.sel].lv; else { S.live = {}; S.slides.forEach(s => delete s.lv); }
   syncLiveUI(); redrawSoon();
 };
-(() => { // 直接在預覽上拖曳文字區塊
-  const cv = $('cvLive'); let drag = null;
-  cv.addEventListener('pointerdown', e => {
-    const sl = S.slides[S.sel]; if (!sl) return; const L = liveCfg(sl, S.sel === 0);
-    drag = { x: e.clientX, y: e.clientY, dx: L.dx, dy: L.dy, k: W / cv.getBoundingClientRect().width }; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing';
-  });
-  cv.addEventListener('pointermove', e => {
-    if (!drag) return;
-    const dx = Math.round((drag.dx + (e.clientX - drag.x) * drag.k) / 4) * 4, dy = Math.round((drag.dy + (e.clientY - drag.y) * drag.k) / 4) * 4;
-    editLive('dx', Math.max(-900, Math.min(900, dx))); editLive('dy', Math.max(-600, Math.min(600, dy)));
-  });
-  const end = () => { drag = null; cv.style.cursor = 'grab'; }; cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end); cv.style.cursor = 'grab'; cv.style.touchAction = 'none';
-})();
+function attachDrag(cv, get, set) {
+  let drag = null; cv.style.touchAction = 'none';
+  cv.addEventListener('pointerdown', e => { if (!S.slides[S.sel]) return; drag = { x: e.clientX, y: e.clientY, s: get(), k: W / cv.getBoundingClientRect().width }; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; });
+  cv.addEventListener('pointermove', e => { if (drag) set(drag.s, (e.clientX - drag.x) * drag.k, (e.clientY - drag.y) * drag.k); });
+  const end = () => { drag = null; cv.style.cursor = 'grab'; }; cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+}
+const snap4 = v => Math.round(v / 4) * 4, clampN = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+attachDrag($('cvLive'), () => { const L = liveCfg(S.slides[S.sel], S.sel === 0); return { dx: L.dx, dy: L.dy }; },
+  (s, mx, my) => { editLive('dx', clampN(snap4(s.dx + mx), -900, 900)); editLive('dy', clampN(snap4(s.dy + my), -600, 600)); });
+attachDrag($('cvStrip'), () => ({ x: S.stripX, y: S.stripY }),
+  (s, mx, my) => { S.stripX = clampN(snap4(s.x + mx), -700, 700); S.stripY = clampN(snap4(s.y - my), 0, 700); syncOut(); redrawSoon(); });
+$('stripX').oninput = () => { S.stripX = +$('stripX').value; syncOut(); redrawSoon(); };
+$('stripReset').onclick = () => { S.stripX = 0; S.stripY = 64; S.stripW = .81; $('stripY').value = 64; $('stripW').value = 81; S.page = 0; syncOut(); redrawSoon(); };
+document.querySelectorAll('.view').forEach(b => b.onclick = () => setView(b.dataset.v));
 (async () => {
   syncOut(); buildCats(); buildThemes(); buildFontSelects();
   try {
     const v = JSON.parse(localStorage.getItem('ppt-web-v1') || 'null');
     if (v && v.slides && v.slides.length) {
-      Object.assign(S, { themeKey: v.themeKey || 'paper', stripW: v.stripW || .81, stripY: v.stripY || 64, lineGap: v.lineGap || null, live: v.live || {} });
+      Object.assign(S, { themeKey: v.themeKey || 'paper', stripW: v.stripW || .81, stripY: v.stripY || 64, stripX: v.stripX || 0, lineGap: v.lineGap || null, live: v.live || {} });
       if (S.lineGap) $('lineGap').value = S.lineGap;
       if (v.fonts) S.fonts = v.fonts;
       for (const f of (v.localFonts || [])) await registerLocal(f.name, f.fam);

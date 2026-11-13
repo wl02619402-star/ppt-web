@@ -50,8 +50,28 @@ main{overflow:auto;padding:16px 24px}
 .thumb .badge{position:absolute;right:3px;bottom:3px;background:rgba(0,0,0,.72);color:#fff;font-size:11px;line-height:16px;padding:0 5px;border-radius:2px}
 
 /* 中央預覽 */
-.stage{margin:0 auto 14px;width:min(100%,calc((100vh - 150px) / 2 * 16 / 9))}
-.cap{display:flex;justify-content:space-between;align-items:center;height:26px;font-size:12px;color:var(--muted)}
+.views{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:min(100%,calc((100vh - 230px) * 16 / 9));margin:0 auto 12px}
+.view{display:flex;gap:12px;align-items:center;text-align:left;padding:8px;border:1px solid var(--line2);background:var(--panel);border-radius:4px}
+.view:hover{border-color:var(--muted)}
+.view.on{border-color:var(--accent);background:var(--raise)}
+.view .mini{flex:none;width:104px;aspect-ratio:16/9;background:#000;outline:1px solid var(--line2);display:block}
+.view .mini.chk{background:linear-gradient(45deg,#2a2c32 25%,transparent 25%,transparent 75%,#2a2c32 75%) 0 0/12px 12px,linear-gradient(45deg,#2a2c32 25%,#212328 25%,#212328 75%,#2a2c32 75%) 6px 6px/12px 12px}
+.view .mini canvas{display:block;width:100%;height:100%}
+.view .vt{display:flex;flex-direction:column;min-width:0}
+.view .vt b{font-size:15px}
+.view .vt span{font-size:12px;color:var(--muted);line-height:1.4}
+.view.on .vt b{color:var(--accent)}
+.stage{margin:0 auto 14px;width:min(100%,calc((100vh - 230px) * 16 / 9))}
+.note{font-size:13px;color:#c9cbd1;background:var(--raise);border-left:3px solid var(--accent);padding:8px 10px;margin-bottom:16px}
+.note b{color:var(--ink)}
+.field{display:block;font-size:12px;color:var(--muted);margin-bottom:10px}
+.field select{margin-top:4px}
+details.more{margin-top:4px}
+details.more summary{cursor:pointer;font-size:13px;color:var(--muted);padding:4px 0}
+details.more summary:hover{color:var(--ink)}
+.frame canvas{cursor:grab}
+.cap{display:flex;align-items:center;gap:12px;min-height:30px;font-size:13px;color:var(--muted)}
+.cap #viewHint{flex:1}
 .cap b{color:var(--ink);font-weight:500;margin-right:8px}
 .frame{aspect-ratio:16/9;background:#000;outline:1px solid var(--line2)}
 .frame canvas{display:block;width:100%;height:100%}
@@ -160,13 +180,20 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
       </div>
     </div>
     <div id="editor" hidden>
-      <div class="stage">
-        <div class="cap"><span><b>現場版</b>16:9</span><span id="capLive"></span></div>
-        <div class="frame"><canvas id="cvLive" width="1920" height="1080"></canvas></div>
+      <div class="views" role="tablist" aria-label="要看哪一種版本">
+        <button class="view on" data-v="live" role="tab">
+          <span class="mini"><canvas id="miniLive" width="320" height="180"></canvas></span>
+          <span class="vt"><b>現場版</b><span>投在教會大螢幕，整頁畫面</span></span>
+        </button>
+        <button class="view" data-v="strip" role="tab">
+          <span class="mini chk"><canvas id="miniStrip" width="320" height="180"></canvas></span>
+          <span class="vt"><b>線上版</b><span>直播疊在影像上，只有一條字幕</span></span>
+        </button>
       </div>
       <div class="stage">
-        <div class="cap"><span><b>長條版</b>透明背景，疊在影像上</span><div class="pages" id="pages"></div></div>
-        <div class="frame video"><canvas id="cvStrip" width="1920" height="1080"></canvas></div>
+        <div class="cap"><span id="viewHint"></span><span id="capLive"></span><div class="pages" id="pages"></div></div>
+        <div class="frame" id="frameLive"><canvas id="cvLive" width="1920" height="1080"></canvas></div>
+        <div class="frame video" id="frameStrip" hidden><canvas id="cvStrip" width="1920" height="1080"></canvas></div>
       </div>
     </div>
   </main>
@@ -175,97 +202,108 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
     <div id="sideBody" hidden>
       <div class="tabs" role="tablist">
         <button class="on" data-pane="pText" role="tab">文字</button>
-        <button data-pane="pLayout" role="tab">版面</button>
-        <button data-pane="pFont" role="tab">字型</button>
-        <button data-pane="pTheme" role="tab">背景</button>
+        <button data-pane="pLook" role="tab">外觀</button>
+        <button data-pane="pPos" role="tab">位置</button>
       </div>
+
       <div class="pane" id="pText">
         <div class="sec">
-          <h3>本頁文字</h3>
+          <h3>這一頁的文字</h3>
           <textarea id="txt" spellcheck="false"></textarea>
-          <div class="hint">一行一段；第一行較短時當標題。紅字用 **兩個星號** 包起來。</div>
+          <div class="hint">一行就是一段；第一行比較短時會當標題。想標紅字，用兩個星號包起來，例如 **耶穌**。</div>
           <div class="row" style="margin-top:10px">
-            <button class="btn small" id="btnRed">選取文字 → 紅字</button>
+            <button class="btn small" id="btnRed">選取的字變紅字</button>
           </div>
         </div>
         <div class="sec">
           <h3>頁面</h3>
           <div class="row">
-            <button class="btn small" id="btnAdd">新增</button>
-            <button class="btn small" id="btnDup">複製</button>
-            <button class="btn small" id="btnDel">刪除</button>
+            <button class="btn small" id="btnAdd">新增一頁</button>
+            <button class="btn small" id="btnDup">複製這頁</button>
+            <button class="btn small" id="btnDel">刪除這頁</button>
           </div>
         </div>
       </div>
-      <div class="pane" id="pLayout" hidden>
+
+      <div class="pane" id="pLook" hidden>
+        <div class="note">這裡的設定，現場版和線上版會一起套用。</div>
         <div class="sec">
-          <h3>本頁字級</h3>
-          <label class="slider">現場版<input type="range" id="fs" min="60" max="130" step="5"><output id="fsO"></output></label>
-          <label class="slider">長條版<input type="range" id="sfs" min="60" max="130" step="5"><output id="sfsO"></output></label>
+          <h3>背景</h3>
+          <div class="themebar"><span id="themeCount"></span></div>
+          <div class="cats" id="themeCats"></div>
+          <div class="themes" id="themes"></div>
+          <div class="customrow">
+            <div class="row">
+              <button class="btn small" id="btnBg">用自己的背景圖…</button>
+              <button class="btn small" id="btnBgClear" hidden>取消背景圖</button>
+              <input type="file" id="bgFile" accept="image/*" hidden>
+            </div>
+            <div class="row" id="bgMode" style="margin-top:8px" hidden>
+              <span class="hint" style="margin:0 4px 0 0">圖片上的字</span>
+              <button class="pill" data-m="dark">白字（深色罩）</button>
+              <button class="pill" data-m="light">深字（淺色罩）</button>
+            </div>
+          </div>
         </div>
         <div class="sec">
-          <h3>現場版文字位置</h3>
-          <div class="row" id="lvScope" style="margin-bottom:6px">
-            <button class="pill" data-s="all">全部頁面</button>
-            <button class="pill" data-s="slide">只有這一頁</button>
-          </div>
-          <label class="slider">左右<input type="range" id="lvX" min="-900" max="900" step="4"><output id="lvXO"></output></label>
-          <label class="slider">上下<input type="range" id="lvY" min="-600" max="600" step="4"><output id="lvYO"></output></label>
-          <label class="slider">寬度<input type="range" id="lvW" min="700" max="1800" step="10"><output id="lvWO"></output></label>
-          <div class="row" id="lvAlign" style="margin:8px 0 0">
-            <span class="hint" style="margin:0 4px 0 0">對齊</span>
-            <button class="pill" data-a="left">靠左</button>
-            <button class="pill" data-a="center">置中</button>
-            <button class="pill" data-a="right">靠右</button>
-          </div>
-          <div class="hint">也可以直接在上面的現場版預覽按住拖曳。</div>
-          <div class="row" style="margin-top:8px"><button class="btn small" id="lvReset">還原位置</button></div>
+          <h3>字型</h3>
+          <label class="field">標題<select id="fontHead"></select></label>
+          <label class="field">內文與經文<select id="fontBody"></select></label>
+          <details class="more">
+            <summary>用電腦裡裝的字型（金萱、凝書體…）</summary>
+            <div class="hint" style="margin:8px 0">這類付費字型無法放進網站，但只要裝在這台電腦，就能在這裡加入。匯出的圖片已經含字型，ProPresenter 那台不用裝。</div>
+            <div class="row"><input id="localName" type="text" placeholder="字型完整名稱，例如：金萱那提九分糖"><button class="btn small" id="btnLocalAdd">加入</button></div>
+            <div class="row" style="margin-top:8px"><button class="btn small" id="btnLocalPick">從電腦的字型清單挑…</button></div>
+            <input id="localFilter" type="text" placeholder="搜尋字型名稱" hidden style="margin-top:8px">
+            <div class="row" id="localList" style="margin-top:8px"></div>
+          </details>
         </div>
         <div class="sec">
-          <h3>行距（全部頁面）</h3>
+          <h3>行距</h3>
           <label class="slider">行距<input type="range" id="lineGap" min="1.1" max="1.9" step="0.05" value="1.5"><output id="lineGapO"></output></label>
-          <div class="hint">數字越小行距越緊，預設 1.5。長條版會自動比現場版緊 0.1。</div>
-          <div class="row" style="margin-top:8px"><button class="btn small" id="lineGapReset">還原預設</button></div>
-        </div>
-        <div class="sec">
-          <h3>長條位置（全部頁面）</h3>
-          <label class="slider">離底邊<input type="range" id="stripY" min="20" max="400" step="4"><output id="stripYO"></output></label>
-          <label class="slider">寬度<input type="range" id="stripW" min="50" max="96" step="1"><output id="stripWO"></output></label>
+          <div class="row"><button class="btn small" id="lineGapReset">還原預設</button></div>
         </div>
       </div>
-      <div class="pane" id="pFont" hidden>
-        <div class="sec">
-          <h3>主標字型</h3>
-          <select id="fontHead"></select>
-          <div class="hint">每頁第一行的標題。</div>
-        </div>
-        <div class="sec">
-          <h3>內文與經文字型</h3>
-          <select id="fontBody"></select>
-        </div>
-        <div class="sec">
-          <h3>用電腦裡裝的字型</h3>
-          <div class="hint" style="margin:0 0 8px">金萱那堤、凝書體這類字型無法放進網站，但只要裝在這台電腦，就能在這裡加入。匯出的圖片已經含字型，ProPresenter 那台不用裝。</div>
-          <div class="row"><input id="localName" type="text" placeholder="字型完整名稱，例如：金萱那堤九分"><button class="btn small" id="btnLocalAdd">加入</button></div>
-          <div class="row" style="margin-top:8px"><button class="btn small" id="btnLocalPick">從電腦的字型清單挑…</button></div>
-          <input id="localFilter" type="text" placeholder="搜尋字型名稱" hidden style="margin-top:8px">
-          <div class="row" id="localList" style="margin-top:8px"></div>
-        </div>
-      </div>
-      <div class="pane" id="pTheme" hidden>
-        <div class="themebar"><h3>背景設計</h3><span id="themeCount"></span></div>
-        <div class="cats" id="themeCats"></div>
-        <div class="themes" id="themes"></div>
-        <div class="customrow">
-          <div class="row">
-            <button class="btn small" id="btnBg">用自己的背景圖…</button>
-            <button class="btn small" id="btnBgClear" hidden>取消背景圖</button>
-            <input type="file" id="bgFile" accept="image/*" hidden>
+
+      <div class="pane" id="pPos" hidden>
+        <div id="posLive">
+          <div class="note"><b>現場版</b>：調整文字在整頁畫面上的位置與大小。</div>
+          <div class="sec">
+            <h3>這一頁的字級</h3>
+            <label class="slider">大小<input type="range" id="fs" min="60" max="130" step="5"><output id="fsO"></output></label>
           </div>
-          <div class="row" id="bgMode" style="margin-top:8px" hidden>
-            <span class="hint" style="margin:0 4px 0 0">圖片上的字</span>
-            <button class="pill" data-m="dark">白字（深色罩）</button>
-            <button class="pill" data-m="light">深字（淺色罩）</button>
+          <div class="sec">
+            <h3>文字位置</h3>
+            <div class="row" id="lvScope" style="margin-bottom:6px">
+              <button class="pill" data-s="all">全部頁面一起改</button>
+              <button class="pill" data-s="slide">只改這一頁</button>
+            </div>
+            <label class="slider">左右<input type="range" id="lvX" min="-900" max="900" step="4"><output id="lvXO"></output></label>
+            <label class="slider">上下<input type="range" id="lvY" min="-600" max="600" step="4"><output id="lvYO"></output></label>
+            <label class="slider">寬度<input type="range" id="lvW" min="700" max="1800" step="10"><output id="lvWO"></output></label>
+            <div class="row" id="lvAlign" style="margin:8px 0 0">
+              <span class="hint" style="margin:0 4px 0 0">對齊</span>
+              <button class="pill" data-a="left">靠左</button>
+              <button class="pill" data-a="center">置中</button>
+              <button class="pill" data-a="right">靠右</button>
+            </div>
+            <div class="hint">也可以直接在預覽上按住拖曳。</div>
+            <div class="row" style="margin-top:8px"><button class="btn small" id="lvReset">還原位置</button></div>
+          </div>
+        </div>
+        <div id="posStrip" hidden>
+          <div class="note"><b>線上版</b>：調整那一條字幕的位置與大小，所有頁面都一樣。</div>
+          <div class="sec">
+            <h3>這一頁的字級</h3>
+            <label class="slider">大小<input type="range" id="sfs" min="60" max="130" step="5"><output id="sfsO"></output></label>
+          </div>
+          <div class="sec">
+            <h3>字幕條位置</h3>
+            <label class="slider">左右<input type="range" id="stripX" min="-700" max="700" step="4"><output id="stripXO"></output></label>
+            <label class="slider">離底邊<input type="range" id="stripY" min="0" max="700" step="4"><output id="stripYO"></output></label>
+            <label class="slider">寬度<input type="range" id="stripW" min="50" max="96" step="1"><output id="stripWO"></output></label>
+            <div class="hint">也可以直接在預覽上按住字幕條拖曳。</div>
+            <div class="row" style="margin-top:8px"><button class="btn small" id="stripReset">還原位置</button></div>
           </div>
         </div>
       </div>
@@ -275,9 +313,9 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
 
 <div id="toast"></div>
 <div id="prog"><div><div id="progT">處理中…</div><i><b id="progB"></b></i></div></div>
-<script src="themes.js?v=9"></script>
-<script src="themes2.js?v=9"></script>
-<script src="app.js?v=9"></script>
+<script src="themes.js?v=10"></script>
+<script src="themes2.js?v=10"></script>
+<script src="app.js?v=10"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
