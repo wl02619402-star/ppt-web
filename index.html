@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>簡報美編工坊</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<style>
+:root{
+  --bg:#141518; --panel:#1b1c20; --raise:#25262b; --line:#2f3137; --line2:#3b3d45;
+  --ink:#e9eaed; --muted:#8e919b; --accent:#ff6a3d; --accent-ink:#1a0d08;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:14px/1.5 "Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* 頂列 */
+header{height:44px;display:flex;align-items:center;gap:6px;padding:0 12px 0 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+header h1{font-size:14px;font-weight:700;margin:0 20px 0 0;white-space:nowrap}
+header .sp{flex:1}
+.btn{height:30px;padding:0 12px;border:1px solid var(--line2);background:transparent;border-radius:4px;font-weight:500;font-size:13px;white-space:nowrap}
+.btn:hover{background:var(--raise)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:700}
+.btn.primary:hover{filter:brightness(1.08);background:var(--accent)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.small{height:26px;padding:0 9px;font-size:12px}
+
+/* 三欄 */
+#app{display:grid;grid-template-columns:188px minmax(0,1fr) 344px;height:calc(100vh - 44px)}
+#list{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:8px 10px 8px 0}
+main{overflow:auto;padding:16px 24px}
+#side{background:var(--panel);border-left:1px solid var(--line);overflow:hidden;display:flex;flex-direction:column;min-height:0}
+
+/* 左側投影片清單 */
+.thumb{position:relative;margin:0 0 6px 28px;padding:0;border:0;cursor:pointer}
+.thumb canvas{display:block;width:100%;background:#000;outline:1px solid var(--line2)}
+.thumb:hover canvas{outline-color:var(--muted)}
+.thumb.sel canvas{outline:2px solid var(--accent)}
+.thumb .n{position:absolute;left:-24px;top:2px;width:20px;text-align:right;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.thumb.sel .n{color:var(--accent);font-weight:700}
+.thumb .badge{position:absolute;right:3px;bottom:3px;background:rgba(0,0,0,.72);color:#fff;font-size:11px;line-height:16px;padding:0 5px;border-radius:2px}
+
+/* 中央預覽 */
+.stage{margin:0 auto 14px;width:min(100%,calc((100vh - 150px) / 2 * 16 / 9))}
+.cap{display:flex;justify-content:space-between;align-items:center;height:26px;font-size:12px;color:var(--muted)}
+.cap b{color:var(--ink);font-weight:500;margin-right:8px}
+.frame{aspect-ratio:16/9;background:#000;outline:1px solid var(--line2)}
+.frame canvas{display:block;width:100%;height:100%}
+.frame.video{background:
+  linear-gradient(45deg,#2a2c32 25%,transparent 25%,transparent 75%,#2a2c32 75%) 0 0/24px 24px,
+  linear-gradient(45deg,#2a2c32 25%,#212328 25%,#212328 75%,#2a2c32 75%) 12px 12px/24px 24px}
+.pages{display:flex;gap:2px}
+.pill{min-width:26px;height:22px;padding:0 7px;border:1px solid var(--line2);background:transparent;color:var(--muted);font-size:12px;border-radius:3px}
+.pill:hover{color:var(--ink)}
+.pill.sel{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+/* 空狀態 */
+#drop{max-width:880px;margin:5vh auto 0;display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:start}
+#drop.over .zone{border-color:var(--accent);background:rgba(255,106,61,.06)}
+#drop h2{font-size:26px;line-height:1.25;margin:0 0 14px;font-weight:700}
+#drop ol{margin:0 0 18px;padding:0;list-style:none;counter-reset:s}
+#drop li{counter-increment:s;display:flex;gap:12px;padding:10px 0;border-top:1px solid var(--line);color:#c9cbd1}
+#drop li::before{content:counter(s);flex:none;width:20px;color:var(--accent);font-weight:700;font-variant-numeric:tabular-nums}
+#drop .note{font-size:12px;color:var(--muted)}
+.zone{border:1px dashed var(--line2);min-height:260px;padding:24px;display:flex;flex-direction:column;justify-content:center;gap:14px;border-radius:4px}
+.zone p{margin:0;color:var(--muted);font-size:13px}
+.zone .row{display:flex;gap:8px;flex-wrap:wrap}
+
+/* 右側檢視器 */
+.tabs{display:flex;border-bottom:1px solid var(--line);flex:none}
+.tabs button{flex:1;height:38px;border:0;background:none;color:var(--muted);font-weight:500;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button:hover{color:var(--ink)}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--accent)}
+.pane{padding:16px;overflow:auto;flex:1;min-height:0}
+.pane[hidden]{display:none}
+#sideEmpty{padding:16px;color:var(--muted);font-size:13px}
+#sideBody{display:flex;flex-direction:column;flex:1;min-height:0}
+#sideBody[hidden]{display:none}
+.sec{margin-bottom:22px}
+.sec h3{margin:0 0 8px;font-size:13px;font-weight:700}
+textarea{width:100%;min-height:220px;background:var(--bg);border:1px solid var(--line2);border-radius:4px;padding:10px;line-height:1.65;resize:vertical}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.hint{font-size:12px;color:var(--muted);margin-top:8px}
+.slider{display:grid;grid-template-columns:64px 1fr 44px;gap:10px;align-items:center;margin:10px 0;font-size:13px}
+.slider output{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px}
+input[type=range]{width:100%;accent-color:var(--accent);margin:0}
+
+/* 主題 */
+.themebar{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
+.themebar h3{margin:0;font-size:13px}
+.themebar span{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.cats{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px}
+.cats .pill{height:24px}
+.themes{display:grid;grid-template-columns:1fr 1fr;gap:10px 8px}
+.tcard{padding:0;border:0;background:none;text-align:left}
+.tcard canvas{display:block;width:100%;aspect-ratio:16/9;background:var(--raise);outline:1px solid var(--line2)}
+.tcard:hover canvas{outline-color:var(--muted)}
+.tcard.sel canvas{outline:2px solid var(--accent)}
+.tcard span{display:block;font-size:12px;margin-top:4px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tcard.sel span{color:var(--ink)}
+.customrow{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+
+#toast{position:fixed;bottom:20px;left:50%;transform:translate(-50%,8px);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:4px;font-size:13px;opacity:0;transition:.2s;pointer-events:none;z-index:20}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+#prog{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:30}
+#prog>div{background:var(--panel);border:1px solid var(--line2);padding:22px 28px;border-radius:4px;min-width:280px}
+#prog i{display:block;height:4px;background:var(--line);margin-top:12px}
+#prog b{display:block;height:100%;width:0;background:var(--accent);transition:width .15s}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (max-width:1100px){
+  #app{grid-template-columns:1fr;height:auto}
+  #list{display:flex;gap:8px;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px 12px}
+  .thumb{min-width:150px;margin:0 0 0 22px}
+  #side{border-left:0;border-top:1px solid var(--line);min-height:560px}
+  main{padding:12px}
+  #drop{grid-template-columns:1fr;gap:20px}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>簡報美編工坊</h1>
+  <span class="sp"></span>
+  <button class="btn" id="btnOpen">上傳文字檔</button>
+  <button class="btn primary" id="btnExport" disabled>匯出 ProPresenter 檔</button>
+  <input type="file" id="file" accept=".pptx" hidden>
+</header>
+
+<div id="app">
+  <aside id="list" aria-label="投影片清單"></aside>
+  <main id="main">
+    <div id="drop">
+      <div>
+        <h2>空白文字檔進去，現場版和長條版出來</h2>
+        <ol>
+          <li>上傳只有文字的 pptx</li>
+          <li>挑一套背景，兩種版面自動套同一個風格</li>
+          <li>改字、調字級和長條位置，然後匯出給 ProPresenter</li>
+        </ol>
+        <div class="note">檔案只在你的瀏覽器裡處理，不會傳到任何地方。</div>
+      </div>
+      <div class="zone">
+        <p>把 .pptx 拖到這裡，或：</p>
+        <div class="row">
+          <button class="btn primary" id="btnPick">選擇檔案</button>
+          <button class="btn" id="btnSample">用範例試試</button>
+        </div>
+      </div>
+    </div>
+    <div id="editor" hidden>
+      <div class="stage">
+        <div class="cap"><span><b>現場版</b>16:9</span><span id="capLive"></span></div>
+        <div class="frame"><canvas id="cvLive" width="1920" height="1080"></canvas></div>
+      </div>
+      <div class="stage">
+        <div class="cap"><span><b>長條版</b>透明背景，疊在影像上</span><div class="pages" id="pages"></div></div>
+        <div class="frame video"><canvas id="cvStrip" width="1920" height="1080"></canvas></div>
+      </div>
+    </div>
+  </main>
+  <aside id="side">
+    <div id="sideEmpty">上傳檔案後，這裡可以改文字、調版面、換背景。</div>
+    <div id="sideBody" hidden>
+      <div class="tabs" role="tablist">
+        <button class="on" data-pane="pText" role="tab">文字</button>
+        <button data-pane="pLayout" role="tab">版面</button>
+        <button data-pane="pTheme" role="tab">背景</button>
+      </div>
+      <div class="pane" id="pText">
+        <div class="sec">
+          <h3>本頁文字</h3>
+          <textarea id="txt" spellcheck="false"></textarea>
+          <div class="hint">一行一段；第一行較短時當標題。紅字用 **兩個星號** 包起來。</div>
+          <div class="row" style="margin-top:10px">
+            <button class="btn small" id="btnRed">選取文字 → 紅字</button>
+          </div>
+        </div>
+        <div class="sec">
+          <h3>頁面</h3>
+          <div class="row">
+            <button class="btn small" id="btnAdd">新增</button>
+            <button class="btn small" id="btnDup">複製</button>
+            <button class="btn small" id="btnDel">刪除</button>
+          </div>
+        </div>
+      </div>
+      <div class="pane" id="pLayout" hidden>
+        <div class="sec">
+          <h3>本頁字級</h3>
+          <label class="slider">現場版<input type="range" id="fs" min="60" max="130" step="5"><output id="fsO"></output></label>
+          <label class="slider">長條版<input type="range" id="sfs" min="60" max="130" step="5"><output id="sfsO"></output></label>
+        </div>
+        <div class="sec">
+          <h3>長條位置（全部頁面）</h3>
+          <label class="slider">離底邊<input type="range" id="stripY" min="20" max="400" step="4"><output id="stripYO"></output></label>
+          <label class="slider">寬度<input type="range" id="stripW" min="50" max="96" step="1"><output id="stripWO"></output></label>
+        </div>
+      </div>
+      <div class="pane" id="pTheme" hidden>
+        <div class="themebar"><h3>背景設計</h3><span id="themeCount"></span></div>
+        <div class="cats" id="themeCats"></div>
+        <div class="themes" id="themes"></div>
+        <div class="customrow">
+          <div class="row">
+            <button class="btn small" id="btnBg">用自己的背景圖…</button>
+            <button class="btn small" id="btnBgClear" hidden>取消背景圖</button>
+            <input type="file" id="bgFile" accept="image/*" hidden>
+          </div>
+          <div class="row" id="bgMode" style="margin-top:8px" hidden>
+            <span class="hint" style="margin:0 4px 0 0">圖片上的字</span>
+            <button class="pill" data-m="dark">白字（深色罩）</button>
+            <button class="pill" data-m="light">深字（淺色罩）</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<div id="toast"></div>
+<div id="prog"><div><div id="progT">處理中…</div><i><b id="progB"></b></i></div></div>
+<script src="themes.js?v=6"></script>
+<script src="themes2.js?v=6"></script>
+<script src="app.js?v=6"></script>
+<script>
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('#sideBody .pane').forEach(p => p.hidden = p.id !== b.dataset.pane);
+});
+</script>
+</body>
+</html>
