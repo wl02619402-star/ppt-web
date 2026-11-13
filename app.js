@@ -1,7 +1,7 @@
 'use strict';
 // ---------- 狀態 ----------
 const S = {
-  slides: [], sel: 0, page: 0, themeKey: 'paper', stripW: 0.81, stripY: 64, stripX: 0, view: 'live',
+  slides: [], sel: 0, page: 0, themeKey: 'paper', stripW: 0.81, stripY: 64, stripX: 0, view: 'live', autoExport: false,
   custom: null, customMode: 'dark', fileName: '簡報',
   fonts: { head: 'theme', body: 'theme' }, localFonts: [], lineGap: null, live: {}, liveScope: 'all',
 };
@@ -386,10 +386,25 @@ function renderLocalList() {
   if (!list.length) box.textContent = q ? '沒有符合的字型' : '沒找到金萱、凝書等常用字型，請直接在上面搜尋';
 }
 
+// ---------- 記住上次的樣式 ----------
+const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, live: S.live, fonts: S.fonts, autoExport: S.autoExport, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
+async function applyStyle(v) {
+  if (!v) return;
+  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'paper', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, live: v.live || {}, autoExport: !!v.autoExport });
+  if (v.fonts) S.fonts = v.fonts;
+  for (const f of (v.localFonts || [])) await registerLocal(f.name, f.fam);
+  if (S.lineGap) $('lineGap').value = S.lineGap;
+  $('stripW').value = Math.round(S.stripW * 100); $('autoExport').checked = S.autoExport;
+  buildFontSelects(); buildThemes(); syncOut();
+}
+function showStyleNote(has) {
+  $('styleNote').hidden = !has; if (has) $('styleNoteT').textContent = `已記住你上次的設定（背景：${THEMES[S.themeKey].name}），新檔案會自動套用。`;
+}
 // ---------- 儲存 ----------
 let saveT;
 function save() {
   clearTimeout(saveT); saveT = setTimeout(() => {
+    try { localStorage.setItem('ppt-web-style', JSON.stringify(styleObj())); } catch (e) { }
     try { localStorage.setItem('ppt-web-v1', JSON.stringify({ slides: S.slides, themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, live: S.live, fileName: S.fileName, fonts: S.fonts, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) })); } catch (e) { }
   }, 300);
 }
@@ -399,11 +414,11 @@ function redrawSoon() { clearTimeout(redrawT); redrawT = setTimeout(renderMain, 
 // ---------- 載入 ----------
 async function start(slides, name) {
   S.slides = slides; S.sel = 0; S.page = 0; S.fileName = name.replace(/\.pptx$/i, '');
-  $('drop').hidden = true; $('editor').hidden = false; $('viewHint').textContent = VIEW_HINT[S.view]; $('sideEmpty').hidden = true; $('sideBody').hidden = false; $('btnExport').disabled = false;
+  $('drop').hidden = true; $('editor').hidden = false; $('viewHint').textContent = VIEW_HINT[S.view]; $('sideEmpty').hidden = true; $('sideBody').hidden = false; $('btnExport').disabled = false; $('btnZip').disabled = false;
   await ensureFonts(); bgCache.clear(); buildCats(); buildThemes(); buildList(); select(0); save();
 }
 async function loadFile(f) {
-  try { const slides = await parsePptx(await f.arrayBuffer()); if (!slides.length) throw new Error('empty'); await start(slides, f.name); toast(`已讀入 ${slides.length} 頁`); }
+  try { const slides = await parsePptx(await f.arrayBuffer()); if (!slides.length) throw new Error('empty'); await start(slides, f.name); toast(`已讀入 ${slides.length} 頁`); if (S.autoExport) await runExport('pptx'); }
   catch (e) { console.error(e); toast('讀不到這個檔案，請確認是 .pptx 格式'); }
 }
 const SAMPLE = [
@@ -421,7 +436,8 @@ const blobOf = (cv, type, q) => new Promise(r => cv.toBlob(r, type, q));
 const dataOf = blob => new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(blob); });
 function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
 
-async function exportAll() {
+async function exportAll(mode = 'zip') {
+  const wantZip = mode === 'zip';
   await ensureFonts();
   const zip = new JSZip(), pL = new PptxGenJS(), pS = new PptxGenJS(); pL.layout = pS.layout = 'LAYOUT_WIDE';
   const cv = mk(W, H); const total = S.slides.length; let done = 0;
@@ -429,20 +445,25 @@ async function exportAll() {
     prog(`正在輸出第 ${i + 1} / ${total} 頁…`, done / total); await sleep(0);
     drawLive(cv, S.slides[i], i);
     const jb = await blobOf(cv, 'image/jpeg', .93), name = String(i + 1).padStart(3, '0');
-    zip.file(`現場圖片/現場_${name}.jpg`, jb);
+    if (wantZip) zip.file(`現場圖片/現場_${name}.jpg`, jb);
     pL.addSlide().addImage({ data: await dataOf(jb), x: 0, y: 0, w: 13.333, h: 7.5 });
     const n = stripPages(S.slides[i]).pages.length;
     for (let p = 0; p < n; p++) {
       drawStrip(cv, S.slides[i], p);
       const pb = await blobOf(cv, 'image/png');
-      zip.file(`長條圖片/長條_${name}${n > 1 ? '_' + 'abcdefgh'[p] : ''}.png`, pb);
+      if (wantZip) zip.file(`長條圖片/長條_${name}${n > 1 ? '_' + 'abcdefgh'[p] : ''}.png`, pb);
       pS.addSlide().addImage({ data: await dataOf(pb), x: 0, y: 0, w: 13.333, h: 7.5 });
     }
     done++;
   }
   prog('正在打包 pptx…', .95); await sleep(30);
-  zip.file(`${S.fileName}_現場版_給ProPresenter.pptx`, await pL.write({ outputType: 'blob' }));
-  zip.file(`${S.fileName}_線上長條版_給ProPresenter.pptx`, await pS.write({ outputType: 'blob' }));
+  const liveName = `${S.fileName}_現場版_給ProPresenter.pptx`, stripName = `${S.fileName}_線上長條版_給ProPresenter.pptx`;
+  const liveBlob = await pL.write({ outputType: 'blob' }), stripBlob = await pS.write({ outputType: 'blob' });
+  if (!wantZip) {
+    $('prog').style.display = 'none'; download(liveBlob, liveName); await sleep(500); download(stripBlob, stripName);
+    toast('完成！已下載兩個 pptx（現場版、線上長條版）'); return [liveBlob, stripBlob];
+  }
+  zip.file(liveName, liveBlob); zip.file(stripName, stripBlob);
   const out = await zip.generateAsync({ type: 'blob' });
   $('prog').style.display = 'none'; download(out, `${S.fileName}_輸出.zip`); toast('完成！已下載 zip');
   return out;
@@ -481,7 +502,8 @@ $('lineGapReset').onclick = () => { S.lineGap = null; $('lineGap').value = 1.5; 
 $('stripY').oninput = () => { S.stripY = +$('stripY').value; syncOut(); redrawSoon(); };
 $('stripW').oninput = () => { S.stripW = $('stripW').value / 100; syncOut(); S.page = 0; redrawSoon(); };
 $('stripW').onchange = () => buildList();
-$('btnExport').onclick = () => exportAll().catch(e => { console.error(e); $('prog').style.display = 'none'; toast('匯出失敗：' + e.message); });
+const runExport = mode => exportAll(mode).catch(e => { console.error(e); $('prog').style.display = 'none'; toast('匯出失敗：' + e.message); });
+$('btnExport').onclick = () => runExport('pptx'); $('btnZip').onclick = () => runExport('zip');
 
 $('btnBg').onclick = () => $('bgFile').click();
 $('bgFile').onchange = e => {
@@ -529,17 +551,15 @@ attachDrag($('cvStrip'), () => ({ x: S.stripX, y: S.stripY }),
 $('stripX').oninput = () => { S.stripX = +$('stripX').value; syncOut(); redrawSoon(); };
 $('stripReset').onclick = () => { S.stripX = 0; S.stripY = 64; S.stripW = .81; $('stripY').value = 64; $('stripW').value = 81; S.page = 0; syncOut(); redrawSoon(); };
 document.querySelectorAll('.view').forEach(b => b.onclick = () => setView(b.dataset.v));
+$('autoExport').onchange = () => { S.autoExport = $('autoExport').checked; save(); };
+$('styleClear').onclick = () => { try { localStorage.removeItem('ppt-web-style'); localStorage.removeItem('ppt-web-v1'); } catch (e) { } location.reload(); };
 (async () => {
   syncOut(); buildCats(); buildThemes(); buildFontSelects();
   try {
     const v = JSON.parse(localStorage.getItem('ppt-web-v1') || 'null');
+    const st = JSON.parse(localStorage.getItem('ppt-web-style') || 'null') || (v && v.themeKey ? v : null);
+    if (st) { await applyStyle(st); showStyleNote(true); }
     if (v && v.slides && v.slides.length) {
-      Object.assign(S, { themeKey: v.themeKey || 'paper', stripW: v.stripW || .81, stripY: v.stripY || 64, stripX: v.stripX || 0, lineGap: v.lineGap || null, live: v.live || {} });
-      if (S.lineGap) $('lineGap').value = S.lineGap;
-      if (v.fonts) S.fonts = v.fonts;
-      for (const f of (v.localFonts || [])) await registerLocal(f.name, f.fam);
-      buildFontSelects();
-      $('stripY').value = S.stripY; $('stripW').value = Math.round(S.stripW * 100);
       const b = document.createElement('button'); b.className = 'btn'; b.textContent = `繼續上次的「${v.fileName}」`;
       b.onclick = () => start(v.slides, v.fileName); $('btnSample').after(b);
     }

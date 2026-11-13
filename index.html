@@ -70,6 +70,10 @@ details.more{margin-top:4px}
 details.more summary{cursor:pointer;font-size:13px;color:var(--muted);padding:4px 0}
 details.more summary:hover{color:var(--ink)}
 .frame canvas{cursor:grab}
+.check{display:flex;gap:8px;align-items:center;font-size:13px;color:#c9cbd1;cursor:pointer}
+.check input{accent-color:var(--accent);width:16px;height:16px;margin:0}
+.styleNote{font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
+.link{border:0;background:none;color:var(--accent);padding:0 2px;font-size:12px;text-decoration:underline}
 .cap{display:flex;align-items:center;gap:12px;min-height:30px;font-size:13px;color:var(--muted)}
 .cap #viewHint{flex:1}
 .cap b{color:var(--ink);font-weight:500;margin-right:8px}
@@ -154,7 +158,8 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
   <h1>簡報美編工坊</h1>
   <span class="sp"></span>
   <button class="btn" id="btnOpen">上傳文字檔</button>
-  <button class="btn primary" id="btnExport" disabled>匯出 ProPresenter 檔</button>
+  <button class="btn" id="btnZip" disabled title="把每一頁存成圖片，另外也附兩個 pptx">另存圖片（zip）</button>
+  <button class="btn primary" id="btnExport" disabled>匯出給 ProPresenter</button>
   <input type="file" id="file" accept=".pptx" hidden>
 </header>
 
@@ -166,8 +171,8 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
         <h2>空白文字檔進去，現場版和長條版出來</h2>
         <ol>
           <li>上傳只有文字的 pptx</li>
-          <li>挑一套背景，兩種版面自動套同一個風格</li>
-          <li>改字、調字級和長條位置，然後匯出給 ProPresenter</li>
+          <li>自動套用你上次選的背景、字型和位置（第一次用才需要挑）</li>
+          <li>檢查一下，按「匯出給 ProPresenter」，或勾選直接匯出</li>
         </ol>
         <div class="note">檔案只在你的瀏覽器裡處理，不會傳到任何地方。</div>
       </div>
@@ -177,6 +182,8 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
           <button class="btn primary" id="btnPick">選擇檔案</button>
           <button class="btn" id="btnSample">用範例試試</button>
         </div>
+        <label class="check"><input type="checkbox" id="autoExport"> 上傳後直接匯出，不用再按任何按鈕</label>
+        <div class="styleNote" id="styleNote" hidden><span id="styleNoteT"></span> <button class="link" id="styleClear">清除</button></div>
       </div>
     </div>
     <div id="editor" hidden>
@@ -228,24 +235,6 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
       <div class="pane" id="pLook" hidden>
         <div class="note">這裡的設定，現場版和線上版會一起套用。</div>
         <div class="sec">
-          <h3>背景</h3>
-          <div class="themebar"><span id="themeCount"></span></div>
-          <div class="cats" id="themeCats"></div>
-          <div class="themes" id="themes"></div>
-          <div class="customrow">
-            <div class="row">
-              <button class="btn small" id="btnBg">用自己的背景圖…</button>
-              <button class="btn small" id="btnBgClear" hidden>取消背景圖</button>
-              <input type="file" id="bgFile" accept="image/*" hidden>
-            </div>
-            <div class="row" id="bgMode" style="margin-top:8px" hidden>
-              <span class="hint" style="margin:0 4px 0 0">圖片上的字</span>
-              <button class="pill" data-m="dark">白字（深色罩）</button>
-              <button class="pill" data-m="light">深字（淺色罩）</button>
-            </div>
-          </div>
-        </div>
-        <div class="sec">
           <h3>字型</h3>
           <label class="field">標題<select id="fontHead"></select></label>
           <label class="field">內文與經文<select id="fontBody"></select></label>
@@ -262,6 +251,24 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
           <h3>行距</h3>
           <label class="slider">行距<input type="range" id="lineGap" min="1.1" max="1.9" step="0.05" value="1.5"><output id="lineGapO"></output></label>
           <div class="row"><button class="btn small" id="lineGapReset">還原預設</button></div>
+        </div>
+        <div class="sec">
+          <h3>背景</h3>
+          <div class="themebar"><span id="themeCount"></span></div>
+          <div class="cats" id="themeCats"></div>
+          <div class="themes" id="themes"></div>
+          <div class="customrow">
+            <div class="row">
+              <button class="btn small" id="btnBg">用自己的背景圖…</button>
+              <button class="btn small" id="btnBgClear" hidden>取消背景圖</button>
+              <input type="file" id="bgFile" accept="image/*" hidden>
+            </div>
+            <div class="row" id="bgMode" style="margin-top:8px" hidden>
+              <span class="hint" style="margin:0 4px 0 0">圖片上的字</span>
+              <button class="pill" data-m="dark">白字（深色罩）</button>
+              <button class="pill" data-m="light">深字（淺色罩）</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -313,9 +320,9 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
 
 <div id="toast"></div>
 <div id="prog"><div><div id="progT">處理中…</div><i><b id="progB"></b></i></div></div>
-<script src="themes.js?v=10"></script>
-<script src="themes2.js?v=10"></script>
-<script src="app.js?v=10"></script>
+<script src="themes.js?v=11"></script>
+<script src="themes2.js?v=11"></script>
+<script src="app.js?v=11"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
