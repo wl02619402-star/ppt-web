@@ -1,7 +1,7 @@
 'use strict';
 // ---------- 狀態 ----------
 const S = {
-  slides: [], sel: 0, page: 0, themeKey: 'torn_kraft', stripW: 0.81, stripY: 64, stripX: 0, view: 'live', autoExport: false,
+  slides: [], sel: 0, page: 0, themeKey: 'torn_kraft', stripW: 0.81, stripY: 64, stripX: 0, view: 'live', autoExport: false, exportFmt: 'image',
   custom: null, customMode: 'dark', fileName: '簡報',
   fonts: { head: 'theme', body: 'theme' }, localFonts: [], lineGap: null, live: {}, liveScope: 'all',
 };
@@ -50,19 +50,19 @@ function tokenize(t) { return t.match(/[A-Za-z0-9:：.\-–—]+|[\s\S]/g) || []
 const SERIF = '"Noto Serif TC","Songti TC","PMingLiU",serif';
 const isSerif = () => !S.custom && !!THEMES[S.themeKey].serif;
 const FONT_OPTS = [
-  { id: 'serifH', label: '源樣明體 Heavy', stack: SERIF, w: 900, rw: 900 },
-  { id: 'serifB', label: '源樣明體 Bold', stack: SERIF, w: 700, rw: 900 },
-  { id: 'sansB', label: '源樣黑體 Bold', stack: FONT, w: 700, rw: 700 },
-  { id: 'sansM', label: '源樣黑體 Medium', stack: FONT, w: 500, rw: 700 },
-  { id: 'huninn', label: '粉圓體（圓體，近似金萱）', stack: '"Huninn","jf-openhuninn","PingFang TC",sans-serif', w: 400, rw: 400 },
-  { id: 'iansui', label: '芫荽體（圓潤手寫感）', stack: '"Iansui","PingFang TC",sans-serif', w: 400, rw: 400 },
-  { id: 'wenkai', label: '霞鶩文楷（楷書，近似凝書體）', stack: '"LXGW WenKai TC","Kaiti TC","KaiTC",serif', w: 400, rw: 700 },
+  { id: 'serifH', label: '源樣明體 Heavy', stack: SERIF, w: 900, rw: 900, face: 'Noto Serif TC', bold: true },
+  { id: 'serifB', label: '源樣明體 Bold', stack: SERIF, w: 700, rw: 900, face: 'Noto Serif TC', bold: true },
+  { id: 'sansB', label: '源樣黑體 Bold', stack: FONT, w: 700, rw: 700, face: 'Noto Sans TC', bold: true },
+  { id: 'sansM', label: '源樣黑體 Medium', stack: FONT, w: 500, rw: 700, face: 'Noto Sans TC', bold: false },
+  { id: 'huninn', label: '粉圓體（圓體，近似金萱）', stack: '"Huninn","jf-openhuninn","PingFang TC",sans-serif', w: 400, rw: 400, face: 'Huninn', bold: false },
+  { id: 'iansui', label: '芫荽體（圓潤手寫感）', stack: '"Iansui","PingFang TC",sans-serif', w: 400, rw: 400, face: 'Iansui', bold: false },
+  { id: 'wenkai', label: '霞鶩文楷（楷書，近似凝書體）', stack: '"LXGW WenKai TC","Kaiti TC","KaiTC",serif', w: 400, rw: 700, face: 'LXGW WenKai TC', bold: false },
 ];
 function fontOpt(id) {
   if (!id || id === 'theme') return null;
   const b = FONT_OPTS.find(o => o.id === id); if (b) return b;
   const f = S.localFonts.find(x => 'L:' + x.fam === id);
-  return f && f.ok !== false ? { id, label: '本機：' + f.name, stack: `"${f.fam}","Noto Sans TC",sans-serif`, w: 400, rw: 400 } : null;
+  return f && f.ok !== false ? { id, label: '本機：' + f.name, stack: `"${f.fam}","Noto Sans TC",sans-serif`, w: 400, rw: 400, face: f.name, bold: false } : null;
 }
 const fnt = (weight, size, head, red) => {
   const o = fontOpt(head ? S.fonts.head : S.fonts.body);
@@ -134,7 +134,7 @@ function stripLead(runs, n) {
   for (const r of runs) { if (left >= r.t.length) { left -= r.t.length; continue; } out.push({ t: r.t.slice(left), red: r.red }); left = 0; }
   return out.length ? out : [{ t: ' ', red: false }];
 }
-function drawLive(cv, slide, idx) {
+function drawLive(cv, slide, idx, noText) {
   const v = autoVariant(slide, idx), T = slideTheme(curTheme(), v), c = cv.getContext('2d');
   const isTitle = v === 'title', isSpark = v === 'spark';
   c.clearRect(0, 0, W, H);
@@ -152,11 +152,12 @@ function drawLive(cv, slide, idx) {
   const h = blockH(lines, o);
   const x = ((isTitle || isSpark) ? (W - L.w) / 2 : 160) + L.dx + shift;
   const y = (isTitle ? Math.max(120, (H * .72 - h) / 2 + 40) : isSpark ? (H - h) / 2 - 10 : Math.max(110, (H - h) / 2 - 10)) + L.dy;
-  drawLines(c, lines, x, y, o, T, L.align, maxW);
-  if (numeral) {
-    c.font = `italic 700 ${Math.round(lines[0].size * 2.1)}px ${SERIF}`; c.fillStyle = T.accent; c.textBaseline = 'middle'; c.fillText(numeral, x - shift + 6, y + lines[0].h / 2 + lines[0].size * .1);
+  const numSize = numeral ? Math.round(lines[0].size * 2.1) : 0, numX = x - shift + 6, numY = numeral ? y + lines[0].h / 2 + lines[0].size * .1 : 0;
+  if (!noText) {
+    drawLines(c, lines, x, y, o, T, L.align, maxW);
+    if (numeral) { c.font = `italic 700 ${numSize}px ${SERIF}`; c.fillStyle = T.accent; c.textBaseline = 'middle'; c.fillText(numeral, numX, numY); }
   }
-  return { shrunk: size < Math.round(base * fs) };
+  return { shrunk: size < Math.round(base * fs), geo: { lines, x, y, o, align: L.align, maxW, T, numeral, numX, numY, numSize } };
 }
 
 // ---------- 長條版 ----------
@@ -179,7 +180,7 @@ function stripPages(slide) {
   if (cur.length) pages.push(cur);
   return { pages, o, cardW };
 }
-function drawStrip(cv, slide, page) {
+function drawStrip(cv, slide, page, noText) {
   const T = curTheme(), c = cv.getContext('2d');
   c.clearRect(0, 0, W, H);
   const { pages, o, cardW } = stripPages(slide);
@@ -189,7 +190,8 @@ function drawStrip(cv, slide, page) {
   const card = drawCard(T, cardW, h, 1);
   c.save(); c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 24; c.shadowOffsetY = 8;
   c.drawImage(card, x0, y0, cardW, h); c.restore();
-  drawLines(c, lines, x0 + STRIP.padL, y0 + STRIP.padT, o, T);
+  if (!noText) drawLines(c, lines, x0 + STRIP.padL, y0 + STRIP.padT, o, T);
+  drawStrip.geo = { lines, x: x0 + STRIP.padL, y: y0 + STRIP.padT, o, w: cardW - STRIP.padL - STRIP.padR, T };
   return pages.length;
 }
 
@@ -414,14 +416,14 @@ function renderLocalList() {
 }
 
 // ---------- 記住上次的樣式 ----------
-const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, live: S.live, fonts: S.fonts, autoExport: S.autoExport, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
+const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, live: S.live, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
 async function applyStyle(v) {
   if (!v) return;
-  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, live: v.live || {}, autoExport: !!v.autoExport });
+  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, live: v.live || {}, autoExport: !!v.autoExport, exportFmt: v.exportFmt || 'image' });
   if (v.fonts) S.fonts = v.fonts;
   for (const f of (v.localFonts || [])) await registerLocal(f.name, f.fam);
   if (S.lineGap) $('lineGap').value = S.lineGap;
-  $('stripW').value = Math.round(S.stripW * 100); $('autoExport').checked = S.autoExport;
+  $('stripW').value = Math.round(S.stripW * 100); $('autoExport').checked = S.autoExport; $('exportFmt').value = S.exportFmt;
   buildFontSelects(); buildThemes(); syncOut();
 }
 function showStyleNote(has) {
@@ -445,7 +447,7 @@ async function start(slides, name) {
   await ensureFonts(); bgCache.clear(); buildCats(); buildThemes(); buildList(); select(0); save();
 }
 async function loadFile(f) {
-  try { const slides = await parsePptx(await f.arrayBuffer()); if (!slides.length) throw new Error('empty'); await start(slides, f.name); toast(`已讀入 ${slides.length} 頁`); if (S.autoExport) await runExport('pptx'); }
+  try { const slides = await parsePptx(await f.arrayBuffer()); if (!slides.length) throw new Error('empty'); await start(slides, f.name); toast(`已讀入 ${slides.length} 頁`); if (S.autoExport) await exportByFormat().catch(e => { console.error(e); $('prog').style.display = 'none'; toast('匯出失敗：' + e.message); }); }
   catch (e) { console.error(e); toast('讀不到這個檔案，請確認是 .pptx 格式'); }
 }
 const SAMPLE = [
@@ -496,6 +498,68 @@ async function exportAll(mode = 'zip') {
   return out;
 }
 
+// ---------- 可編輯文字版 pptx ----------
+const PX_IN = 144, inch = px => +(px / PX_IN).toFixed(4), ptOf = px => +(px * .5).toFixed(2), hexNo = c => String(c).replace('#', '');
+function textGroups(lines, y, o) {
+  const gs = []; let cur = null;
+  lines.forEach((l, i) => {
+    if (!cur || cur.pi !== l.pi) { cur = { pi: l.pi, y, size: l.size, head: l.head, lines: [], h: 0 }; gs.push(cur); }
+    cur.lines.push(l); cur.h += l.h; y += l.h;
+    if (lines[i + 1] && lines[i + 1].pi !== l.pi) y += l.size * o.paraGap;
+  });
+  return gs;
+}
+function faceOf(head) {
+  const o = fontOpt(head ? S.fonts.head : S.fonts.body);
+  if (o) return { face: o.face, bold: !!o.bold };
+  return { face: head && isSerif() ? 'Noto Serif TC' : 'Noto Sans TC', bold: !!head };
+}
+function addTextGroups(sl, lines, y, o, x, w, align, T) {
+  textGroups(lines, y, o).forEach(g => {
+    const f = faceOf(g.head), runs = [];
+    g.lines.forEach((l, li) => {
+      let last = null;
+      l.segs.forEach(s => {
+        const key = s.red ? 'r' : 't';
+        if (last && last.key === key && !last.fresh) { last.run.text += s.t; return; }
+        const opt = { color: hexNo(s.red ? T.red : T.text), bold: f.bold || !!s.red, fontFace: f.face };
+        if (li > 0 && !last) opt.softBreakBefore = true;
+        const run = { text: s.t, options: opt }; runs.push(run); last = { key, run };
+      });
+    });
+    const slack = w * .14, bx = align === 'center' ? x - slack / 2 : align === 'right' ? x - slack : x;
+    sl.addText(runs, { x: inch(bx), y: inch(g.y), w: inch(w + slack), h: inch(g.h), margin: 0, valign: 'top', align, fontSize: ptOf(g.size), lineSpacing: ptOf(g.lines[0].h), wrap: true, fit: 'none' });
+  });
+}
+async function exportEditable() {
+  await ensureFonts();
+  const pL = new PptxGenJS(), pS = new PptxGenJS(); pL.layout = pS.layout = 'LAYOUT_WIDE';
+  const cv = mk(W, H), total = S.slides.length;
+  for (let i = 0; i < total; i++) {
+    prog(`正在輸出可編輯版 第 ${i + 1} / ${total} 頁…`, i / total); await sleep(0);
+    const sd = S.slides[i], r = drawLive(cv, sd, i, true), g = r.geo;
+    const sl = pL.addSlide(); sl.addImage({ data: await dataOf(await blobOf(cv, 'image/jpeg', .93)), x: 0, y: 0, w: 13.333, h: 7.5 });
+    addTextGroups(sl, g.lines, g.y, g.o, g.x, g.maxW, g.align, g.T);
+    if (g.numeral) { const hh = g.numSize * 1.3; sl.addText(g.numeral, { x: inch(g.numX - 6), y: inch(g.numY - hh / 2), w: 1.1, h: inch(hh), margin: 0, valign: 'middle', align: 'left', fontSize: ptOf(g.numSize), italic: true, bold: true, fontFace: 'Noto Serif TC', color: hexNo(g.T.accent) }); }
+    const n = stripPages(sd).pages.length;
+    for (let p = 0; p < n; p++) {
+      drawStrip(cv, sd, p, true); const sg = drawStrip.geo;
+      const ss = pS.addSlide(); ss.addImage({ data: await dataOf(await blobOf(cv, 'image/png')), x: 0, y: 0, w: 13.333, h: 7.5 });
+      addTextGroups(ss, sg.lines, sg.y, sg.o, sg.x, sg.w, 'left', sg.T);
+    }
+  }
+  prog('正在打包 pptx…', .95); await sleep(30);
+  const a = await pL.write({ outputType: 'blob' }), b = await pS.write({ outputType: 'blob' });
+  $('prog').style.display = 'none'; download(a, `${S.fileName}_現場版_可編輯.pptx`); await sleep(500); download(b, `${S.fileName}_線上長條版_可編輯.pptx`);
+  toast('完成！已下載兩個可編輯文字的 pptx'); return [a, b];
+}
+async function exportByFormat() {
+  const f = S.exportFmt;
+  if (f === 'text') return exportEditable();
+  if (f === 'both') { await exportAll('pptx'); await sleep(600); return exportEditable(); }
+  return exportAll('pptx');
+}
+
 function toast(t) { const e = $('toast'); e.textContent = t; e.classList.add('on'); clearTimeout(e._t); e._t = setTimeout(() => e.classList.remove('on'), 2600); }
 
 // ---------- 事件 ----------
@@ -530,7 +594,7 @@ $('stripY').oninput = () => { S.stripY = +$('stripY').value; syncOut(); redrawSo
 $('stripW').oninput = () => { S.stripW = $('stripW').value / 100; syncOut(); S.page = 0; redrawSoon(); };
 $('stripW').onchange = () => buildList();
 const runExport = mode => exportAll(mode).catch(e => { console.error(e); $('prog').style.display = 'none'; toast('匯出失敗：' + e.message); });
-$('btnExport').onclick = () => runExport('pptx'); $('btnZip').onclick = () => runExport('zip');
+$('btnExport').onclick = () => exportByFormat().catch(e => { console.error(e); $('prog').style.display = 'none'; toast('匯出失敗：' + e.message); }); $('btnZip').onclick = () => runExport('zip');
 
 $('btnBg').onclick = () => $('bgFile').click();
 $('bgFile').onchange = e => {
@@ -579,6 +643,7 @@ attachDrag($('cvStrip'), () => ({ x: S.stripX, y: S.stripY }),
 $('stripX').oninput = () => { S.stripX = +$('stripX').value; syncOut(); redrawSoon(); };
 $('stripReset').onclick = () => { S.stripX = 0; S.stripY = 64; S.stripW = .81; $('stripY').value = 64; $('stripW').value = 81; S.page = 0; syncOut(); redrawSoon(); };
 document.querySelectorAll('.view').forEach(b => b.onclick = () => setView(b.dataset.v));
+$('exportFmt').onchange = () => { S.exportFmt = $('exportFmt').value; save(); };
 $('autoExport').onchange = () => { S.autoExport = $('autoExport').checked; save(); };
 $('styleClear').onclick = () => { try { localStorage.removeItem('ppt-web-style'); localStorage.removeItem('ppt-web-v1'); } catch (e) { } location.reload(); };
 (async () => {

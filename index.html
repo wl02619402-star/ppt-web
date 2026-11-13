@@ -27,6 +27,7 @@ button{cursor:pointer}
 header{height:44px;display:flex;align-items:center;gap:6px;padding:0 12px 0 16px;background:var(--panel);border-bottom:1px solid var(--line)}
 header h1{font-size:14px;font-weight:700;margin:0 20px 0 0;white-space:nowrap}
 header .sp{flex:1}
+header select{width:auto;height:30px;font-size:13px}
 .btn{height:30px;padding:0 12px;border:1px solid var(--line2);background:transparent;border-radius:4px;font-weight:500;font-size:13px;white-space:nowrap}
 .btn:hover{background:var(--raise)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:700}
@@ -159,6 +160,7 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
   <span class="sp"></span>
   <button class="btn" id="btnOpen">上傳文字檔</button>
   <button class="btn" id="btnZip" disabled title="把每一頁存成圖片，另外也附兩個 pptx">另存圖片（zip）</button>
+  <select id="exportFmt" title="匯出格式" aria-label="匯出格式"><option value="image">圖片版（版面最準）</option><option value="text">可編輯文字版</option><option value="both">兩種都匯出</option></select>
   <button class="btn primary" id="btnExport" disabled>匯出給 ProPresenter</button>
   <input type="file" id="file" accept=".pptx" hidden>
 </header>
@@ -325,10 +327,10 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
 
 <div id="toast"></div>
 <div id="prog"><div><div id="progT">處理中…</div><i><b id="progB"></b></i></div></div>
-<script src="themes.js?v=12"></script>
-<script src="themes2.js?v=12"></script>
-<script src="themes3.js?v=12"></script>
-<script src="app.js?v=12"></script>
+<script src="themes.js?v=14"></script>
+<script src="themes2.js?v=14"></script>
+<script src="themes3.js?v=14"></script>
+<script src="app.js?v=14"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
