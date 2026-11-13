@@ -243,19 +243,27 @@ function stripOpts() {
   return { headRule: (pi, ps) => pi === 0 && ps.length > 1, headScale: 1.2, lineGap: Math.max(1.2, (S.lineGap || 1.1 * LN) - .2), paraGap: .3 };
 }
 function stripPages(slide) {
-  const o = stripOpts(), cardW = Math.round(W * S.stripW), tw_ = cardW - STRIP.padL - STRIP.padR;
-  const sfs = slide.sfs || 1, pv = STRIP.padT + STRIP.padB;
-  for (let size = Math.round(46 * sfs); size >= 30; size -= 2) {
-    const lines = layout(slide.paras, size, tw_, o);
-    if (blockH(lines, o) + pv <= STRIP.maxH) return { pages: [lines], o, cardW };
-  }
-  const lines = layout(slide.paras, 30, tw_, o), pages = []; let cur = [];
+  // 先把字條變寬（最寬到畫面的 96%）、再縮字，盡量讓一段內容放在同一條；真的放不下才分成多條
+  const o = stripOpts(), sfs = slide.sfs || 1, pv = STRIP.padT + STRIP.padB;
+  const base = Math.round(W * S.stripW), wide = Math.round(W * .96);
+  const widths = [base]; for (let k = 1; k <= 3; k++) { const w = Math.round(base + (wide - base) * k / 3); if (w > widths[widths.length - 1]) widths.push(w); }
+  const attempt = (cardW, minSize) => {
+    const tw_ = cardW - STRIP.padL - STRIP.padR;
+    for (let size = Math.round(46 * sfs); size >= minSize; size -= 2) {
+      const lines = layout(slide.paras, size, tw_, o);
+      if (blockH(lines, o) + pv <= STRIP.maxH) return { pages: [lines], o, cardW };
+    }
+    return null;
+  };
+  for (const w of widths) { const r = attempt(w, 40); if (r) return r; }
+  const r2 = attempt(wide, 30); if (r2) return r2;
+  const tw2 = wide - STRIP.padL - STRIP.padR, lines = layout(slide.paras, 30, tw2, o), pages = []; let cur = [];
   for (const ln of lines) {
     if (cur.length && blockH(cur.concat([ln]), o) + pv > STRIP.maxH) { pages.push(cur); cur = []; }
     cur.push(ln);
   }
   if (cur.length) pages.push(cur);
-  return { pages, o, cardW };
+  return { pages, o, cardW: wide };
 }
 function drawStrip(cv, slide, page, noText) {
   const T = curTheme(), c = cv.getContext('2d');
