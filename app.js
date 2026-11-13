@@ -652,6 +652,23 @@ document.querySelectorAll('.view').forEach(b => b.onclick = () => setView(b.data
 $('exportFmt').onchange = () => { S.exportFmt = $('exportFmt').value; save(); };
 $('autoExport').onchange = () => { S.autoExport = $('autoExport').checked; save(); };
 $('styleClear').onclick = () => { try { localStorage.removeItem('ppt-web-style'); localStorage.removeItem('ppt-web-v1'); } catch (e) { } location.reload(); };
+// 鍵盤切換頁面：上下鍵（或左右鍵、PageUp/PageDown）；在輸入框裡打字時不攔截，按 Esc 離開輸入框
+document.addEventListener('keydown', e => {
+  const t = e.target, tag = t.tagName, type = (t.type || '').toLowerCase();
+  const typing = tag === 'TEXTAREA' || tag === 'SELECT' || (tag === 'INPUT' && !['range', 'checkbox', 'button'].includes(type));
+  if (e.key === 'Escape' && typing) { t.blur(); return; }
+  if (typing || e.metaKey || e.ctrlKey || e.altKey || !S.slides.length || !$('editor') || $('editor').hidden) return;
+  let to = null;
+  if (e.key === 'ArrowDown' || e.key === 'PageDown') to = S.sel + 1;
+  else if (e.key === 'ArrowUp' || e.key === 'PageUp') to = S.sel - 1;
+  else if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && type !== 'range') to = S.sel + (e.key === 'ArrowRight' ? 1 : -1);
+  else if (e.key === 'Home') to = 0;
+  else if (e.key === 'End') to = S.slides.length - 1;
+  if (to === null) return;
+  e.preventDefault();
+  to = Math.max(0, Math.min(S.slides.length - 1, to));
+  if (to !== S.sel) select(to);
+});
 (async () => {
   syncOut(); buildCats(); buildThemes(); buildFontSelects();
   try {

@@ -230,7 +230,7 @@ input[type=range]{width:100%;accent-color:var(--ink2);margin:0}
         <div class="sec">
           <h3>這一頁的文字</h3>
           <textarea id="txt" spellcheck="false"></textarea>
-          <div class="hint">一行就是一段；第一行比較短時會當標題。想標紅字，用兩個星號包起來，例如 **耶穌**。</div>
+          <div class="hint">一行就是一段；第一行比較短時會當標題。想標紅字，用兩個星號包起來，例如 **耶穌**。按 Esc 離開輸入框後，可以用上下鍵切換頁面。</div>
           <div class="row" style="margin-top:10px">
             <button class="btn small" id="btnRed">選取的字變紅字</button>
           </div>
@@ -338,10 +338,10 @@ input[type=range]{width:100%;accent-color:var(--ink2);margin:0}
 
 <div id="toast"></div>
 <div id="prog"><div><div id="progT">處理中…</div><i><b id="progB"></b></i></div></div>
-<script src="themes.js?v=16"></script>
-<script src="themes2.js?v=16"></script>
-<script src="themes3.js?v=16"></script>
-<script src="app.js?v=16"></script>
+<script src="themes.js?v=17"></script>
+<script src="themes2.js?v=17"></script>
+<script src="themes3.js?v=17"></script>
+<script src="app.js?v=17"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
