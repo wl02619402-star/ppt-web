@@ -7,7 +7,7 @@
 <title>簡報美編工坊</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@700;900&family=Huninn&family=Iansui&family=LXGW+WenKai+TC:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 <style>
@@ -87,6 +87,8 @@ main{overflow:auto;padding:16px 24px}
 #sideBody[hidden]{display:none}
 .sec{margin-bottom:22px}
 .sec h3{margin:0 0 8px;font-size:13px;font-weight:700}
+select,input[type=text]{width:100%;height:32px;background:var(--bg);border:1px solid var(--line2);border-radius:4px;padding:0 8px;font-size:13px}
+#localName{flex:1;width:auto}
 textarea{width:100%;min-height:220px;background:var(--bg);border:1px solid var(--line2);border-radius:4px;padding:10px;line-height:1.65;resize:vertical}
 .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .hint{font-size:12px;color:var(--muted);margin-top:8px}
@@ -174,6 +176,7 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
       <div class="tabs" role="tablist">
         <button class="on" data-pane="pText" role="tab">文字</button>
         <button data-pane="pLayout" role="tab">版面</button>
+        <button data-pane="pFont" role="tab">字型</button>
         <button data-pane="pTheme" role="tab">背景</button>
       </div>
       <div class="pane" id="pText">
@@ -206,6 +209,25 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
           <label class="slider">寬度<input type="range" id="stripW" min="50" max="96" step="1"><output id="stripWO"></output></label>
         </div>
       </div>
+      <div class="pane" id="pFont" hidden>
+        <div class="sec">
+          <h3>主標字型</h3>
+          <select id="fontHead"></select>
+          <div class="hint">每頁第一行的標題。</div>
+        </div>
+        <div class="sec">
+          <h3>內文與經文字型</h3>
+          <select id="fontBody"></select>
+        </div>
+        <div class="sec">
+          <h3>用電腦裡裝的字型</h3>
+          <div class="hint" style="margin:0 0 8px">金萱那堤、凝書體這類字型無法放進網站，但只要裝在這台電腦，就能在這裡加入。匯出的圖片已經含字型，ProPresenter 那台不用裝。</div>
+          <div class="row"><input id="localName" type="text" placeholder="字型完整名稱，例如：金萱那堤九分"><button class="btn small" id="btnLocalAdd">加入</button></div>
+          <div class="row" style="margin-top:8px"><button class="btn small" id="btnLocalPick">從電腦的字型清單挑…</button></div>
+          <input id="localFilter" type="text" placeholder="搜尋字型名稱" hidden style="margin-top:8px">
+          <div class="row" id="localList" style="margin-top:8px"></div>
+        </div>
+      </div>
       <div class="pane" id="pTheme" hidden>
         <div class="themebar"><h3>背景設計</h3><span id="themeCount"></span></div>
         <div class="cats" id="themeCats"></div>
@@ -229,9 +251,9 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
 
 <div id="toast"></div>
 <div id="prog"><div><div id="progT">處理中…</div><i><b id="progB"></b></i></div></div>
-<script src="themes.js?v=6"></script>
-<script src="themes2.js?v=6"></script>
-<script src="app.js?v=6"></script>
+<script src="themes.js?v=7"></script>
+<script src="themes2.js?v=7"></script>
+<script src="app.js?v=7"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));

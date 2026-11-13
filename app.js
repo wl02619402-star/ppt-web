@@ -3,6 +3,7 @@
 const S = {
   slides: [], sel: 0, page: 0, themeKey: 'paper', stripW: 0.81, stripY: 64,
   custom: null, customMode: 'dark', fileName: '簡報',
+  fonts: { head: 'theme', body: 'theme' }, localFonts: [],
 };
 const $ = id => document.getElementById(id);
 const measureCtx = mk(10, 10).getContext('2d');
@@ -43,7 +44,26 @@ function tw(font, tok) {
 function tokenize(t) { return t.match(/[A-Za-z0-9:：.\-–—]+|[\s\S]/g) || []; }
 const SERIF = '"Noto Serif TC","Songti TC","PMingLiU",serif';
 const isSerif = () => !S.custom && !!THEMES[S.themeKey].serif;
-const fnt = (weight, size, head) => `${weight} ${size}px ${head && isSerif() ? SERIF : FONT}`;
+const FONT_OPTS = [
+  { id: 'serifH', label: '源樣明體 Heavy', stack: SERIF, w: 900, rw: 900 },
+  { id: 'serifB', label: '源樣明體 Bold', stack: SERIF, w: 700, rw: 900 },
+  { id: 'sansB', label: '源樣黑體 Bold', stack: FONT, w: 700, rw: 700 },
+  { id: 'sansM', label: '源樣黑體 Medium', stack: FONT, w: 500, rw: 700 },
+  { id: 'huninn', label: '粉圓體（圓體，近似金萱）', stack: '"Huninn","jf-openhuninn","PingFang TC",sans-serif', w: 400, rw: 400 },
+  { id: 'iansui', label: '芫荽體（圓潤手寫感）', stack: '"Iansui","PingFang TC",sans-serif', w: 400, rw: 400 },
+  { id: 'wenkai', label: '霞鶩文楷（楷書，近似凝書體）', stack: '"LXGW WenKai TC","Kaiti TC","KaiTC",serif', w: 400, rw: 700 },
+];
+function fontOpt(id) {
+  if (!id || id === 'theme') return null;
+  const b = FONT_OPTS.find(o => o.id === id); if (b) return b;
+  const f = S.localFonts.find(x => 'L:' + x.fam === id);
+  return f && f.ok !== false ? { id, label: '本機：' + f.name, stack: `"${f.fam}","Noto Sans TC",sans-serif`, w: 400, rw: 400 } : null;
+}
+const fnt = (weight, size, head, red) => {
+  const o = fontOpt(head ? S.fonts.head : S.fonts.body);
+  if (o) return `${red ? o.rw : o.w} ${size}px ${o.stack}`;
+  return `${weight} ${size}px ${head && isSerif() ? SERIF : FONT}`;
+};
 
 function layout(paras, size, maxW, o) {
   // o: {headRule, headScale, lineGap, paraGap}
@@ -52,7 +72,7 @@ function layout(paras, size, maxW, o) {
     const head = o.headRule(pi, paras);
     const fs = head ? Math.round(size * o.headScale) : size;
     const wt = head ? 700 : 500;
-    const base = fnt(wt, fs, head), redf = fnt(700, fs, head);
+    const base = fnt(wt, fs, head, false), redf = fnt(700, fs, head, true);
     const flat = [];
     runs.forEach(r => tokenize(r.t.replace(/[\n\v]/g, ' ')).forEach(tk => flat.push({ t: tk, red: r.red })));
     let cur = [], cw = 0;
@@ -80,7 +100,7 @@ function blockH(lines, o) {
 function drawLines(c, lines, x, y, o, T, align = 'left', boxW = 0) {
   c.textBaseline = 'middle';
   lines.forEach((l, i) => {
-    const wt = l.head ? 700 : 500, base = fnt(wt, l.size, l.head), redf = fnt(700, l.size, l.head);
+    const wt = l.head ? 700 : 500, base = fnt(wt, l.size, l.head, false), redf = fnt(700, l.size, l.head, true);
     let px = align === 'center' ? x + (boxW - l.w) / 2 : x;
     const cy = y + l.h / 2;
     l.segs.forEach(s => {
@@ -204,7 +224,9 @@ async function ensureFonts() {
   const all = new Set(); S.slides.forEach(s => s.paras.forEach(p => p.forEach(r => [...r.t].forEach(ch => all.add(ch)))));
   const fresh = [...all].filter(ch => !loadedChars.has(ch)); if (!fresh.length) return false;
   const sample = fresh.join(''); fresh.forEach(ch => loadedChars.add(ch));
-  try { await Promise.all([400, 500, 700].map(w => document.fonts.load(`${w} 40px "Noto Sans TC"`, sample)).concat([document.fonts.load('700 40px "Noto Serif TC"', sample)])); } catch (e) { }
+  const jobs = [400, 500, 700].map(w => document.fonts.load(`${w} 40px "Noto Sans TC"`, sample)).concat([document.fonts.load('700 40px "Noto Serif TC"', sample)]);
+  for (const id of [S.fonts.head, S.fonts.body]) { const o = fontOpt(id); if (o) [o.w, o.rw].forEach(w => jobs.push(document.fonts.load(`${w} 40px ${o.stack}`, sample))); }
+  try { await Promise.allSettled(jobs); } catch (e) { }
   wcache.clear(); return true;
 }
 
@@ -293,11 +315,53 @@ function getBgFor(k) { const c = mk(W, H); THEMES[k].bg.call(THEMES[k], c.getCon
 function afterThemeChange() { bgCache.clear(); buildThemes(); buildList(); renderMain(); save(); }
 function clearCustom(redraw = true) { S.custom = null; $('btnBgClear').hidden = true; $('bgMode').hidden = true; if (redraw) afterThemeChange(); }
 
+// ---------- 字型選單 ----------
+async function registerLocal(name, fam) {
+  fam = fam || 'LF_' + Math.random().toString(36).slice(2, 8);
+  let f = S.localFonts.find(x => x.name === name);
+  if (!f) { f = { name, fam }; S.localFonts.push(f); }
+  try { const ff = new FontFace(f.fam, `local("${name.replace(/"/g, '')}")`); await ff.load(); document.fonts.add(ff); f.ok = true; }
+  catch (e) { f.ok = false; }
+  return f;
+}
+function buildFontSelects() {
+  [['fontHead', 'head'], ['fontBody', 'body']].forEach(([id, k]) => {
+    const sel = $(id); sel.innerHTML = '';
+    const add = (v, t, dis) => { const o = document.createElement('option'); o.value = v; o.textContent = t; if (dis) o.disabled = true; sel.appendChild(o); };
+    add('theme', '跟著背景主題');
+    FONT_OPTS.forEach(o => add(o.id, o.label));
+    S.localFonts.forEach(f => add('L:' + f.fam, '本機：' + f.name + (f.ok === false ? '（找不到）' : ''), f.ok === false));
+    sel.value = fontOpt(S.fonts[k]) || S.fonts[k] === 'theme' ? S.fonts[k] : 'theme';
+  });
+}
+async function afterFontChange() {
+  loadedChars.clear(); await ensureFonts(); wcache.clear(); buildList(); renderMain(); save();
+}
+async function addLocalFontByName(name) {
+  name = name.trim(); if (!name) return;
+  const f = await registerLocal(name);
+  if (f.ok) { toast(`已加入本機字型：${name}`); buildFontSelects(); } else { S.localFonts = S.localFonts.filter(x => x !== f); toast('找不到這個字型，請確認名稱，或用「從電腦挑」'); }
+  return f;
+}
+let _localAll = null;
+function renderLocalList() {
+  const box = $('localList'), q = $('localFilter').value.trim().toLowerCase();
+  const pre = /金萱|那堤|凝書|源樣|源柔|思源|圓|jf|huninn/i;
+  let list = _localAll || []; list = q ? list.filter(f => (f.fullName + f.family).toLowerCase().includes(q)) : list.filter(f => pre.test(f.fullName + f.family));
+  box.innerHTML = '';
+  list.slice(0, 80).forEach(f => {
+    const b = document.createElement('button'); b.className = 'btn small'; b.textContent = f.fullName;
+    b.onclick = async () => { const r = await addLocalFontByName(f.postscriptName || f.fullName); if (r && r.ok) { r.name = f.fullName; save(); } };
+    box.appendChild(b);
+  });
+  if (!list.length) box.textContent = q ? '沒有符合的字型' : '沒找到金萱、凝書等常用字型，請直接在上面搜尋';
+}
+
 // ---------- 儲存 ----------
 let saveT;
 function save() {
   clearTimeout(saveT); saveT = setTimeout(() => {
-    try { localStorage.setItem('ppt-web-v1', JSON.stringify({ slides: S.slides, themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, fileName: S.fileName })); } catch (e) { }
+    try { localStorage.setItem('ppt-web-v1', JSON.stringify({ slides: S.slides, themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, fileName: S.fileName, fonts: S.fonts, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) })); } catch (e) { }
   }, 300);
 }
 let redrawT;
@@ -401,12 +465,25 @@ document.querySelectorAll('#bgMode .pill').forEach(b => b.onclick = () => {
 document.querySelector('#bgMode .pill[data-m=dark]').classList.add('sel');
 
 // ---------- 啟動：還原上次內容 ----------
+$('fontHead').onchange = e => { S.fonts.head = e.target.value; afterFontChange(); };
+$('fontBody').onchange = e => { S.fonts.body = e.target.value; afterFontChange(); };
+$('btnLocalAdd').onclick = async () => { const f = await addLocalFontByName($('localName').value); if (f && f.ok) { $('localName').value = ''; save(); } };
+$('localName').onkeydown = e => { if (e.key === 'Enter') $('btnLocalAdd').click(); };
+$('localFilter').oninput = renderLocalList;
+if (!window.queryLocalFonts) $('btnLocalPick').hidden = true;
+$('btnLocalPick').onclick = async () => {
+  try { _localAll = await window.queryLocalFonts(); $('localFilter').hidden = false; renderLocalList(); }
+  catch (e) { toast('沒有取得字型清單的權限，可以改用輸入名稱'); }
+};
 (async () => {
-  syncOut(); buildCats(); buildThemes();
+  syncOut(); buildCats(); buildThemes(); buildFontSelects();
   try {
     const v = JSON.parse(localStorage.getItem('ppt-web-v1') || 'null');
     if (v && v.slides && v.slides.length) {
       Object.assign(S, { themeKey: v.themeKey || 'paper', stripW: v.stripW || .81, stripY: v.stripY || 64 });
+      if (v.fonts) S.fonts = v.fonts;
+      for (const f of (v.localFonts || [])) await registerLocal(f.name, f.fam);
+      buildFontSelects();
       $('stripY').value = S.stripY; $('stripW').value = Math.round(S.stripW * 100);
       const b = document.createElement('button'); b.className = 'btn'; b.textContent = `繼續上次的「${v.fileName}」`;
       b.onclick = () => start(v.slides, v.fileName); $('btnSample').after(b);
