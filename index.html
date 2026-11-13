@@ -292,7 +292,17 @@ input[type=range]{width:100%;accent-color:var(--ink2);margin:0}
 
       <div class="pane" id="pPos" hidden>
         <div id="posLive">
-          <div class="note"><b>現場版</b>：調整文字在整頁畫面上的位置與大小。</div>
+          <div class="note"><b>現場版</b>：調整文字在整頁畫面上的位置與大小</div>
+          <div class="sec">
+            <h3>全部頁面</h3>
+            <label class="slider">字級<input type="range" id="deckScale" min="70" max="140" step="5"><output id="deckScaleO"></output></label>
+            <div class="row" id="anchorRow">
+              <span class="hint" style="margin:0 4px 0 0">垂直位置</span>
+              <button class="pill" data-an="middle">置中</button>
+              <button class="pill" data-an="top">靠上</button>
+            </div>
+            <div class="hint">字級預設已讓整份簡報大小一致，只有很長的頁面會自動縮小</div>
+          </div>
           <div class="sec">
             <h3>這一頁的字級</h3>
             <label class="slider">大小<input type="range" id="fs" min="60" max="130" step="5"><output id="fsO"></output></label>
@@ -338,10 +348,10 @@ input[type=range]{width:100%;accent-color:var(--ink2);margin:0}
 
 <div id="toast"></div>
 <div id="prog"><div><div id="progT">處理中…</div><i><b id="progB"></b></i></div></div>
-<script src="themes.js?v=19"></script>
-<script src="themes2.js?v=19"></script>
-<script src="themes3.js?v=19"></script>
-<script src="app.js?v=19"></script>
+<script src="themes.js?v=20"></script>
+<script src="themes2.js?v=20"></script>
+<script src="themes3.js?v=20"></script>
+<script src="app.js?v=20"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));

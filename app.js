@@ -1,7 +1,7 @@
 'use strict';
 // ---------- 狀態 ----------
 const S = {
-  slides: [], sel: 0, page: 0, themeKey: 'torn_kraft', stripW: 0.81, stripY: 64, stripX: 0, view: 'live', autoExport: false, exportFmt: 'image',
+  slides: [], sel: 0, page: 0, themeKey: 'torn_kraft', stripW: 0.81, stripY: 64, stripX: 0, view: 'live', autoExport: false, exportFmt: 'image', deckScale: 1, anchor: 'middle',
   custom: null, customMode: 'dark', fileName: '簡報',
   fonts: { head: 'theme', body: 'theme' }, localFonts: [], lineGap: null, live: {}, liveScope: 'all',
 };
@@ -141,6 +141,26 @@ function stripLead(runs, n) {
   for (const r of runs) { if (left >= r.t.length) { left -= r.t.length; continue; } out.push({ t: r.t.slice(left), red: r.red }); left = 0; }
   return out.length ? out : [{ t: ' ', red: false }];
 }
+// 整份簡報的統一字級：每頁各自算出「放得下的最大字級」，取中位數，讓相鄰頁面字級一致；太長的頁面才個別縮小
+let _deck = { sig: '', val: 80 };
+function deckSize() {
+  const T0 = curTheme();
+  const sig = [S.themeKey, S.custom ? 1 : 0, S.lineGap, JSON.stringify(S.fonts), S.live.w || '', S.slides.map((s, i) => (s.variant || '') + '|' + (s.fs || 1) + '|' + s.paras.map(ptext).join('/')).join('#')].join('~');
+  if (sig === _deck.sig) return _deck.val;
+  const fits = [];
+  S.slides.forEach((sd, i) => {
+    const v = autoVariant(sd, i); if (v === 'title' || v === 'spark') return;
+    let paras = sd.paras, shift = 0;
+    if (v === 'num') { const m = ptext(paras[0]).match(NUM_RE); if (m) { shift = 150; paras = paras.map((p, k) => k ? p : stripLead(p, m[0].length)); } }
+    const sf = safeOf(slideTheme(T0, v), v), o = liveOpts(false, v), maxW = (S.live.w || 1560 - sf.r) - shift, maxH = H - sf.t - sf.b;
+    let size = 80; for (; size >= 30; size -= 2) if (blockH(layout(paras, size, maxW, o), o) <= maxH) break;
+    fits.push(size);
+  });
+  fits.sort((x, y) => x - y);
+  const med = fits.length ? fits[Math.floor(fits.length / 2)] : 80;
+  _deck = { sig, val: Math.max(30, Math.min(80, med)) };
+  return _deck.val;
+}
 function drawLive(cv, slide, idx, noText) {
   const v = autoVariant(slide, idx), T = slideTheme(curTheme(), v), c = cv.getContext('2d');
   const isTitle = v === 'title', isSpark = v === 'spark';
@@ -153,7 +173,7 @@ function drawLive(cv, slide, idx, noText) {
     if (m) { numeral = /[１-９]/.test(m[1]) ? String(m[1].charCodeAt(0) - 0xFF10) : m[1]; paras = paras.map((p, i) => i ? p : stripLead(p, m[0].length)); }
   }
   const shift = numeral ? 150 : 0, maxW = (L.userW ? L.w : L.w - sf.r) - shift, maxH = H - sf.t - sf.b;
-  const base = isTitle ? 56 : isSpark ? 100 : 80;
+  const base = isTitle ? 56 : isSpark ? 100 : deckSize() * S.deckScale;
   let size = Math.round(base * fs), lines;
   for (; size >= 30; size -= 2) { lines = layout(paras, size, maxW, o); if (blockH(lines, o) <= maxH) break; }
   const h = blockH(lines, o);
@@ -161,13 +181,13 @@ function drawLive(cv, slide, idx, noText) {
   const auto = (isTitle || isSpark || (paras.length <= 1 && lines.length <= 2)) ? 'center' : 'left', align = L.align || auto;
   slide._autoAlign = align;
   const x = (align === 'left' && !isTitle && !isSpark ? 160 : (W - maxW - shift) / 2) + L.dx + shift;
-  const y = Math.max(sf.t, sf.t + (maxH - h) / 2 - 6) + L.dy;
+  const y = ((S.anchor === 'top' && !isTitle && !isSpark) ? sf.t + 24 : Math.max(sf.t, sf.t + (maxH - h) / 2 - 6)) + L.dy;
   const numSize = numeral ? Math.round(lines[0].size * 2.1) : 0, numX = x - shift + 6, numY = numeral ? y + lines[0].h / 2 + lines[0].size * .1 : 0;
   if (!noText) {
     drawLines(c, lines, x, y, o, T, align, maxW);
     if (numeral) { c.font = `italic 700 ${numSize}px ${SERIF}`; c.fillStyle = T.accent; c.textBaseline = 'middle'; c.fillText(numeral, numX, numY); }
   }
-  return { shrunk: size < Math.round(base * fs) && size < 56, geo: { lines, x, y, o, align, maxW, T, numeral, numX, numY, numSize } };
+  return { shrunk: size < Math.round(base * fs) && size < 48, geo: { lines, x, y, o, align, maxW, T, numeral, numX, numY, numSize } };
 }
 
 // ---------- 長條版 ----------
@@ -322,6 +342,8 @@ function setView(v) {
   $('viewHint').textContent = VIEW_HINT[v]; renderMain();
 }
 function syncLiveUI() {
+  $('deckScale').value = Math.round(S.deckScale * 100); $('deckScaleO').textContent = Math.round(S.deckScale * 100) + '%';
+  document.querySelectorAll('#anchorRow .pill').forEach(b => b.classList.toggle('sel', b.dataset.an === S.anchor));
   const sl = S.slides[S.sel]; if (!sl) return;
   const vv = autoVariant(sl, S.sel), L = liveCfg(sl, vv === 'title', vv);
   $('lvX').value = L.dx; $('lvXO').textContent = L.dx; $('lvY').value = L.dy; $('lvYO').textContent = L.dy; $('lvW').value = L.w; $('lvWO').textContent = L.w;
@@ -426,14 +448,14 @@ function renderLocalList() {
 }
 
 // ---------- 記住上次的樣式 ----------
-const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
+const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, deckScale: S.deckScale, anchor: S.anchor, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
 async function applyStyle(v) {
   if (!v) return;
-  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: !!v.autoExport, exportFmt: v.exportFmt || 'image' });
+  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: !!v.autoExport, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: v.anchor || 'middle' });
   if (v.fonts) S.fonts = v.fonts;
   for (const f of (v.localFonts || [])) await registerLocal(f.name, f.fam);
   if (S.lineGap) $('lineGap').value = S.lineGap;
-  $('stripW').value = Math.round(S.stripW * 100); $('autoExport').checked = S.autoExport; $('exportFmt').value = S.exportFmt;
+  $('stripW').value = Math.round(S.stripW * 100); $('autoExport').checked = S.autoExport; $('exportFmt').value = S.exportFmt; $('deckScale').value = Math.round(S.deckScale * 100);
   buildFontSelects(); buildThemes(); syncOut();
 }
 function showStyleNote(has) {
@@ -448,7 +470,8 @@ function save() {
   }, 300);
 }
 let redrawT;
-function redrawSoon() { clearTimeout(redrawT); redrawT = setTimeout(renderMain, 60); save(); }
+let thumbT;
+function redrawSoon() { clearTimeout(redrawT); redrawT = setTimeout(renderMain, 60); clearTimeout(thumbT); thumbT = setTimeout(() => S.slides.forEach((_, i) => renderThumb(i)), 500); save(); }
 
 // ---------- 載入 ----------
 async function start(slides, name, live) {
@@ -636,6 +659,8 @@ $('btnLocalPick').onclick = async () => {
   catch (e) { toast('沒有取得字型清單的權限，可以改用輸入名稱'); }
 };
 $('variantSel').onchange = () => { const sl = S.slides[S.sel]; sl.variant = $('variantSel').value; syncOut(); renderMain(); save(); };
+$('deckScale').oninput = () => { S.deckScale = $('deckScale').value / 100; syncOut(); redrawSoon(); };
+document.querySelectorAll('#anchorRow .pill').forEach(b => b.onclick = () => { S.anchor = b.dataset.an; syncOut(); redrawSoon(); });
 $('lvX').oninput = () => editLive('dx', +$('lvX').value);
 $('lvY').oninput = () => editLive('dy', +$('lvY').value);
 $('lvW').oninput = () => editLive('w', +$('lvW').value);
