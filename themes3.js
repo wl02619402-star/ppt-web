@@ -126,3 +126,11 @@ function tornBg(c, P, kind) {
   });
   rest.forEach(([k, t]) => { THEMES[k] = t; });
 })();
+
+// 各套背景的裝飾占用區（文字自動避開）：波浪在底部、拱門在右側
+Object.entries(THEMES).forEach(([k, t]) => {
+  if (/^g4_/.test(k)) t.safe = { b: 170 };
+  if (/^g8_/.test(k)) t.safe = { r: 380 };
+});
+Object.assign(THEMES.ocean, { safe: { b: 170 } }); Object.assign(THEMES.spring, { safe: { b: 220 } });
+Object.assign(THEMES.snownight, { safe: { b: 150 } }); Object.assign(THEMES.retro, { safe: { b: 170 } }); Object.assign(THEMES.sunrise, { safe: { b: 240 } });

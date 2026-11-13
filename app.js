@@ -46,7 +46,7 @@ function tw(font, tok) {
   if (v === undefined) { measureCtx.font = font; v = measureCtx.measureText(tok).width; wcache.set(k, v); }
   return v;
 }
-function tokenize(t) { return t.match(/[A-Za-z0-9:：.\-–—]+|[\s\S]/g) || []; }
+function tokenize(t) { return t.match(/[（(](?=[^（）()]*\d)[^（）()]{1,14}[）)]|[A-Za-z0-9:：.\-–—]+|[\s\S]/g) || []; }
 const SERIF = '"Noto Serif TC","Songti TC","PMingLiU",serif';
 const isSerif = () => !S.custom && !!THEMES[S.themeKey].serif;
 const FONT_OPTS = [
@@ -121,13 +121,20 @@ const plain = p => p.map(r => r.t).join('');
 function liveOpts(isTitle, v) {
   return {
     headRule: (pi, ps) => v === 'spark' ? false : isTitle ? pi === 0 : (pi === 0 && ps.length > 1 && plain(ps[0]).length <= 28),
-    headScale: isTitle ? 1.9 : 1.16, lineGap: S.lineGap || 1.5, paraGap: .5,
+    headScale: isTitle ? 1.9 : 1.16, lineGap: S.lineGap || 1.42, paraGap: .45,
   };
 }
 function liveCfg(slide, isTitle, v) {
   const m = Object.assign({ dx: 0, dy: 0, w: null, align: null }, S.live, (slide && slide.lv) || {});
-  const mid = isTitle || v === 'spark';
-  return { dx: m.dx, dy: m.dy, w: m.w || (isTitle ? 1500 : v === 'spark' ? 1300 : 1560), align: m.align || (mid ? 'center' : 'left') };
+  return { dx: m.dx, dy: m.dy, w: m.w || (isTitle ? 1500 : v === 'spark' ? 1300 : 1560), userW: !!m.w, align: m.align || null };
+}
+// 每種版型、每套背景的「裝飾占用區」：文字自動避開
+function safeOf(T, v) {
+  const tp = T.ownVariants
+    ? { title: [230, 120], band: [140, 90], rule: [90, 170], brackets: [130, 130], spark: [110, 100], num: [90, 150], plain: [90, 170], spot: [110, 110] }
+    : { title: [110, 110], band: [100, 100], rule: [90, 170], brackets: [130, 130], spark: [110, 110], num: [90, 100], plain: [90, 90], spot: [110, 110] };
+  const [t, b] = tp[v] || [100, 100], e = T.safe || {};
+  return { t: Math.max(t, e.t || 0), b: Math.max(b, e.b || 0), r: e.r || 0 };
 }
 function stripLead(runs, n) {
   const out = []; let left = n;
@@ -139,25 +146,28 @@ function drawLive(cv, slide, idx, noText) {
   const isTitle = v === 'title', isSpark = v === 'spark';
   c.clearRect(0, 0, W, H);
   c.drawImage(getBg(v, idx), 0, 0);
-  const o = liveOpts(isTitle, v), fs = slide.fs || 1, L = liveCfg(slide, isTitle, v);
+  const o = liveOpts(isTitle, v), fs = slide.fs || 1, L = liveCfg(slide, isTitle, v), sf = safeOf(T, v);
   let paras = slide.paras, numeral = null;
   if (v === 'num') {
     const m = ptext(paras[0]).match(NUM_RE);
     if (m) { numeral = /[１-９]/.test(m[1]) ? String(m[1].charCodeAt(0) - 0xFF10) : m[1]; paras = paras.map((p, i) => i ? p : stripLead(p, m[0].length)); }
   }
-  const shift = numeral ? 150 : 0, maxW = L.w - shift, maxH = isTitle ? 560 : isSpark ? 700 : 790;
-  const base = isTitle ? 56 : isSpark ? 92 : 76;
+  const shift = numeral ? 150 : 0, maxW = (L.userW ? L.w : L.w - sf.r) - shift, maxH = H - sf.t - sf.b;
+  const base = isTitle ? 56 : isSpark ? 100 : 80;
   let size = Math.round(base * fs), lines;
   for (; size >= 30; size -= 2) { lines = layout(paras, size, maxW, o); if (blockH(lines, o) <= maxH) break; }
   const h = blockH(lines, o);
-  const x = ((isTitle || isSpark) ? (W - L.w) / 2 : 160) + L.dx + shift;
-  const y = (isTitle ? Math.max(120, (H * .72 - h) / 2 + 40) : isSpark ? (H - h) / 2 - 10 : Math.max(110, (H - h) / 2 - 10)) + L.dy;
+  // 自動對齊：標題、重點句、只有一小段的頁面置中，其餘靠左
+  const auto = (isTitle || isSpark || (paras.length <= 1 && lines.length <= 2)) ? 'center' : 'left', align = L.align || auto;
+  slide._autoAlign = align;
+  const x = (align === 'left' && !isTitle && !isSpark ? 160 : (W - maxW - shift) / 2) + L.dx + shift;
+  const y = Math.max(sf.t, sf.t + (maxH - h) / 2 - 6) + L.dy;
   const numSize = numeral ? Math.round(lines[0].size * 2.1) : 0, numX = x - shift + 6, numY = numeral ? y + lines[0].h / 2 + lines[0].size * .1 : 0;
   if (!noText) {
-    drawLines(c, lines, x, y, o, T, L.align, maxW);
+    drawLines(c, lines, x, y, o, T, align, maxW);
     if (numeral) { c.font = `italic 700 ${numSize}px ${SERIF}`; c.fillStyle = T.accent; c.textBaseline = 'middle'; c.fillText(numeral, numX, numY); }
   }
-  return { shrunk: size < Math.round(base * fs), geo: { lines, x, y, o, align: L.align, maxW, T, numeral, numX, numY, numSize } };
+  return { shrunk: size < Math.round(base * fs) && size < 56, geo: { lines, x, y, o, align, maxW, T, numeral, numX, numY, numSize } };
 }
 
 // ---------- 長條版 ----------
@@ -315,7 +325,7 @@ function syncLiveUI() {
   const sl = S.slides[S.sel]; if (!sl) return;
   const vv = autoVariant(sl, S.sel), L = liveCfg(sl, vv === 'title', vv);
   $('lvX').value = L.dx; $('lvXO').textContent = L.dx; $('lvY').value = L.dy; $('lvYO').textContent = L.dy; $('lvW').value = L.w; $('lvWO').textContent = L.w;
-  document.querySelectorAll('#lvAlign .pill').forEach(b => b.classList.toggle('sel', b.dataset.a === L.align));
+  const al = L.align || sl._autoAlign || 'left'; document.querySelectorAll('#lvAlign .pill').forEach(b => b.classList.toggle('sel', b.dataset.a === al));
   document.querySelectorAll('#lvScope .pill').forEach(b => b.classList.toggle('sel', b.dataset.s === S.liveScope));
 }
 function editLive(key, val) {
@@ -416,10 +426,10 @@ function renderLocalList() {
 }
 
 // ---------- 記住上次的樣式 ----------
-const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, live: S.live, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
+const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
 async function applyStyle(v) {
   if (!v) return;
-  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, live: v.live || {}, autoExport: !!v.autoExport, exportFmt: v.exportFmt || 'image' });
+  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: !!v.autoExport, exportFmt: v.exportFmt || 'image' });
   if (v.fonts) S.fonts = v.fonts;
   for (const f of (v.localFonts || [])) await registerLocal(f.name, f.fam);
   if (S.lineGap) $('lineGap').value = S.lineGap;
@@ -441,8 +451,8 @@ let redrawT;
 function redrawSoon() { clearTimeout(redrawT); redrawT = setTimeout(renderMain, 60); save(); }
 
 // ---------- 載入 ----------
-async function start(slides, name) {
-  S.slides = slides; S.sel = 0; S.page = 0; S.fileName = name.replace(/\.pptx$/i, '');
+async function start(slides, name, live) {
+  S.slides = slides; S.live = live || {}; S.sel = 0; S.page = 0; S.fileName = name.replace(/\.pptx$/i, '');
   $('drop').hidden = true; $('editor').hidden = false; $('viewHint').textContent = VIEW_HINT[S.view]; $('sideEmpty').hidden = true; $('sideBody').hidden = false; $('btnExport').disabled = false; $('btnZip').disabled = false;
   await ensureFonts(); bgCache.clear(); buildCats(); buildThemes(); buildList(); select(0); save();
 }
@@ -678,7 +688,7 @@ document.addEventListener('keydown', e => {
     await renderEmptyPreview();
     if (v && v.slides && v.slides.length) {
       const b = document.createElement('button'); b.className = 'btn'; b.textContent = `繼續上次的「${v.fileName}」`;
-      b.onclick = () => start(v.slides, v.fileName); $('btnSample').after(b);
+      b.onclick = () => start(v.slides, v.fileName, v.live); $('btnSample').after(b);
     }
   } catch (e) { }
 })();
