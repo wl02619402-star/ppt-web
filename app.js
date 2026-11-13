@@ -3,7 +3,7 @@
 const S = {
   slides: [], sel: 0, page: 0, themeKey: 'paper', stripW: 0.81, stripY: 64,
   custom: null, customMode: 'dark', fileName: '簡報',
-  fonts: { head: 'theme', body: 'theme' }, localFonts: [],
+  fonts: { head: 'theme', body: 'theme' }, localFonts: [], lineGap: null,
 };
 const $ = id => document.getElementById(id);
 const measureCtx = mk(10, 10).getContext('2d');
@@ -116,7 +116,7 @@ const plain = p => p.map(r => r.t).join('');
 function liveOpts(isTitle) {
   return {
     headRule: (pi, ps) => isTitle ? pi === 0 : (pi === 0 && ps.length > 1 && plain(ps[0]).length <= 28),
-    headScale: isTitle ? 1.9 : 1.16, lineGap: 1.5, paraGap: .5,
+    headScale: isTitle ? 1.9 : 1.16, lineGap: S.lineGap || 1.5, paraGap: .5,
   };
 }
 function drawLive(cv, slide, idx) {
@@ -137,7 +137,7 @@ function drawLive(cv, slide, idx) {
 // ---------- 長條版 ----------
 const STRIP = { padL: 100, padR: 140, padT: 46, padB: 46, maxH: 340 };
 function stripOpts() {
-  return { headRule: (pi, ps) => pi === 0 && ps.length > 1, headScale: 1.2, lineGap: 1.4, paraGap: .3 };
+  return { headRule: (pi, ps) => pi === 0 && ps.length > 1, headScale: 1.2, lineGap: S.lineGap ? Math.max(1.1, S.lineGap - .1) : 1.4, paraGap: .3 };
 }
 function stripPages(slide) {
   const o = stripOpts(), cardW = Math.round(W * S.stripW), tw_ = cardW - STRIP.padL - STRIP.padR;
@@ -268,7 +268,7 @@ function select(i) {
 }
 function syncOut() {
   $('fsO').textContent = $('fs').value + '%'; $('sfsO').textContent = $('sfs').value + '%';
-  $('stripYO').textContent = S.stripY; $('stripWO').textContent = Math.round(S.stripW * 100) + '%';
+  $('lineGapO').textContent = S.lineGap ? S.lineGap.toFixed(2) : '預設'; $('stripYO').textContent = S.stripY; $('stripWO').textContent = Math.round(S.stripW * 100) + '%';
 }
 const HUE = {
   paper: 'warm', dusk: 'cool', morning: 'warm', olive: 'green', minimal: 'neutral', burgundy: 'warm', sage: 'green', terracotta: 'warm',
@@ -361,7 +361,7 @@ function renderLocalList() {
 let saveT;
 function save() {
   clearTimeout(saveT); saveT = setTimeout(() => {
-    try { localStorage.setItem('ppt-web-v1', JSON.stringify({ slides: S.slides, themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, fileName: S.fileName, fonts: S.fonts, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) })); } catch (e) { }
+    try { localStorage.setItem('ppt-web-v1', JSON.stringify({ slides: S.slides, themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, lineGap: S.lineGap, fileName: S.fileName, fonts: S.fonts, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) })); } catch (e) { }
   }, 300);
 }
 let redrawT;
@@ -447,6 +447,8 @@ $('btnDel').onclick = () => {
 };
 $('fs').oninput = () => { S.slides[S.sel].fs = $('fs').value / 100; syncOut(); redrawSoon(); };
 $('sfs').oninput = () => { S.slides[S.sel].sfs = $('sfs').value / 100; syncOut(); redrawSoon(); };
+$('lineGap').oninput = () => { S.lineGap = +$('lineGap').value; wcache.clear(); syncOut(); S.page = 0; redrawSoon(); };
+$('lineGapReset').onclick = () => { S.lineGap = null; $('lineGap').value = 1.5; wcache.clear(); syncOut(); S.page = 0; redrawSoon(); };
 $('stripY').oninput = () => { S.stripY = +$('stripY').value; syncOut(); redrawSoon(); };
 $('stripW').oninput = () => { S.stripW = $('stripW').value / 100; syncOut(); S.page = 0; redrawSoon(); };
 $('stripW').onchange = () => buildList();
@@ -480,7 +482,8 @@ $('btnLocalPick').onclick = async () => {
   try {
     const v = JSON.parse(localStorage.getItem('ppt-web-v1') || 'null');
     if (v && v.slides && v.slides.length) {
-      Object.assign(S, { themeKey: v.themeKey || 'paper', stripW: v.stripW || .81, stripY: v.stripY || 64 });
+      Object.assign(S, { themeKey: v.themeKey || 'paper', stripW: v.stripW || .81, stripY: v.stripY || 64, lineGap: v.lineGap || null });
+      if (S.lineGap) $('lineGap').value = S.lineGap;
       if (v.fonts) S.fonts = v.fonts;
       for (const f of (v.localFonts || [])) await registerLocal(f.name, f.fam);
       buildFontSelects();
