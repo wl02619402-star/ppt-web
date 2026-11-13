@@ -3,7 +3,7 @@
 const S = {
   slides: [], sel: 0, page: 0, themeKey: 'paper', stripW: 0.81, stripY: 64,
   custom: null, customMode: 'dark', fileName: '簡報',
-  fonts: { head: 'theme', body: 'theme' }, localFonts: [], lineGap: null,
+  fonts: { head: 'theme', body: 'theme' }, localFonts: [], lineGap: null, live: {}, liveScope: 'all',
 };
 const $ = id => document.getElementById(id);
 const measureCtx = mk(10, 10).getContext('2d');
@@ -101,7 +101,7 @@ function drawLines(c, lines, x, y, o, T, align = 'left', boxW = 0) {
   c.textBaseline = 'middle';
   lines.forEach((l, i) => {
     const wt = l.head ? 700 : 500, base = fnt(wt, l.size, l.head, false), redf = fnt(700, l.size, l.head, true);
-    let px = align === 'center' ? x + (boxW - l.w) / 2 : x;
+    let px = align === 'center' ? x + (boxW - l.w) / 2 : align === 'right' ? x + boxW - l.w : x;
     const cy = y + l.h / 2;
     l.segs.forEach(s => {
       c.font = s.red ? redf : base; c.fillStyle = s.red ? T.red : T.text; c.fillText(s.t, px, cy);
@@ -119,18 +119,22 @@ function liveOpts(isTitle) {
     headScale: isTitle ? 1.9 : 1.16, lineGap: S.lineGap || 1.5, paraGap: .5,
   };
 }
+function liveCfg(slide, isTitle) {
+  const m = Object.assign({ dx: 0, dy: 0, w: null, align: null }, S.live, (slide && slide.lv) || {});
+  return { dx: m.dx, dy: m.dy, w: m.w || (isTitle ? 1500 : 1560), align: m.align || (isTitle ? 'center' : 'left') };
+}
 function drawLive(cv, slide, idx) {
   const T = curTheme(), c = cv.getContext('2d'), isTitle = idx === 0;
   c.clearRect(0, 0, W, H);
   c.drawImage(getBg(isTitle ? 'title' : 'content'), 0, 0);
-  const o = liveOpts(isTitle), fs = slide.fs || 1;
-  const maxW = isTitle ? 1500 : 1560, maxH = isTitle ? 560 : 790;
+  const o = liveOpts(isTitle), fs = slide.fs || 1, L = liveCfg(slide, isTitle);
+  const maxW = L.w, maxH = isTitle ? 560 : 790;
   let size = Math.round((isTitle ? 56 : 76) * fs), lines;
   for (; size >= 30; size -= 2) { lines = layout(slide.paras, size, maxW, o); if (blockH(lines, o) <= maxH) break; }
   const h = blockH(lines, o);
-  const x = isTitle ? (W - maxW) / 2 : 160;
-  const y = isTitle ? Math.max(120, (H * .72 - h) / 2 + 40) : Math.max(110, (H - h) / 2 - 10);
-  drawLines(c, lines, x, y, o, T, isTitle ? 'center' : 'left', maxW);
+  const x = (isTitle ? (W - maxW) / 2 : 160) + L.dx;
+  const y = (isTitle ? Math.max(120, (H * .72 - h) / 2 + 40) : Math.max(110, (H - h) / 2 - 10)) + L.dy;
+  drawLines(c, lines, x, y, o, T, L.align, maxW);
   return { shrunk: size < Math.round((isTitle ? 56 : 76) * fs) };
 }
 
@@ -266,7 +270,20 @@ function select(i) {
   syncOut(); renderMain();
   const th = document.querySelectorAll('.thumb')[i]; if (th) th.scrollIntoView({ block: 'nearest' });
 }
+function syncLiveUI() {
+  const sl = S.slides[S.sel]; if (!sl) return;
+  const L = liveCfg(sl, S.sel === 0);
+  $('lvX').value = L.dx; $('lvXO').textContent = L.dx; $('lvY').value = L.dy; $('lvYO').textContent = L.dy; $('lvW').value = L.w; $('lvWO').textContent = L.w;
+  document.querySelectorAll('#lvAlign .pill').forEach(b => b.classList.toggle('sel', b.dataset.a === L.align));
+  document.querySelectorAll('#lvScope .pill').forEach(b => b.classList.toggle('sel', b.dataset.s === S.liveScope));
+}
+function editLive(key, val) {
+  if (S.liveScope === 'slide') { const sl = S.slides[S.sel]; sl.lv = sl.lv || {}; sl.lv[key] = val; }
+  else { S.live[key] = val; S.slides.forEach(s => { if (s.lv) delete s.lv[key]; }); }
+  syncLiveUI(); redrawSoon();
+}
 function syncOut() {
+  syncLiveUI();
   $('fsO').textContent = $('fs').value + '%'; $('sfsO').textContent = $('sfs').value + '%';
   $('lineGapO').textContent = S.lineGap ? S.lineGap.toFixed(2) : '預設'; $('stripYO').textContent = S.stripY; $('stripWO').textContent = Math.round(S.stripW * 100) + '%';
 }
@@ -361,7 +378,7 @@ function renderLocalList() {
 let saveT;
 function save() {
   clearTimeout(saveT); saveT = setTimeout(() => {
-    try { localStorage.setItem('ppt-web-v1', JSON.stringify({ slides: S.slides, themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, lineGap: S.lineGap, fileName: S.fileName, fonts: S.fonts, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) })); } catch (e) { }
+    try { localStorage.setItem('ppt-web-v1', JSON.stringify({ slides: S.slides, themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, lineGap: S.lineGap, live: S.live, fileName: S.fileName, fonts: S.fonts, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) })); } catch (e) { }
   }, 300);
 }
 let redrawT;
@@ -477,12 +494,34 @@ $('btnLocalPick').onclick = async () => {
   try { _localAll = await window.queryLocalFonts(); $('localFilter').hidden = false; renderLocalList(); }
   catch (e) { toast('沒有取得字型清單的權限，可以改用輸入名稱'); }
 };
+$('lvX').oninput = () => editLive('dx', +$('lvX').value);
+$('lvY').oninput = () => editLive('dy', +$('lvY').value);
+$('lvW').oninput = () => editLive('w', +$('lvW').value);
+document.querySelectorAll('#lvAlign .pill').forEach(b => b.onclick = () => editLive('align', b.dataset.a));
+document.querySelectorAll('#lvScope .pill').forEach(b => b.onclick = () => { S.liveScope = b.dataset.s; syncLiveUI(); });
+$('lvReset').onclick = () => {
+  if (S.liveScope === 'slide') delete S.slides[S.sel].lv; else { S.live = {}; S.slides.forEach(s => delete s.lv); }
+  syncLiveUI(); redrawSoon();
+};
+(() => { // 直接在預覽上拖曳文字區塊
+  const cv = $('cvLive'); let drag = null;
+  cv.addEventListener('pointerdown', e => {
+    const sl = S.slides[S.sel]; if (!sl) return; const L = liveCfg(sl, S.sel === 0);
+    drag = { x: e.clientX, y: e.clientY, dx: L.dx, dy: L.dy, k: W / cv.getBoundingClientRect().width }; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing';
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const dx = Math.round((drag.dx + (e.clientX - drag.x) * drag.k) / 4) * 4, dy = Math.round((drag.dy + (e.clientY - drag.y) * drag.k) / 4) * 4;
+    editLive('dx', Math.max(-900, Math.min(900, dx))); editLive('dy', Math.max(-600, Math.min(600, dy)));
+  });
+  const end = () => { drag = null; cv.style.cursor = 'grab'; }; cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end); cv.style.cursor = 'grab'; cv.style.touchAction = 'none';
+})();
 (async () => {
   syncOut(); buildCats(); buildThemes(); buildFontSelects();
   try {
     const v = JSON.parse(localStorage.getItem('ppt-web-v1') || 'null');
     if (v && v.slides && v.slides.length) {
-      Object.assign(S, { themeKey: v.themeKey || 'paper', stripW: v.stripW || .81, stripY: v.stripY || 64, lineGap: v.lineGap || null });
+      Object.assign(S, { themeKey: v.themeKey || 'paper', stripW: v.stripW || .81, stripY: v.stripY || 64, lineGap: v.lineGap || null, live: v.live || {} });
       if (S.lineGap) $('lineGap').value = S.lineGap;
       if (v.fonts) S.fonts = v.fonts;
       for (const f of (v.localFonts || [])) await registerLocal(f.name, f.fam);

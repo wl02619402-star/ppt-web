@@ -204,6 +204,24 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
           <label class="slider">長條版<input type="range" id="sfs" min="60" max="130" step="5"><output id="sfsO"></output></label>
         </div>
         <div class="sec">
+          <h3>現場版文字位置</h3>
+          <div class="row" id="lvScope" style="margin-bottom:6px">
+            <button class="pill" data-s="all">全部頁面</button>
+            <button class="pill" data-s="slide">只有這一頁</button>
+          </div>
+          <label class="slider">左右<input type="range" id="lvX" min="-900" max="900" step="4"><output id="lvXO"></output></label>
+          <label class="slider">上下<input type="range" id="lvY" min="-600" max="600" step="4"><output id="lvYO"></output></label>
+          <label class="slider">寬度<input type="range" id="lvW" min="700" max="1800" step="10"><output id="lvWO"></output></label>
+          <div class="row" id="lvAlign" style="margin:8px 0 0">
+            <span class="hint" style="margin:0 4px 0 0">對齊</span>
+            <button class="pill" data-a="left">靠左</button>
+            <button class="pill" data-a="center">置中</button>
+            <button class="pill" data-a="right">靠右</button>
+          </div>
+          <div class="hint">也可以直接在上面的現場版預覽按住拖曳。</div>
+          <div class="row" style="margin-top:8px"><button class="btn small" id="lvReset">還原位置</button></div>
+        </div>
+        <div class="sec">
           <h3>行距（全部頁面）</h3>
           <label class="slider">行距<input type="range" id="lineGap" min="1.1" max="1.9" step="0.05" value="1.5"><output id="lineGapO"></output></label>
           <div class="hint">數字越小行距越緊，預設 1.5。長條版會自動比現場版緊 0.1。</div>
@@ -257,9 +275,9 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
 
 <div id="toast"></div>
 <div id="prog"><div><div id="progT">處理中…</div><i><b id="progB"></b></i></div></div>
-<script src="themes.js?v=8"></script>
-<script src="themes2.js?v=8"></script>
-<script src="app.js?v=8"></script>
+<script src="themes.js?v=9"></script>
+<script src="themes2.js?v=9"></script>
+<script src="app.js?v=9"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
