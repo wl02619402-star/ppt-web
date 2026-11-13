@@ -566,6 +566,12 @@ function toast(t) { const e = $('toast'); e.textContent = t; e.classList.add('on
 $('btnOpen').onclick = $('btnPick').onclick = () => $('file').click();
 $('file').onchange = e => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ''; };
 $('btnSample').onclick = () => start(sampleSlides(), '範例');
+async function renderEmptyPreview() {
+  try {
+    const sl = sampleSlides(), keep = S.slides; S.slides = sl; loadedChars.clear(); await ensureFonts(); S.slides = keep;
+    drawLive($('sampleLive'), sl[1], 1); drawStrip($('sampleStrip'), sl[1], 0);
+  } catch (e) { }
+}
 ['dragover', 'dragenter'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); $('drop').classList.add('over'); }));
 ['dragleave', 'drop'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); $('drop').classList.remove('over'); }));
 document.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) loadFile(f); });
@@ -652,6 +658,7 @@ $('styleClear').onclick = () => { try { localStorage.removeItem('ppt-web-style')
     const v = JSON.parse(localStorage.getItem('ppt-web-v1') || 'null');
     const st = JSON.parse(localStorage.getItem('ppt-web-style') || 'null') || (v && v.themeKey ? v : null);
     if (st) { await applyStyle(st); showStyleNote(true); }
+    await renderEmptyPreview();
     if (v && v.slides && v.slides.length) {
       const b = document.createElement('button'); b.className = 'btn'; b.textContent = `繼續上次的「${v.fileName}」`;
       b.onclick = () => start(v.slides, v.fileName); $('btnSample').after(b);

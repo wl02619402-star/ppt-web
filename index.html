@@ -13,7 +13,7 @@
 <style>
 :root{
   --bg:#141518; --panel:#1b1c20; --raise:#25262b; --line:#2f3137; --line2:#3b3d45;
-  --ink:#e9eaed; --muted:#8e919b; --accent:#ff6a3d; --accent-ink:#1a0d08;
+  --ink:#e9eaed; --ink2:#c4c6cc; --muted:#8e919b; --accent:#ff6a3d; --accent-ink:#1a0d08;
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%}
@@ -24,122 +24,131 @@ button{cursor:pointer}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 /* 頂列 */
-header{height:44px;display:flex;align-items:center;gap:6px;padding:0 12px 0 16px;background:var(--panel);border-bottom:1px solid var(--line)}
-header h1{font-size:14px;font-weight:700;margin:0 20px 0 0;white-space:nowrap}
+header{height:48px;display:flex;align-items:center;gap:8px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+header h1{font-size:14px;font-weight:600;margin:0 24px 0 0;white-space:nowrap}
 header .sp{flex:1}
-header select{width:auto;height:30px;font-size:13px}
-.btn{height:30px;padding:0 12px;border:1px solid var(--line2);background:transparent;border-radius:4px;font-weight:500;font-size:13px;white-space:nowrap}
+header select{width:auto;height:32px;font-size:13px}
+.btn{height:32px;padding:0 12px;border:1px solid var(--line2);background:transparent;border-radius:4px;font-weight:500;font-size:13px;white-space:nowrap}
 .btn:hover{background:var(--raise)}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:700}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
 .btn.primary:hover{filter:brightness(1.08);background:var(--accent)}
 .btn:disabled{opacity:.4;cursor:not-allowed}
-.btn.small{height:26px;padding:0 9px;font-size:12px}
+.btn.small{height:28px;padding:0 8px;font-size:12px}
 
 /* 三欄 */
-#app{display:grid;grid-template-columns:188px minmax(0,1fr) 344px;height:calc(100vh - 44px)}
-#list{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:8px 10px 8px 0}
+#app{display:grid;grid-template-columns:188px minmax(0,1fr) 344px;height:calc(100vh - 48px)}
+#list{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:8px 8px 8px 0}
 main{overflow:auto;padding:16px 24px}
 #side{background:var(--panel);border-left:1px solid var(--line);overflow:hidden;display:flex;flex-direction:column;min-height:0}
 
 /* 左側投影片清單 */
-.thumb{position:relative;margin:0 0 6px 28px;padding:0;border:0;cursor:pointer}
+.thumb{position:relative;margin:0 0 8px 28px;padding:0;border:0;cursor:pointer}
 .thumb canvas{display:block;width:100%;background:#000;outline:1px solid var(--line2)}
 .thumb:hover canvas{outline-color:var(--muted)}
 .thumb.sel canvas{outline:2px solid var(--accent)}
 .thumb .n{position:absolute;left:-24px;top:2px;width:20px;text-align:right;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
-.thumb.sel .n{color:var(--accent);font-weight:700}
+.thumb.sel .n{color:var(--ink);font-weight:500}
 .thumb .badge{position:absolute;right:3px;bottom:3px;background:rgba(0,0,0,.72);color:#fff;font-size:11px;line-height:16px;padding:0 5px;border-radius:2px}
 
 /* 中央預覽 */
-.views{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:min(100%,calc((100vh - 230px) * 16 / 9));margin:0 auto 12px}
+.views{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:min(100%,calc((100vh - 232px) * 16 / 9));margin:0 auto 16px}
 .view{display:flex;gap:12px;align-items:center;text-align:left;padding:8px;border:1px solid var(--line2);background:var(--panel);border-radius:4px}
 .view:hover{border-color:var(--muted)}
-.view.on{border-color:var(--accent);background:var(--raise)}
+.view.on{border-color:var(--ink);background:var(--raise)}
 .view .mini{flex:none;width:104px;aspect-ratio:16/9;background:#000;outline:1px solid var(--line2);display:block}
 .view .mini.chk{background:linear-gradient(45deg,#2a2c32 25%,transparent 25%,transparent 75%,#2a2c32 75%) 0 0/12px 12px,linear-gradient(45deg,#2a2c32 25%,#212328 25%,#212328 75%,#2a2c32 75%) 6px 6px/12px 12px}
 .view .mini canvas{display:block;width:100%;height:100%}
 .view .vt{display:flex;flex-direction:column;min-width:0}
-.view .vt b{font-size:15px}
+.view .vt b{font-size:15px;font-weight:500}
 .view .vt span{font-size:12px;color:var(--muted);line-height:1.4}
-.view.on .vt b{color:var(--accent)}
-.stage{margin:0 auto 14px;width:min(100%,calc((100vh - 230px) * 16 / 9))}
-.note{font-size:13px;color:#c9cbd1;background:var(--raise);border-left:3px solid var(--accent);padding:8px 10px;margin-bottom:16px}
+.stage{margin:0 auto 16px;width:min(100%,calc((100vh - 232px) * 16 / 9))}
+.note{font-size:13px;color:var(--ink2);margin:0 0 20px}
 .note b{color:var(--ink)}
-.field{display:block;font-size:12px;color:var(--muted);margin-bottom:10px}
+.field{display:block;font-size:12px;color:var(--muted);margin-bottom:12px}
 .field select{margin-top:4px}
 details.more{margin-top:4px}
 details.more summary{cursor:pointer;font-size:13px;color:var(--muted);padding:4px 0}
 details.more summary:hover{color:var(--ink)}
 .frame canvas{cursor:grab}
-.check{display:flex;gap:8px;align-items:center;font-size:13px;color:#c9cbd1;cursor:pointer}
+.check{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink2);cursor:pointer}
 .check input{accent-color:var(--accent);width:16px;height:16px;margin:0}
 .styleNote{font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
-.link{border:0;background:none;color:var(--accent);padding:0 2px;font-size:12px;text-decoration:underline}
-.cap{display:flex;align-items:center;gap:12px;min-height:30px;font-size:13px;color:var(--muted)}
+.link{border:0;background:none;color:var(--ink);padding:0 2px;font-size:12px;text-decoration:underline}
+.cap{display:flex;align-items:center;gap:12px;min-height:32px;font-size:13px;color:var(--muted)}
 .cap #viewHint{flex:1}
 .cap b{color:var(--ink);font-weight:500;margin-right:8px}
-.frame{aspect-ratio:16/9;background:#000;outline:1px solid var(--line2)}
+.frame{position:relative;aspect-ratio:16/9;background:#000;outline:1px solid var(--line2)}
+.frame::after{content:'';position:absolute;inset:-8px;pointer-events:none;background-repeat:no-repeat;
+  background-image:linear-gradient(var(--muted),var(--muted)),linear-gradient(var(--muted),var(--muted)),linear-gradient(var(--muted),var(--muted)),linear-gradient(var(--muted),var(--muted)),linear-gradient(var(--muted),var(--muted)),linear-gradient(var(--muted),var(--muted)),linear-gradient(var(--muted),var(--muted)),linear-gradient(var(--muted),var(--muted));
+  background-size:12px 1px,1px 12px,12px 1px,1px 12px,12px 1px,1px 12px,12px 1px,1px 12px;
+  background-position:0 0,0 0,100% 0,100% 0,0 100%,0 100%,100% 100%,100% 100%}
 .frame canvas{display:block;width:100%;height:100%}
 .frame.video{background:
   linear-gradient(45deg,#2a2c32 25%,transparent 25%,transparent 75%,#2a2c32 75%) 0 0/24px 24px,
   linear-gradient(45deg,#2a2c32 25%,#212328 25%,#212328 75%,#2a2c32 75%) 12px 12px/24px 24px}
 .pages{display:flex;gap:2px}
-.pill{min-width:26px;height:22px;padding:0 7px;border:1px solid var(--line2);background:transparent;color:var(--muted);font-size:12px;border-radius:3px}
+.pill{min-width:28px;height:24px;padding:0 8px;border:1px solid var(--line2);background:transparent;color:var(--muted);font-size:12px;border-radius:3px}
 .pill:hover{color:var(--ink)}
 .pill.sel{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 
 /* 空狀態 */
-#drop{max-width:880px;margin:5vh auto 0;display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:start}
-#drop.over .zone{border-color:var(--accent);background:rgba(255,106,61,.06)}
-#drop h2{font-size:26px;line-height:1.25;margin:0 0 14px;font-weight:700}
-#drop ol{margin:0 0 18px;padding:0;list-style:none;counter-reset:s}
-#drop li{counter-increment:s;display:flex;gap:12px;padding:10px 0;border-top:1px solid var(--line);color:#c9cbd1}
-#drop li::before{content:counter(s);flex:none;width:20px;color:var(--accent);font-weight:700;font-variant-numeric:tabular-nums}
-#drop .note{font-size:12px;color:var(--muted)}
-.zone{border:1px dashed var(--line2);min-height:260px;padding:24px;display:flex;flex-direction:column;justify-content:center;gap:14px;border-radius:4px}
-.zone p{margin:0;color:var(--muted);font-size:13px}
-.zone .row{display:flex;gap:8px;flex-wrap:wrap}
+#drop{max-width:1040px;margin:48px auto 0;display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:48px;align-items:center}
+#drop h2{font-size:28px;line-height:1.3;margin:0 0 16px;font-weight:600}
+#drop ol{margin:0 0 24px;padding:0;list-style:none;counter-reset:s}
+#drop li{counter-increment:s;display:flex;gap:12px;padding:12px 0;border-top:1px solid var(--line);color:var(--ink2)}
+#drop li::before{content:counter(s);flex:none;width:20px;color:var(--muted);font-variant-numeric:tabular-nums}
+#drop .actions{gap:8px;margin-bottom:12px}
+#drop .drag{margin:0 0 20px;font-size:12px;color:var(--muted)}
+#drop .fine{margin:20px 0 0;font-size:12px;color:var(--muted)}
+.sample{display:grid;gap:16px;padding:8px;border-radius:4px;transition:outline-color .15s;outline:2px solid transparent}
+#drop.over .sample{outline-color:var(--accent)}
+.sframe{position:relative;overflow:hidden;background:#000;outline:1px solid var(--line2)}
+.sframe canvas{display:block;width:100%;height:auto}
+.sframe.live{aspect-ratio:16/9}
+.sframe.strip{aspect-ratio:16/5;background:linear-gradient(45deg,#2a2c32 25%,transparent 25%,transparent 75%,#2a2c32 75%) 0 0/24px 24px,linear-gradient(45deg,#2a2c32 25%,#212328 25%,#212328 75%,#2a2c32 75%) 12px 12px/24px 24px}
+.sframe.strip canvas{position:absolute;left:-8%;bottom:-6%;width:116%}
+.sframe .tag{position:absolute;left:8px;top:8px;font-size:12px;line-height:20px;padding:0 8px;background:rgba(0,0,0,.65);color:#fff;border-radius:2px}
 
 /* 右側檢視器 */
 .tabs{display:flex;border-bottom:1px solid var(--line);flex:none}
-.tabs button{flex:1;height:38px;border:0;background:none;color:var(--muted);font-weight:500;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button{flex:1;height:40px;border:0;background:none;color:var(--muted);font-weight:500;border-bottom:2px solid transparent;margin-bottom:-1px}
 .tabs button:hover{color:var(--ink)}
-.tabs button.on{color:var(--ink);border-bottom-color:var(--accent)}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--ink)}
 .pane{padding:16px;overflow:auto;flex:1;min-height:0}
 .pane[hidden]{display:none}
 #sideEmpty{padding:16px;color:var(--muted);font-size:13px}
 #sideBody{display:flex;flex-direction:column;flex:1;min-height:0}
 #sideBody[hidden]{display:none}
-.sec{margin-bottom:22px}
-.sec h3{margin:0 0 8px;font-size:13px;font-weight:700}
+.sec{margin-bottom:24px}
+.sec h3{margin:0 0 8px;font-size:13px;font-weight:500}
 select,input[type=text]{width:100%;height:32px;background:var(--bg);border:1px solid var(--line2);border-radius:4px;padding:0 8px;font-size:13px}
 #localName{flex:1;width:auto}
 textarea{width:100%;min-height:220px;background:var(--bg);border:1px solid var(--line2);border-radius:4px;padding:10px;line-height:1.65;resize:vertical}
-.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .hint{font-size:12px;color:var(--muted);margin-top:8px}
-.slider{display:grid;grid-template-columns:64px 1fr 44px;gap:10px;align-items:center;margin:10px 0;font-size:13px}
+.slider{display:grid;grid-template-columns:64px 1fr 44px;gap:12px;align-items:center;margin:12px 0;font-size:13px}
 .slider output{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px}
-input[type=range]{width:100%;accent-color:var(--accent);margin:0}
+input[type=range]{width:100%;accent-color:var(--ink2);margin:0}
 
 /* 主題 */
 .themebar{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
-.themebar h3{margin:0;font-size:13px}
+.themebar h3{margin:0;font-size:13px;font-weight:500}
 .themebar span{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
 .cats{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px}
 .cats .pill{height:24px}
-.themes{display:grid;grid-template-columns:1fr 1fr;gap:10px 8px}
+.themes{display:grid;grid-template-columns:1fr 1fr;gap:12px 8px}
 .tcard{padding:0;border:0;background:none;text-align:left}
 .tcard canvas{display:block;width:100%;aspect-ratio:16/9;background:var(--raise);outline:1px solid var(--line2)}
 .tcard:hover canvas{outline-color:var(--muted)}
 .tcard.sel canvas{outline:2px solid var(--accent)}
 .tcard span{display:block;font-size:12px;margin-top:4px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tcard.sel span{color:var(--ink)}
-.customrow{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+.customrow{margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
 
-#toast{position:fixed;bottom:20px;left:50%;transform:translate(-50%,8px);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:4px;font-size:13px;opacity:0;transition:.2s;pointer-events:none;z-index:20}
+#toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,8px);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:4px;font-size:13px;opacity:0;transition:.2s;pointer-events:none;z-index:20}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 #prog{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:30}
-#prog>div{background:var(--panel);border:1px solid var(--line2);padding:22px 28px;border-radius:4px;min-width:280px}
+#prog>div{background:var(--panel);border:1px solid var(--line2);padding:24px 28px;border-radius:4px;min-width:280px}
 #prog i{display:block;height:4px;background:var(--line);margin-top:12px}
 #prog b{display:block;height:100%;width:0;background:var(--accent);transition:width .15s}
 
@@ -150,7 +159,7 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
   .thumb{min-width:150px;margin:0 0 0 22px}
   #side{border-left:0;border-top:1px solid var(--line);min-height:560px}
   main{padding:12px}
-  #drop{grid-template-columns:1fr;gap:20px}
+  #drop{grid-template-columns:1fr;gap:24px;margin-top:16px}
 }
 </style>
 </head>
@@ -169,23 +178,25 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
   <aside id="list" aria-label="投影片清單"></aside>
   <main id="main">
     <div id="drop">
-      <div>
+      <div class="intro">
         <h2>空白文字檔進去，現場版和長條版出來</h2>
         <ol>
           <li>上傳只有文字的 pptx</li>
-          <li>自動套用你上次選的背景、字型和位置（第一次用才需要挑）</li>
+          <li>自動套用你上次選的背景、字型和位置，第一次才需要挑</li>
           <li>檢查一下，按「匯出給 ProPresenter」，或勾選直接匯出</li>
         </ol>
-        <div class="note">檔案只在你的瀏覽器裡處理，不會傳到任何地方。</div>
-      </div>
-      <div class="zone">
-        <p>把 .pptx 拖到這裡，或：</p>
-        <div class="row">
+        <div class="row actions">
           <button class="btn primary" id="btnPick">選擇檔案</button>
           <button class="btn" id="btnSample">用範例試試</button>
         </div>
+        <p class="drag">也可以直接把 .pptx 拖進這個頁面</p>
         <label class="check"><input type="checkbox" id="autoExport"> 上傳後直接匯出，不用再按任何按鈕</label>
         <div class="styleNote" id="styleNote" hidden><span id="styleNoteT"></span> <button class="link" id="styleClear">清除</button></div>
+        <p class="fine">檔案只在你的瀏覽器裡處理，不會傳到任何地方</p>
+      </div>
+      <div class="sample" aria-hidden="true">
+        <div class="sframe live"><canvas id="sampleLive" width="1920" height="1080"></canvas><span class="tag">現場版</span></div>
+        <div class="sframe strip"><canvas id="sampleStrip" width="1920" height="1080"></canvas><span class="tag">線上版</span></div>
       </div>
     </div>
     <div id="editor" hidden>
@@ -207,7 +218,7 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
     </div>
   </main>
   <aside id="side">
-    <div id="sideEmpty">上傳檔案後，這裡可以改文字、調版面、換背景。</div>
+    <div id="sideEmpty">上傳檔案後，這裡可以改文字、調位置、換背景</div>
     <div id="sideBody" hidden>
       <div class="tabs" role="tablist">
         <button class="on" data-pane="pText" role="tab">文字</button>
@@ -240,7 +251,7 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
       </div>
 
       <div class="pane" id="pLook" hidden>
-        <div class="note">這裡的設定，現場版和線上版會一起套用。</div>
+        <div class="note">這裡的設定，現場版和線上版會一起套用</div>
         <div class="sec">
           <h3>字型</h3>
           <label class="field">標題<select id="fontHead"></select></label>
@@ -301,7 +312,7 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
               <button class="pill" data-a="center">置中</button>
               <button class="pill" data-a="right">靠右</button>
             </div>
-            <div class="hint">也可以直接在預覽上按住拖曳。</div>
+            <div class="hint">也可以直接在預覽上按住拖曳</div>
             <div class="row" style="margin-top:8px"><button class="btn small" id="lvReset">還原位置</button></div>
           </div>
         </div>
@@ -316,7 +327,7 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
             <label class="slider">左右<input type="range" id="stripX" min="-700" max="700" step="4"><output id="stripXO"></output></label>
             <label class="slider">離底邊<input type="range" id="stripY" min="0" max="700" step="4"><output id="stripYO"></output></label>
             <label class="slider">寬度<input type="range" id="stripW" min="50" max="96" step="1"><output id="stripWO"></output></label>
-            <div class="hint">也可以直接在預覽上按住字幕條拖曳。</div>
+            <div class="hint">也可以直接在預覽上按住字幕條拖曳</div>
             <div class="row" style="margin-top:8px"><button class="btn small" id="stripReset">還原位置</button></div>
           </div>
         </div>
@@ -327,10 +338,10 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
 
 <div id="toast"></div>
 <div id="prog"><div><div id="progT">處理中…</div><i><b id="progB"></b></i></div></div>
-<script src="themes.js?v=14"></script>
-<script src="themes2.js?v=14"></script>
-<script src="themes3.js?v=14"></script>
-<script src="app.js?v=14"></script>
+<script src="themes.js?v=16"></script>
+<script src="themes2.js?v=16"></script>
+<script src="themes3.js?v=16"></script>
+<script src="app.js?v=16"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
