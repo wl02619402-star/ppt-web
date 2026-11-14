@@ -106,7 +106,18 @@ function tw(font, tok) {
   if (v === undefined) { measureCtx.font = font; v = measureCtx.measureText(tok).width; wcache.set(k, v); }
   return v;
 }
-function tokenize(t) { return t.match(/[（(](?=[^（）()]*\d)[^（）()]{1,14}[）)]|[A-Za-z0-9:：.\-–—]+|[\s\S]/g) || []; }
+const _seg = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter('zh-Hant', { granularity: 'word' }) : null;
+const isCJK = ch => /[\u3400-\u9fff]/.test(ch);
+// 斷行單位：經文出處、英數字當一整塊；中文用詞為單位（避免「死／亡」被拆開），過長的詞再拆成單字
+function tokenize(t) {
+  const out = [], parts = t.match(/[（(](?=[^（）()]*\d)[^（）()]{1,14}[）)]|[A-Za-z0-9:：.\-–—]+|[^A-Za-z0-9:：.\-–—（(]+|[\s\S]/g) || [];
+  for (const p of parts) {
+    if (/^[A-Za-z0-9（(:：.\-–—]/.test(p) || p.length < 2) { out.push(p); continue; }
+    if (!_seg) { out.push(...p); continue; }
+    for (const g of _seg.segment(p)) { const w = g.segment; if (w.length > 4) out.push(...w); else out.push(w); }
+  }
+  return out;
+}
 const SERIF = '"Noto Serif TC","Songti TC","PMingLiU",serif';
 const isSerif = () => !S.custom && !!THEMES[S.themeKey].serif;
 const FONT_OPTS = [
@@ -149,6 +160,11 @@ function layout(paras, size, maxW, o) {
       if (cur.length && cw + w > maxW && !NO_START.has(tk.t)) {
         const carry = [];
         while (cur.length && NO_END.has(cur[cur.length - 1].t)) carry.unshift(cur.pop());
+        // 新的一行不要以太短的詞開頭：把前面的詞一起帶下來，湊到至少 4 個字（例如「死亡之路」整個放到下一行）
+        if (isCJK(tk.t[0]) && tk.t.length <= 2) {
+          let n = carry.reduce((a, x) => a + x.t.length, 0) + tk.t.length;
+          while (n < 4 && cur.length > 2 && isCJK(cur[cur.length - 1].t[0])) { const x = cur.pop(); carry.unshift(x); n += x.t.length; }
+        }
         lines.push({ pi, segs: cur, size: fs, head, scr, w: cw });
         cur = carry; cw = carry.reduce((a, s) => a + tw(s.red ? redf : base, s.t), 0);
       }
