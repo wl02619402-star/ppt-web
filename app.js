@@ -861,15 +861,21 @@ function redrawSoon() { clearTimeout(redrawT); redrawT = setTimeout(renderMain, 
 
 // ---------- 載入 ----------
 async function start(slides, name, live) {
-  S.slides = slides; S.live = live || {}; S.sel = 0; S.page = 0; S.fileName = name.replace(/\.pptx$/i, '');
+  S.slides = slides; S.live = live || {}; S.sel = 0; S.page = 0; S.fileName = name.replace(/\.(pptx|txt)$/i, '');
   $('drop').hidden = true; $('editor').hidden = false; $('viewHint').textContent = VIEW_HINT[S.view]; $('sideEmpty').hidden = true; $('sideBody').hidden = false; document.body.classList.remove('empty');
   await Promise.all(slides.flatMap(x => [].concat(x.bg && x.bg.t === 'img' ? [x.bg.src] : [], (x.pics || []).map(p => p.src))).map(loadBgImg));
   await ensureFonts(); bgCache.clear(); buildCats(); buildThemes(); buildList(); select(0); save(); histReset();
   setTimeout(() => { const w = S.slides.map((s, i) => s._warn ? i + 1 : 0).filter(Boolean); if (w.length) toast(`排好了。第 ${w.slice(0, 5).join('、')}${w.length > 5 ? ' 等' : ''} 頁字比較多，縮圖上有標「看一下」`); }, 1500);
 }
+function parseTxt(buf) {
+  let s = new TextDecoder('utf-8').decode(buf);
+  if (s.includes('\uFFFD')) { try { s = new TextDecoder('big5').decode(buf); } catch (e) {} }
+  s = s.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').replace(/\u3000/g, ' ');
+  return s.split(/\n[ \t]*\n+/).map(b => b.trim()).filter(Boolean).map(b => ({ paras: strToParas(b), fs: 1, sfs: 1 }));
+}
 async function loadFile(f) {
-  try { const slides = await parsePptx(await f.arrayBuffer()); if (!slides.length) throw new Error('empty'); await start(slides, f.name); toast(`已讀入 ${slides.length} 頁`); if (S.autoExport) await exportByFormat().catch(e => { console.error(e); $('prog').style.display = 'none'; toast('匯出失敗：' + e.message); }); }
-  catch (e) { console.error(e); toast('讀不到這個檔案，請確認是 .pptx 格式'); }
+  try { const isTxt = /\.txt$/i.test(f.name) || f.type === 'text/plain'; const buf = await f.arrayBuffer(); const slides = isTxt ? parseTxt(buf) : await parsePptx(buf); if (!slides.length) throw new Error('empty'); await start(slides, f.name); toast(`已讀入 ${slides.length} 頁`); if (S.autoExport) await exportByFormat().catch(e => { console.error(e); $('prog').style.display = 'none'; toast('匯出失敗：' + e.message); }); }
+  catch (e) { console.error(e); toast('讀不到這個檔案，請確認是 .pptx 或 .txt'); }
 }
 const SAMPLE = [
   [['耶穌是道路、真理和生命'], ['約14:6-7'], ['栗育仁  牧師']],

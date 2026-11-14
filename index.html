@@ -502,7 +502,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
       <button role="menuitem" data-f="zip"><b>每一頁的圖片</b><span>打包成一個 zip 檔</span></button>
     </div>
   </div>
-  <input type="file" id="file" accept=".pptx" hidden>
+  <input type="file" id="file" accept=".pptx,.txt,text/plain" hidden>
 </header>
 
 <div id="app">
@@ -511,13 +511,13 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
     <div id="drop">
       <div class="intro">
         <h2>把講道文字檔排成投影片</h2>
-        <p class="lead">上傳只有文字的 pptx，網站會排好現場版 16:9 和線上字條，匯出就能放進 ProPresenter</p>
+        <p class="lead">上傳只有文字的 pptx 或 txt，網站會排好現場版 16:9 和線上字條，匯出就能放進 ProPresenter</p>
         <div class="row actions">
           <button class="btn primary big" id="btnPick">上傳文字檔</button>
           <button class="btn big" id="btnSample">用範例試試</button>
         </div>
         <ol class="flow">
-          <li><b>上傳文字檔</b><span>只有文字的 pptx 就可以</span></li>
+          <li><b>上傳文字檔</b><span>只有文字的 pptx 或 txt；txt 空一行就換下一頁</span></li>
           <li><b>選模板</b><span>到 <a href="https://slidesgo.com/" target="_blank" rel="noopener">Slidesgo</a> 下載 PowerPoint 格式的模板，進去後上傳</span><span id="tplNow"></span><button class="btn" id="btnPickTpl" hidden>上傳模板</button></li>
           <li><b>匯出</b><span>按右上角「匯出 pptx」，下載現場版、線上版兩個檔案</span></li>
         </ol>
@@ -744,7 +744,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=70"></script>
+<script src="app.js?v=71"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
