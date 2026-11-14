@@ -626,7 +626,7 @@ const pct = v => Math.round(v * 100) + '%', mul = g => (g / LN).toFixed(2);
 function syncLiveUI() {
   const sl = S.slides[S.sel], one = S.layScope === 'slide' && !!sl;
   document.querySelectorAll('#layScope button').forEach(b => b.classList.toggle('on', b.dataset.s === S.layScope));
-  $('layScopeSlide').textContent = sl ? `只有這一頁（第 ${S.sel + 1} 頁）` : '只有這一頁';
+  $('layScopeSlide').textContent = sl ? `只有第 ${S.sel + 1} 頁` : '只有這一頁';
   const own = sl && ((sl.fs && sl.fs !== 1) || sl.lg || (sl.sfs && sl.sfs !== 1) || sl.slg || (sl.lv && Object.keys(sl.lv).length));
   $('layNote').textContent = one ? `下面的調整只會改第 ${S.sel + 1} 頁。` : '下面的調整會套用到每一頁' + (own ? '；這一頁有自己的設定，不會被蓋掉。' : '。');
   // 現場版
@@ -1077,7 +1077,7 @@ function markBgSel() {
 function syncSlideBgUI() {
   const slideMode = S.bgScope === 'slide', sl = S.slides[S.sel]; if (!$('bgScope')) return;
   document.querySelectorAll('#bgScope button').forEach(x => x.classList.toggle('on', x.dataset.s === S.bgScope));
-  $('scopeSlideBtn').textContent = sl ? `只有這一頁（第 ${S.sel + 1} 頁）` : '只有這一頁';
+  $('scopeSlideBtn').textContent = sl ? `只有第 ${S.sel + 1} 頁` : '只有這一頁';
   $('scopeHint').textContent = slideMode ? `下面的選擇只會改第 ${S.sel + 1} 頁，其他頁不變。` : '下面的選擇會套用到每一頁。想只改某一頁，先點左邊那一頁，再按「只有這一頁」。';
   $('bgVaryRow').hidden = slideMode; $('bgLayoutRow').hidden = !slideMode; $('slBgPick').textContent = sl ? `只用在第 ${S.sel + 1} 頁…` : '只用在這一頁…'; $('slBgTitle').textContent = `第 ${S.sel + 1} 頁用自己的圖`;
   $('bgResetRow').hidden = !(slideMode && sl && sl.bg);

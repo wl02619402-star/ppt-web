@@ -159,7 +159,7 @@ input[type=range]{width:100%;accent-color:var(--ink2);margin:0}
 .bgthumb{width:96px;flex:none}.bgthumb canvas{display:block;width:100%;aspect-ratio:16/9;outline:1px solid var(--line2)}
 .bgup-body{flex:1;min-width:0}
 .scope{display:flex;border:1px solid var(--line2);border-radius:4px;overflow:hidden}
-.scope button{flex:1;height:36px;border:0;background:none;color:var(--muted);font-weight:500}
+.scope button{flex:1;min-width:0;height:36px;border:0;background:none;color:var(--muted);font-weight:500;padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .scope button.on{background:var(--ink);color:var(--bg)}
 .thumb .flag{position:absolute;left:6px;bottom:6px;font-size:11px;background:var(--accent);color:#fff;padding:1px 6px;border-radius:3px}
 .colorbar{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
@@ -430,7 +430,7 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
 <script src="themes.js?v=20"></script>
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=41"></script>
-<script src="app.js?v=42"></script>
+<script src="app.js?v=43"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
