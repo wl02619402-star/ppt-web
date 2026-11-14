@@ -3,7 +3,7 @@
 const S = {
   slides: [], sel: 0, page: 0, themeKey: 'torn_kraft', stripW: 0.81, stripY: 64, stripX: 0, view: 'live', autoExport: false, exportFmt: 'image', deckScale: 1, anchor: 'middle',
   custom: null, customMode: 'dark', customDim: null, fileName: '簡報',
-  fonts: { head: 'theme', body: 'theme', scr: 'same' }, shadow: false, blocks: false, autoVary: true, bgAll: null, bgScope: 'all', localFonts: [], lineGap: null, live: {}, liveScope: 'all',
+  fonts: { head: 'theme', body: 'theme', scr: 'same' }, shadow: false, blocks: false, autoVary: true, bgAll: null, bgScope: 'all', localFonts: [], lineGap: null, lgScope: 'all', live: {}, liveScope: 'all',
 };
 const $ = id => document.getElementById(id);
 const measureCtx = mk(10, 10).getContext('2d');
@@ -208,10 +208,11 @@ function drawLines(c, lines, x, y, o, T, align = 'left', boxW = 0) {
 const plain = p => p.map(r => r.t).join('');
 
 // ---------- 現場版 ----------
-function liveOpts(isTitle, v) {
+const gapOf = slide => (slide && slide.lg) || S.lineGap || 1.1 * LN;
+function liveOpts(isTitle, v, slide) {
   return {
     headRule: (pi, ps) => (v === 'spark' || v === 'solid') ? false : isTitle ? pi === 0 : (pi === 0 && ps.length > 1 && plain(ps[0]).length <= 28),
-    headScale: isTitle ? 1.9 : 1.16, lineGap: S.lineGap || 1.1 * LN, paraGap: .45, shadow: S.shadow,
+    headScale: isTitle ? 1.9 : 1.16, lineGap: gapOf(slide), paraGap: .45, shadow: S.shadow,
   };
 }
 function liveCfg(slide, isTitle, v) {
@@ -246,14 +247,14 @@ function stripLead(runs, n) {
 // 整份簡報的統一字級：每頁各自算出「放得下的最大字級」，取中位數，讓相鄰頁面字級一致；太長的頁面才個別縮小
 let _deck = { sig: '', val: 80 };
 function deckSize() {
-    const sig = [S.themeKey, S.autoVary, JSON.stringify(S.bgAll), S.custom ? 1 : 0, S.lineGap, JSON.stringify(S.fonts), S.live.w || '', S.slides.map((s, i) => (s.variant || '') + '|' + (s.fs || 1) + '|' + (s.bg ? s.bg.t : '') + '|' + s.paras.map(ptext).join('/')).join('#')].join('~');
+    const sig = [S.themeKey, S.autoVary, JSON.stringify(S.bgAll), S.custom ? 1 : 0, S.lineGap, JSON.stringify(S.fonts), S.live.w || '', S.slides.map((s, i) => (s.variant || '') + '|' + (s.fs || 1) + '|' + (s.bg ? s.bg.t : '') + '|' + (s.lg || '') + '|' + s.paras.map(ptext).join('/')).join('#')].join('~');
   if (sig === _deck.sig) return _deck.val;
   const fits = [];
   S.slides.forEach((sd, i) => {
     const v = autoVariant(sd, i); if (v === 'title' || v === 'spark' || v === 'solid') return;
     let paras = sd.paras, shift = 0;
     if (v === 'num') { const m = ptext(paras[0]).match(NUM_RE); if (m) { shift = 150; paras = paras.map((p, k) => k ? p : stripLead(p, m[0].length)); } }
-    const sf = picSafe(sd, safeOf(slideTheme(curTheme(sd), v), v, i)), o = liveOpts(false, v), maxW = (S.live.w ? S.live.w : 1560 - sf.r - sf.l) - shift, maxH = H - sf.t - sf.b;
+    const sf = picSafe(sd, safeOf(slideTheme(curTheme(sd), v), v, i)), o = liveOpts(false, v, sd), maxW = (S.live.w ? S.live.w : 1560 - sf.r - sf.l) - shift, maxH = H - sf.t - sf.b;
     if (v === 'side' && paras.length > 1 && plain(paras[0]).length <= 28) paras = paras.slice(1), o.headRule = () => false;
     let size = 80; for (; size >= 30; size -= 2) if (blockH(layout(paras, size, maxW, o), o) <= maxH) break;
     fits.push(size);
@@ -273,7 +274,7 @@ function drawLive(cv, slide, idx, noText) {
     c.save(); c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = 26; c.shadowOffsetY = 8;
     c.drawImage(im, im.width * cr.l, im.height * cr.t, im.width * (1 - cr.l - cr.r), im.height * (1 - cr.t - cr.b), p.x * W, p.y * H, p.w * W, p.h * H); c.restore();
   });
-  const o = liveOpts(isTitle, v), fs = slide.fs || 1, L = liveCfg(slide, isTitle, v), sf = picSafe(slide, safeOf(T, v, idx));
+  const o = liveOpts(isTitle, v, slide), fs = slide.fs || 1, L = liveCfg(slide, isTitle, v), sf = picSafe(slide, safeOf(T, v, idx));
   let paras = slide.paras, numeral = null, panel = null;
   if (v === 'side' && paras.length > 1 && plain(paras[0]).length <= 28) {
     const left = idx % 2 === 0, pw = 560, ho = { headRule: () => true, headScale: 1, lineGap: o.lineGap, paraGap: .3 };
@@ -318,13 +319,13 @@ function drawLive(cv, slide, idx, noText) {
 
 // ---------- 長條版 ----------
 const STRIP = { padL: 100, padR: 140, padT: 46, padB: 46, maxH: 340 };
-function stripOpts() {
-  return { headRule: (pi, ps) => pi === 0 && ps.length > 1, headScale: 1.2, lineGap: Math.max(1.2, (S.lineGap || 1.1 * LN) - .2), paraGap: .3 };
+function stripOpts(slide) {
+  return { headRule: (pi, ps) => pi === 0 && ps.length > 1, headScale: 1.2, lineGap: Math.max(1.2, gapOf(slide) - .2), paraGap: .3 };
 }
 function stripPages(slide) {
-  if (!slide.paras.length) return { pages: [], o: stripOpts(), cardW: Math.round(W * S.stripW) };
+  if (!slide.paras.length) return { pages: [], o: stripOpts(slide), cardW: Math.round(W * S.stripW) };
   // 先把字條變寬（最寬到畫面的 96%）、再縮字，盡量讓一段內容放在同一條；真的放不下才分成多條
-  const o = stripOpts(), sfs = slide.sfs || 1, pv = STRIP.padT + STRIP.padB;
+  const o = stripOpts(slide), sfs = slide.sfs || 1, pv = STRIP.padT + STRIP.padB;
   const base = Math.round(W * S.stripW), wide = Math.round(W * .96);
   const widths = [base]; for (let k = 1; k <= 3; k++) { const w = Math.round(base + (wide - base) * k / 3); if (w > widths[widths.length - 1]) widths.push(w); }
   const attempt = (cardW, minSize) => {
@@ -562,7 +563,7 @@ function editLive(key, val) {
 function syncOut() {
   syncLiveUI();
   $('fsO').textContent = $('fs').value + '%'; $('sfsO').textContent = $('sfs').value + '%';
-  $('lineGapO').textContent = (S.lineGap ? S.lineGap / LN : 1.1).toFixed(2); $('lineGap').value = S.lineGap ? S.lineGap / LN : 1.1; $('stripXO').textContent = S.stripX; $('stripX').value = S.stripX; $('stripY').value = S.stripY; $('stripYO').textContent = S.stripY; $('stripWO').textContent = Math.round(S.stripW * 100) + '%';
+  syncGapUI(); $('stripXO').textContent = S.stripX; $('stripX').value = S.stripX; $('stripY').value = S.stripY; $('stripYO').textContent = S.stripY; $('stripWO').textContent = Math.round(S.stripW * 100) + '%';
 }
 const HUE = {
   paper: 'warm', dusk: 'cool', morning: 'warm', olive: 'green', minimal: 'neutral', burgundy: 'warm', sage: 'green', terracotta: 'warm',
@@ -938,8 +939,28 @@ $('btnDel').onclick = () => {
 };
 $('fs').oninput = () => { S.slides[S.sel].fs = $('fs').value / 100; syncOut(); redrawSoon(); };
 $('sfs').oninput = () => { S.slides[S.sel].sfs = $('sfs').value / 100; syncOut(); redrawSoon(); };
-$('lineGap').oninput = () => { S.lineGap = +$('lineGap').value * LN; wcache.clear(); syncOut(); S.page = 0; redrawSoon(); };
-$('lineGapReset').onclick = () => { S.lineGap = null; $('lineGap').value = 1.1; wcache.clear(); syncOut(); S.page = 0; redrawSoon(); };
+// 行距：可以改整份，也可以只改這一頁
+function syncGapUI() {
+  const sl = S.slides[S.sel], one = S.lgScope === 'slide', g = one && sl ? gapOf(sl) : (S.lineGap || 1.1 * LN);
+  $('lineGap').value = (g / LN).toFixed(2); $('lineGapO').textContent = (g / LN).toFixed(2);
+  document.querySelectorAll('#lgScope button').forEach(b => b.classList.toggle('on', b.dataset.s === S.lgScope));
+  $('lgScopeSlide').textContent = sl ? `只有這一頁（第 ${S.sel + 1} 頁）` : '只有這一頁';
+  const own = sl && sl.lg;
+  $('lgNote').textContent = one ? (own ? '這一頁用自己的行距，其他頁不受影響。' : '這一頁目前跟整份一樣；拉動滑桿就只改這一頁。') : '改這裡，所有頁面一起變（自己設過行距的頁面除外）。';
+  $('lineGapReset').textContent = one ? '這一頁改回跟整份一樣' : '還原預設';
+  $('lineGapReset').disabled = one && !own;
+}
+$('lineGap').oninput = () => {
+  const v = +$('lineGap').value * LN, sl = S.slides[S.sel];
+  if (S.lgScope === 'slide' && sl) sl.lg = v; else S.lineGap = v;
+  _deck.sig = ''; wcache.clear(); syncGapUI(); S.page = 0; redrawSoon();
+};
+$('lineGapReset').onclick = () => {
+  const sl = S.slides[S.sel];
+  if (S.lgScope === 'slide' && sl) delete sl.lg; else S.lineGap = null;
+  _deck.sig = ''; wcache.clear(); syncGapUI(); S.page = 0; redrawSoon();
+};
+document.querySelectorAll('#lgScope button').forEach(b => b.onclick = () => { S.lgScope = b.dataset.s; syncGapUI(); });
 $('stripY').oninput = () => { S.stripY = +$('stripY').value; syncOut(); redrawSoon(); };
 $('stripW').oninput = () => { S.stripW = $('stripW').value / 100; syncOut(); S.page = 0; redrawSoon(); };
 $('stripW').onchange = () => buildList();
