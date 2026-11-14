@@ -201,6 +201,7 @@ input[type=range]{width:100%;accent-color:var(--ink2);margin:0}
 .banner b{display:block;font-weight:500;margin-bottom:2px}
 .banner span{font-size:13px;color:var(--ink2)}
 .banner a{color:var(--accent)}
+.capnote{font-size:12px;color:var(--accent);margin-top:8px}
 .chk{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13px}
 .sw{width:28px;height:28px;border-radius:4px;border:1px solid var(--line2);padding:0}
 .sw.sel{outline:2px solid var(--accent);outline-offset:1px}
@@ -432,47 +433,36 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
         </div>
         <div class="hint" id="layNote" style="margin:8px 0 16px"></div>
         <div id="posLive">
-          <div class="vtag">正在調整：現場版<span>（線上版請點上方「線上版」）</span></div>
+          <div class="vtag">正在調整：現場版<span>（要調線上版，點上方的「線上版」）</span></div>
           <div class="sec">
             <label class="slider">字級<input type="range" id="lvSize" min="60" max="140" step="5"><output id="lvSizeO"></output></label>
             <label class="slider">行距<input type="range" id="lvGap" min="0.8" max="1.5" step="0.05"><output id="lvGapO"></output></label>
-            <div class="hint">行距對應 PowerPoint 的「多行」倍數，教會規範建議 1.1 到 1.3</div>
-          </div>
-          <div class="sec">
-            <h3>位置</h3>
-            <label class="slider">左右<input type="range" id="lvX" min="-900" max="900" step="4"><output id="lvXO"></output></label>
-            <label class="slider">上下<input type="range" id="lvY" min="-600" max="600" step="4"><output id="lvYO"></output></label>
-            <label class="slider">寬度<input type="range" id="lvW" min="700" max="1800" step="10"><output id="lvWO"></output></label>
             <div class="row" id="lvAlign" style="margin:8px 0 0">
               <span class="hint" style="margin:0 4px 0 0">對齊</span>
               <button class="pill" data-a="left">靠左</button>
               <button class="pill" data-a="center">置中</button>
               <button class="pill" data-a="right">靠右</button>
             </div>
-            <div class="row" id="anchorRow" style="margin:8px 0 0">
-              <span class="hint" style="margin:0 4px 0 0">垂直</span>
-              <button class="pill" data-an="middle">置中</button>
-              <button class="pill" data-an="top">靠上</button>
-            </div>
-            <div class="hint">也可以直接在畫面上按住文字拖曳</div>
+            <div class="capnote" id="lvCap" hidden></div>
+            <div class="hint">要移動文字，直接在畫面上按住文字拖曳。</div>
           </div>
           <button class="btn small" id="lvReset">還原</button>
         </div>
         <div id="posStrip" hidden>
-          <div class="vtag">正在調整：線上版<span>（現場版請點上方「現場版」）</span></div>
+          <div class="vtag">正在調整：線上版<span>（要調現場版，點上方的「現場版」）</span></div>
           <div class="sec">
             <label class="slider">字級<input type="range" id="svSize" min="60" max="140" step="5"><output id="svSizeO"></output></label>
             <label class="slider">行距<input type="range" id="svGap" min="0.8" max="1.5" step="0.05"><output id="svGapO"></output></label>
             <label class="slider">長度<input type="range" id="stripW" min="30" max="98" step="1"><output id="stripWO"></output></label>
-            <div class="hint">長度沒調過時會自動貼合文字；也可以在畫面上拖曳字條左右兩端</div>
-          </div>
-          <div class="sec">
-            <h3>字幕條位置<span class="hint" style="margin-left:8px">每一頁共用</span></h3>
-            <label class="slider">左右<input type="range" id="stripX" min="-700" max="700" step="4"><output id="stripXO"></output></label>
-            <label class="slider">離底邊<input type="range" id="stripY" min="0" max="700" step="4"><output id="stripYO"></output></label>
-            <div class="hint">也可以直接在畫面上按住字幕條拖曳</div>
+            <div class="capnote" id="svCap" hidden></div>
+            <div class="hint">要移動字條，直接在畫面上拖曳；拖字條左右兩端可以調長度。字條的位置每一頁共用。</div>
           </div>
           <button class="btn small" id="stripReset">還原</button>
+        </div>
+        <div class="legacy">
+          <input type="range" id="lvX"><output id="lvXO"></output><input type="range" id="lvY"><output id="lvYO"></output><input type="range" id="lvW"><output id="lvWO"></output>
+          <div id="anchorRow"><button class="pill" data-an="middle"></button><button class="pill" data-an="top"></button></div>
+          <input type="range" id="stripX"><output id="stripXO"></output><input type="range" id="stripY"><output id="stripYO"></output>
         </div>
       </div>
     </div>
@@ -485,7 +475,7 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=57"></script>
+<script src="app.js?v=58"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
