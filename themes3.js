@@ -1,7 +1,7 @@
 // 版型：同一套背景，依每頁內容自動變化（簡單但不單調）
 const VARIANT_LABELS = {
   auto: '自動', title: '標題頁', plain: '一般', band: '一般・側邊色條', rule: '一般・底部分隔線',
-  brackets: '一般・框角', flip: '一般・左右翻轉', zoom: '一般・放大局部', side: '左右分欄（手動選用）', card: '卡片框',
+  brackets: '一般・框角', split: '左右兩欄（標題在左）', flip: '一般・左右翻轉', zoom: '一般・放大局部', side: '左右分欄（手動選用）', card: '卡片框',
   spark: '重點句・星芒', solid: '整頁色塊強調', num: '編號重點', spot: '深色強調',
 };
 const hexA = (hex, a) => hex + hex2(a);
@@ -17,7 +17,7 @@ function planVariants() {
   const sig = (S.autoVary === false ? '0' : '1') + sl.map(s => (s.variant || '') + '|' + s.paras.map(ptext).join('/')).join('#');
   if (sig === _plan.sig) return _plan.v;
   const out = [], last = {}, cnt = {};
-  const GAP = { solid: 3, spark: 2, side: 2, card: 2, zoom: 2, flip: 2 };
+  const GAP = { solid: 3, spot: 4, spark: 2, side: 2, split: 2, card: 2, zoom: 2, flip: 2 };
   sl.forEach((s, i) => {
     let v;
     const ps = s.paras.map(ptext).map(x => x.trim()).filter(Boolean), chars = ps.join('').length;
@@ -28,11 +28,12 @@ function planVariants() {
     else if (S.autoVary === false) v = (ps.length && ps.length <= 2 && chars <= 34) ? 'spark' : ['plain', 'band', 'rule', 'brackets', 'plain', 'rule'][i % 6];
     else {
       const short = ps.length && ps.length <= 2 && chars <= 34, headBody = ps.length > 1 && ps[0].length <= 28, scripture = ps.some(x => REF_RE.test(x));
-      let cands = short ? ['spark', 'solid', 'card']
-        : headBody ? ['card', 'plain', 'flip', 'rule', 'band']
+      let cands = short ? ['spark', 'spot', 'solid', 'card']
+        : headBody ? (ps[0].length <= 30 ? ['split', 'card', 'plain', 'flip', 'rule', 'band'] : ['card', 'plain', 'flip', 'rule', 'band'])
         : scripture ? ['card', 'plain', 'zoom', 'flip', 'brackets']
         : ['plain', 'flip', 'zoom', 'rule', 'band', 'brackets', 'card'];
       if (chars > 170) cands = cands.filter(c => c !== 'card' && c !== 'side');
+      if (chars > 260) cands = cands.filter(c => c !== 'split');
       const prev = out[i - 1];
       const ok = cands.filter(c => c !== prev && (last[c] === undefined || i - last[c] >= (GAP[c] || 1)));
       const pool = ok.length ? ok : cands.filter(c => c !== prev);

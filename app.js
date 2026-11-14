@@ -3,7 +3,7 @@
 const S = {
   slides: [], sel: 0, page: 0, themeKey: 'torn_kraft', stripW: 0.81, stripY: 64, stripX: 0, view: 'live', autoExport: false, exportFmt: 'image', deckScale: 1, anchor: 'middle',
   custom: null, customMode: 'dark', customDim: null, fileName: '簡報',
-  fonts: { head: 'theme', body: 'theme', scr: 'same' }, shadow: false, blocks: false, autoVary: true, bgAll: null, bgScope: 'all', localFonts: [], lineGap: null, stripGap: null, stripScale: 1, layScope: 'all', live: {}, liveScope: 'all',
+  fonts: { head: 'theme', body: 'theme', scr: 'same' }, shadow: false, blocks: false, dashRef: true, autoVary: true, bgAll: null, bgScope: 'all', localFonts: [], lineGap: null, stripGap: null, stripScale: 1, layScope: 'all', live: {}, liveScope: 'all',
 };
 const $ = id => document.getElementById(id);
 const measureCtx = mk(10, 10).getContext('2d');
@@ -87,6 +87,22 @@ function composeBg(c, T, v, p) {
     c.save(); c.shadowColor = 'rgba(0,0,0,.3)'; c.shadowBlur = 36; c.shadowOffsetY = 12; c.drawImage(card, (W - cw) / 2, (H - ch) / 2 - 6, cw, ch); c.restore();
   }
 }
+// 小裝飾：參考手作講道簡報常用的元素（掛籤、框角、星芒、紙膠帶），每頁換不同組合，只放在角落、不碰文字
+function tape(c, x, y, w, h, rot) {
+  c.save(); c.translate(x, y); c.rotate(rot); c.fillStyle = 'rgba(222,206,170,.78)'; c.beginPath(); c.moveTo(-w / 2, -h / 2);
+  for (let i = 0; i <= 6; i++) c.lineTo(-w / 2 + (i % 2 ? 4 : 0), -h / 2 + h * i / 6);
+  c.lineTo(w / 2, h / 2); for (let i = 6; i >= 0; i--) c.lineTo(w / 2 - (i % 2 ? 4 : 0), -h / 2 + h * i / 6); c.closePath(); c.fill(); c.restore();
+}
+function ornaments(c, T, p) {
+  const A = T.accent, sets = [['tab', 'spark'], ['bracket'], ['tape', 'bracket'], ['spark'], ['tab', 'bracket'], ['tape', 'spark']];
+  sets[p % sets.length].forEach(k => {
+    if (k === 'tab') { c.fillStyle = A; c.fillRect(W - 152, 0, 22, 112); }
+    if (k === 'bracket') { c.strokeStyle = hexA(A, .85); c.lineWidth = 3; c.beginPath(); c.moveTo(W - 70, H - 150); c.lineTo(W - 70, H - 70); c.lineTo(W - 150, H - 70); c.stroke(); }
+    if (k === 'spark') { star(c, W - 140, 150, 30, A); star(c, W - 184, 108, 13, hexA(A, .8)); }
+    if (k === 'tape') tape(c, 190, 52, 190, 44, -.16);
+  });
+}
+const NO_ORN = new Set(['title', 'spot', 'solid', 'spark', 'num', 'band', 'rule', 'brackets', 'side']);
 function getBg(v, p = 0, slide) {
   const t = curTheme(slide), key = [t.key, v, p % 6, S.customMode, S.custom ? S.custom.src.length : '', dimOf()].join('|');
   if (!bgCache.has(key)) {
@@ -94,6 +110,7 @@ function getBg(v, p = 0, slide) {
     if (COMP.has(v)) composeBg(x, t, v, p);
     else if (v === 'spot' && !t.flat) drawSpot(x, t, p % 2);
     else { t.bg.call(t, x, t.ownVariants ? v : (v === 'title' ? 'title' : 'content')); if (!t.ownVariants && !t.flat) decorate(x, t, v, p); }
+    if (!t.flat && !NO_ORN.has(v)) ornaments(x, t, p);
     bgCache.set(key, c);
   }
   return bgCache.get(key);
@@ -109,10 +126,13 @@ function tw(font, tok) {
 const _seg = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter('zh-Hant', { granularity: 'word' }) : null;
 const isCJK = ch => /[\u3400-\u9fff]/.test(ch);
 // 斷行單位：經文出處、英數字當一整塊；中文用詞為單位（避免「死／亡」被拆開），過長的詞再拆成單字
+// 經文出處：(約11:33) → —— 約11:33（只改顯示，不改原文）
+const dashRef = t => S.dashRef === false ? t : t.replace(/\s*[（(]\s*([^（）()]{0,8}?\d+\s*[:：]\s*\d[^（）()]{0,16}?)\s*[）)]/g, '—— $1');
+const isCallout = p => { const t = ptext(p).trim(); return !REF_RE.test(t) && /[！!]$/.test(t) && t.length <= 48; };
 function tokenize(t) {
-  const out = [], parts = t.match(/[（(](?=[^（）()]*\d)[^（）()]{1,14}[）)]|[A-Za-z0-9:：.\-–—]+|[^A-Za-z0-9:：.\-–—（(]+|[\s\S]/g) || [];
+  const out = [], parts = t.match(/——\s?[^\s，。；、」』]{0,8}?\d+\s*[:：]\s*\d+(?:[-–]\d+)?(?:[,，]\s?\d+(?:[-–]\d+)?)*|[（(](?=[^（）()]*\d)[^（）()]{1,14}[）)]|[A-Za-z0-9:：.\-–—]+|[^A-Za-z0-9:：.\-–—（(]+|[\s\S]/g) || [];
   for (const p of parts) {
-    if (/^[A-Za-z0-9（(:：.\-–—]/.test(p) || p.length < 2) { out.push(p); continue; }
+    if (/^——\s?\S*\d/.test(p) || /^[A-Za-z0-9（(:：.\-–]/.test(p) || p.length < 2) { out.push(p); continue; }
     if (!_seg) { out.push(...p); continue; }
     for (const g of _seg.segment(p)) { const w = g.segment; if (w.length > 4) out.push(...w); else out.push(w); }
   }
@@ -154,7 +174,7 @@ function layout(paras, size, maxW, o) {
     const base = fnt(wt, fs, head, false, scr), redf = fnt(700, fs, head, true, scr);
     const flat = []; let pos = 0;
     runs.forEach(r => {
-      r.t.replace(/[\n\v]/g, ' ').split('↵').forEach((pc, k) => {
+      dashRef(r.t.replace(/[\n\v]/g, ' ')).split('↵').forEach((pc, k) => {
         if (k > 0) { flat.push({ brk: true, t: '', red: r.red }); pos += 1; }
         let po = pos; tokenize(pc).forEach(tk => { flat.push({ t: tk, red: r.red, c: r.c, o: po }); po += tk.length; });
         pos += pc.length;
@@ -211,7 +231,7 @@ const plain = p => p.map(r => r.t).join('');
 const gapOf = slide => (slide && slide.lg) || S.lineGap || 1.1 * LN;
 function liveOpts(isTitle, v, slide) {
   return {
-    headRule: (pi, ps) => (v === 'spark' || v === 'solid') ? false : isTitle ? pi === 0 : (pi === 0 && ps.length > 1 && plain(ps[0]).length <= 28),
+    headRule: (pi, ps) => (v === 'spark' || v === 'solid' || v === 'spot') ? false : isTitle ? pi === 0 : (pi === 0 && ps.length > 1 && plain(ps[0]).length <= 28),
     headScale: isTitle ? 1.9 : 1.16, lineGap: gapOf(slide), paraGap: .45, shadow: S.shadow,
   };
 }
@@ -224,10 +244,10 @@ function safeOf(T, v, idx = 0) {
   const tp = T.ownVariants
     ? { title: [230, 120], band: [140, 90], rule: [90, 170], brackets: [130, 130], spark: [110, 100], num: [90, 150], plain: [90, 170], spot: [110, 110], flip: [170, 90] }
     : { title: [110, 110], band: [100, 100], rule: [90, 170], brackets: [130, 130], spark: [110, 110], num: [90, 100], plain: [90, 90], spot: [110, 110], flip: [90, 90] };
-  Object.assign(tp, { zoom: [90, 90], solid: [90, 90], side: [90, 90], card: [190, 190] });
+  Object.assign(tp, { zoom: [90, 90], solid: [90, 90], side: [90, 90], card: [190, 190], split: [110, 110] });
   const [t, b] = tp[v] || [100, 100]; let e = T.safe || {};
   if (v === 'flip') e = { t: e.t, b: e.b, l: e.r, r: e.l };
-  if (v === 'zoom' || v === 'solid' || v === 'card') e = {};
+  if (v === 'zoom' || v === 'solid' || v === 'card' || v === 'spot') e = {};
   let l = e.l || 0, r = e.r || 0;
   if (v === 'side') { if (idx % 2 === 0) l = Math.max(l, 470); else r = Math.max(r, 470); }
   return { t: Math.max(t, e.t || 0), b: Math.max(b, e.b || 0), l, r };
@@ -247,15 +267,16 @@ function stripLead(runs, n) {
 // 整份簡報的統一字級：每頁各自算出「放得下的最大字級」，取中位數，讓相鄰頁面字級一致；太長的頁面才個別縮小
 let _deck = { sig: '', val: 80 };
 function deckSize() {
-    const sig = [S.themeKey, S.autoVary, JSON.stringify(S.bgAll), S.custom ? 1 : 0, S.lineGap, JSON.stringify(S.fonts), S.live.w || '', S.slides.map((s, i) => (s.variant || '') + '|' + (s.fs || 1) + '|' + (s.bg ? s.bg.t : '') + '|' + (s.lg || '') + '|' + s.paras.map(ptext).join('/')).join('#')].join('~');
+    const sig = [S.themeKey, S.autoVary, S.dashRef, JSON.stringify(S.bgAll), S.custom ? 1 : 0, S.lineGap, JSON.stringify(S.fonts), S.live.w || '', S.slides.map((s, i) => (s.variant || '') + '|' + (s.fs || 1) + '|' + (s.bg ? s.bg.t : '') + '|' + (s.lg || '') + '|' + s.paras.map(ptext).join('/')).join('#')].join('~');
   if (sig === _deck.sig) return _deck.val;
   const fits = [];
   S.slides.forEach((sd, i) => {
-    const v = autoVariant(sd, i); if (v === 'title' || v === 'spark' || v === 'solid') return;
+    const v = autoVariant(sd, i); if (v === 'title' || v === 'spark' || v === 'solid' || v === 'spot') return;
     let paras = sd.paras, shift = 0;
     if (v === 'num') { const m = ptext(paras[0]).match(NUM_RE); if (m) { shift = 150; paras = paras.map((p, k) => k ? p : stripLead(p, m[0].length)); } }
     const sf = picSafe(sd, safeOf(slideTheme(curTheme(sd), v), v, i)), o = liveOpts(false, v, sd), maxW = (S.live.w ? S.live.w : 1560 - sf.r - sf.l) - shift, maxH = H - sf.t - sf.b;
     if (v === 'side' && paras.length > 1 && plain(paras[0]).length <= 28) paras = paras.slice(1), o.headRule = () => false;
+    if (v === 'split') { const sp = splitParts(paras); if (sp) { paras = sp.body; o.headRule = () => false; let z = 80; for (; z >= 30; z -= 2) if (blockH(layout(paras, z, SPLIT.rightW, o), o) <= maxH) break; fits.push(z); return; } }
     let size = 80; for (; size >= 30; size -= 2) if (blockH(layout(paras, size, maxW, o), o) <= maxH) break;
     fits.push(size);
   });
@@ -264,9 +285,38 @@ function deckSize() {
   _deck = { sig, val: Math.max(30, Math.min(80, med)) };
   return _deck.val;
 }
+// ---------- 左右兩欄：標題（和一句重點）在左，經文在右 ----------
+const SPLIT = { leftW: 560, gap: 96, get rightW() { return W - 320 - this.leftW - this.gap; } };
+function splitParts(paras) {
+  if (paras.length < 2 || plain(paras[0]).trim().length > 30) return null;
+  const rest = paras.slice(1), calls = rest.filter(isCallout), body = rest.filter(p => !isCallout(p));
+  return body.length ? { head: [paras[0]], calls, body } : null;
+}
+function calloutBox(c, T, x, y, w, h) {
+  c.save(); c.beginPath(); if (c.roundRect) c.roundRect(x, y, w, h, 12); else c.rect(x, y, w, h);
+  c.fillStyle = T.dark ? 'rgba(255,255,255,.12)' : hexA(T.accent, .2); c.fill();
+  c.fillStyle = hexA(T.accent, .9); c.fillRect(x + 18, y + 16, 3, h - 32); c.restore();
+}
+function liveSplit(c, slide, T, o, sf, L, sp, noText) {
+  const x1 = 160 + L.dx, x2 = x1 + SPLIT.leftW + SPLIT.gap, rw = SPLIT.rightW, maxH = H - sf.t - sf.b;
+  const bo = Object.assign({}, o, { headRule: () => false }), base = deckSize() * S.deckScale * (slide.fs || 1);
+  let size = Math.round(base), body; for (; size >= 30; size -= 2) { body = layout(sp.body, size, rw, bo); if (blockH(body, bo) <= maxH) break; }
+  const ho = { headRule: () => true, headScale: 1, lineGap: o.lineGap * .95, paraGap: .3 };
+  let hs = Math.min(100, Math.round(size * 1.25)), head; for (; hs >= 40; hs -= 2) { head = layout(sp.head, hs, SPLIT.leftW, ho); if (blockH(head, ho) <= maxH * .55) break; }
+  const co = { headRule: () => false, headScale: 1, lineGap: o.lineGap, paraGap: .35 }, cs = Math.max(30, Math.round(size * .8));
+  const calls = sp.calls.length ? layout(sp.calls, cs, SPLIT.leftW - 64, co) : [];
+  const hh = blockH(head, ho), ch = calls.length ? blockH(calls, co) + 40 : 0, leftH = hh + (ch ? 40 + ch : 0), bh = blockH(body, bo);
+  const top = sf.t + Math.max(0, (maxH - Math.max(leftH, bh)) / 2) + L.dy, cy = top + hh + 40;
+  if (ch) calloutBox(c, T, x1, cy, SPLIT.leftW, ch);
+  const extra = [{ lines: head, x: x1, y: top, o: ho, w: SPLIT.leftW, T }];
+  if (ch) extra.push({ lines: calls, x: x1 + 40, y: cy + 20, o: co, w: SPLIT.leftW - 64, T });
+  if (!noText) { extra.forEach(e => drawLines(c, e.lines, e.x, e.y, e.o, e.T, 'left', e.w)); drawLines(c, body, x2, top, bo, T, 'left', rw); }
+  slide._autoAlign = 'left';
+  return { shrunk: size < Math.round(base) && size < 48, geo: { lines: body, x: x2, y: top, o: bo, align: 'left', maxW: rw, T, extra } };
+}
 function drawLive(cv, slide, idx, noText) {
   const v = autoVariant(slide, idx), T = slideTheme(curTheme(slide), v), c = cv.getContext('2d');
-  const isTitle = v === 'title', isSpark = v === 'spark' || v === 'solid';
+  const isTitle = v === 'title', isSpark = v === 'spark' || v === 'solid' || v === 'spot';
   c.clearRect(0, 0, W, H);
   c.drawImage(getBg(v, idx, slide), 0, 0);
   (slide.pics || []).forEach(p => {
@@ -283,6 +333,7 @@ function drawLive(cv, slide, idx, noText) {
     panel = { lines: hl, x: (left ? 0 : W - pw) + 65, y: (H - hh) / 2, o: ho, w: pw - 130, T: Object.assign({}, T, { text: lt ? '#1E1914' : '#FBF6EC', red: lt ? '#B3261E' : '#FFD27A' }) };
     paras = paras.slice(1); o.headRule = () => false;
   }
+  if (v === 'split') { const sp = splitParts(paras); if (sp) return liveSplit(c, slide, T, o, sf, L, sp, noText); }
   if (v === 'num') {
     const m = ptext(paras[0]).match(NUM_RE);
     if (m) { numeral = /[１-９]/.test(m[1]) ? String(m[1].charCodeAt(0) - 0xFF10) : m[1]; paras = paras.map((p, i) => i ? p : stripLead(p, m[0].length)); }
@@ -323,9 +374,23 @@ const sgapOf = slide => (slide && slide.slg) || S.stripGap || 0.96 * LN;
 function stripOpts(slide) {
   return { headRule: (pi, ps) => pi === 0 && ps.length > 1, headScale: 1.2, lineGap: sgapOf(slide), paraGap: .3 };
 }
+function stripSplitLayout(slide, sp) {
+  const cardW = Math.round(W * .96), iw = cardW - STRIP.padL - STRIP.padR, leftW = Math.round(iw * .3), gap = 48, rw = iw - leftW - gap;
+  const o = Object.assign(stripOpts(slide), { headRule: () => false }), pv = STRIP.padT + STRIP.padB;
+  const ho = { headRule: () => true, headScale: 1, lineGap: o.lineGap, paraGap: .3 }, co = { headRule: () => false, headScale: 1, lineGap: o.lineGap, paraGap: .3 };
+  for (let size = Math.round(46 * (S.stripScale || 1) * (slide.sfs || 1)); size >= 30; size -= 2) {
+    const body = layout(sp.body, size, rw, o), head = layout(sp.head, Math.round(size * 1.2), leftW, ho);
+    const calls = sp.calls.length ? layout(sp.calls, Math.round(size * .85), leftW - 48, co) : [];
+    const bh = blockH(body, o), hh = blockH(head, ho), ch = calls.length ? blockH(calls, co) + 28 : 0, lh = hh + (ch ? 20 + ch : 0);
+    if (Math.max(bh, lh) + pv <= STRIP.maxH) return { pages: [body], o, cardW, split: { head, ho, calls, co, leftW, gap, rw, bh, hh, ch, lh } };
+  }
+  return null;
+}
 function stripPages(slide) {
   if (!slide.paras.length) return { pages: [], o: stripOpts(slide), cardW: Math.round(W * S.stripW) };
   // 先把字條變寬（最寬到畫面的 96%）、再縮字，盡量讓一段內容放在同一條；真的放不下才分成多條
+  const idx = S.slides.indexOf(slide), v = idx >= 0 ? autoVariant(slide, idx) : 'plain';
+  if (v === 'split') { const sp = splitParts(slide.paras), r = sp && stripSplitLayout(slide, sp); if (r) return r; }
   const o = stripOpts(slide), sfs = slide.sfs || 1, pv = STRIP.padT + STRIP.padB;
   const base = Math.round(W * S.stripW), wide = Math.round(W * .96);
   const widths = [base]; for (let k = 1; k <= 3; k++) { const w = Math.round(base + (wide - base) * k / 3); if (w > widths[widths.length - 1]) widths.push(w); }
@@ -372,7 +437,8 @@ function stripCard(T, cw, h, v = 'plain', idx = 0, slide) {
     x.drawImage(bg, sx, sy, sw, h, 0, 0, sw, h); x.restore();
     x.globalAlpha = T.dark ? .55 : .5; x.fillStyle = T.card.fill; x.fillRect(0, 0, cw, h); x.globalAlpha = 1;
   }
-  if (look === 'solid') { x.globalAlpha = .93; x.fillStyle = v === 'spot' ? '#1d1712' : A; x.fillRect(0, 0, cw, h); x.globalAlpha = 1; grain(x, cw, h, .08); }
+  if (look === 'solid' && v === 'spot') { const tmp = mk(W, H); drawSpot(tmp.getContext('2d'), T, idx % 2); const sy = Math.max(0, Math.min(H - h, H * .32 - h / 2)); x.drawImage(tmp, Math.max(0, (W - cw) / 2), sy, Math.min(cw, W), h, 0, 0, Math.min(cw, W), h); }
+  else if (look === 'solid') { x.globalAlpha = .93; x.fillStyle = A; x.fillRect(0, 0, cw, h); x.globalAlpha = 1; grain(x, cw, h, .08); }
   x.restore();
   // 字條的樣式跟著現場版這一頁的版面走：一般卡、左色塊、右緞帶、底線、整條色塊、標題框
   const W8 = 'rgba(255,255,255,.55)';
@@ -391,14 +457,23 @@ function stripCard(T, cw, h, v = 'plain', idx = 0, slide) {
 function drawStrip(cv, slide, page, noText) {
   const idx = Math.max(0, S.slides.indexOf(slide)), v = autoVariant(slide, idx), T0 = curTheme(slide), T = slideTheme(T0, stripLook(v) === 'solid' ? (v === 'spot' ? 'spot' : 'solid') : 'plain'), c = cv.getContext('2d');
   c.clearRect(0, 0, W, H);
-  const { pages, o, cardW } = stripPages(slide);
+  const sp = stripPages(slide), { pages, o, split } = sp; let cardW = sp.cardW;
   if (!pages.length) { drawStrip.geo = { lines: [], x: 0, y: 0, o, w: 0, T }; return 0; }
   page = Math.min(page, pages.length - 1);
-  const lines = pages[page], h = Math.round(blockH(lines, o) + STRIP.padT + STRIP.padB);
+  const lines = pages[page], h = Math.round((split ? Math.max(split.bh, split.lh) : blockH(lines, o)) + STRIP.padT + STRIP.padB);
+  // 字條寬度貼合內容：短的字條就短，不再每條都一樣長
+  if (!split) { const mw = Math.max(...pages.flat().map(l => l.w)); cardW = Math.min(cardW, Math.max(Math.round(W * .34), Math.ceil(mw) + STRIP.padL + STRIP.padR + 8)); }
   const x0 = Math.max(0, Math.min(W - cardW, Math.round((W - cardW) / 2) + S.stripX)), y0 = Math.max(0, H - h - S.stripY);
   const card = stripCard(T0, cardW, h, v, idx, slide);
   c.save(); c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 24; c.shadowOffsetY = 8;
   c.drawImage(card, x0, y0, cardW, h); c.restore();
+  if (split) {
+    const lx = x0 + STRIP.padL, ty = y0 + STRIP.padT, bx = lx + split.leftW + split.gap, extra = [{ lines: split.head, x: lx, y: ty, o: split.ho, w: split.leftW, T }];
+    if (split.ch) { const cy = ty + split.hh + 20; calloutBox(c, T, lx, cy, split.leftW, split.ch); extra.push({ lines: split.calls, x: lx + 36, y: cy + 14, o: split.co, w: split.leftW - 48, T }); }
+    if (!noText) { extra.forEach(e => drawLines(c, e.lines, e.x, e.y, e.o, e.T, 'left', e.w)); drawLines(c, lines, bx, ty, o, T); }
+    drawStrip.geo = { lines, x: bx, y: ty, o, w: split.rw, T, extra };
+    return 1;
+  }
   if (!noText) drawLines(c, lines, x0 + STRIP.padL, y0 + STRIP.padT, o, T);
   drawStrip.geo = { lines, x: x0 + STRIP.padL, y: y0 + STRIP.padT, o, w: cardW - STRIP.padL - STRIP.padR, T };
   return pages.length;
@@ -703,13 +778,13 @@ function renderLocalList() {
 }
 
 // ---------- 記住上次的樣式 ----------
-const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, deckScale: S.deckScale, anchor: S.anchor, stripGap: S.stripGap, stripScale: S.stripScale, shadow: S.shadow, blocks: S.blocks, autoVary: S.autoVary, bgAll: S.bgAll, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
+const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, deckScale: S.deckScale, anchor: S.anchor, stripGap: S.stripGap, stripScale: S.stripScale, shadow: S.shadow, blocks: S.blocks, dashRef: S.dashRef, autoVary: S.autoVary, bgAll: S.bgAll, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
 async function applyStyle(v) {
   if (!v) return;
-  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: !!v.autoExport, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: v.anchor || 'middle', stripGap: v.stripGap || null, stripScale: v.stripScale || 1, shadow: !!v.shadow, blocks: !!v.blocks, autoVary: v.autoVary !== false, bgAll: v.bgAll || null });
+  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: !!v.autoExport, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: v.anchor || 'middle', stripGap: v.stripGap || null, stripScale: v.stripScale || 1, shadow: !!v.shadow, blocks: !!v.blocks, dashRef: v.dashRef !== false, autoVary: v.autoVary !== false, bgAll: v.bgAll || null });
   if (v.fonts) S.fonts = v.fonts;
   for (const f of (v.localFonts || [])) await registerLocal(f.name, f.fam);
-  $('optShadow').checked = !!S.shadow; $('optBlocks').checked = !!S.blocks;
+  $('optShadow').checked = !!S.shadow; $('optDash').checked = S.dashRef !== false; $('optBlocks').checked = !!S.blocks;
   $('stripW').value = Math.round(S.stripW * 100); $('autoExport').checked = S.autoExport;
   buildFontSelects(); buildThemes(); syncOut();
 }
@@ -841,6 +916,7 @@ async function exportEditable() {
       drawStrip(cv, sd, p, true); const sg = drawStrip.geo;
       const ss = pS.addSlide(); ss.addImage({ data: await dataOf(await blobOf(cv, 'image/png')), x: 0, y: 0, w: 13.333, h: 7.5 });
       addTextGroups(ss, sg.lines, sg.y, sg.o, sg.x, sg.w, 'left', sg.T);
+      (sg.extra || []).forEach(e => addTextGroups(ss, e.lines, e.y, e.o, e.x, e.w, 'left', e.T));
     }
   }
   prog('正在打包 pptx…', .95); await sleep(30);
@@ -1046,6 +1122,7 @@ function applyColor(c) {
   $('slBgDim').oninput = () => { const sl = S.slides[S.sel]; if (sl.bg && sl.bg.t === 'img') { sl.bg.dim = $('slBgDim').value / 100; $('slBgDimO').textContent = $('slBgDim').value + '%'; redrawSoon(); } };
   $('optShadow').onchange = () => { S.shadow = $('optShadow').checked; redrawSoon(); };
   $('optBlocks').onchange = () => { S.blocks = $('optBlocks').checked; redrawSoon(); };
+  $('optDash').onchange = () => { S.dashRef = $('optDash').checked; _deck.sig = ''; wcache.clear(); redrawSoon(); buildList(); };
   $('optVary').onchange = () => { S.autoVary = $('optVary').checked; bgCache.clear(); redrawSoon(); buildList(); syncVariantUI(); save(); };
 })();
 

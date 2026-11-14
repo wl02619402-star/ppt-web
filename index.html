@@ -368,6 +368,7 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
           </details>
           <label class="chk"><input type="checkbox" id="optShadow"> 文字加陰影（背景很亂時用，深色字不會加）</label>
           <label class="chk"><input type="checkbox" id="optBlocks"> 標題與經文用色塊區分</label>
+          <label class="chk"><input type="checkbox" id="optDash" checked> 經文出處寫成「—— 約11:25」</label>
         </div>
       </div>
 
@@ -428,8 +429,8 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
 <div id="prog"><div><div id="progT">處理中…</div><i><b id="progB"></b></i></div></div>
 <script src="themes.js?v=20"></script>
 <script src="themes2.js?v=20"></script>
-<script src="themes3.js?v=32"></script>
-<script src="app.js?v=40"></script>
+<script src="themes3.js?v=41"></script>
+<script src="app.js?v=42"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
