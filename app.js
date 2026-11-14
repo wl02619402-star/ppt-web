@@ -45,6 +45,7 @@ const dimOf = () => S.customDim == null ? (S.customMode === 'light' ? .62 : .58)
 function curTheme(slide) {
   if (slide && slide.bg) { const t = slideBgTheme(slide.bg); if (t) return t; }
   if (tplOn()) return tplTheme();
+  if (S._demo && THEMES[S._demo]) return Object.assign({ key: S._demo }, THEMES[S._demo]);   // 首頁範例用
   return BLANK;
   if (S.bgAll) { const t = slideBgTheme(S.bgAll); if (t) return t; }
   if (S.custom) {
@@ -599,7 +600,8 @@ const thumbCv = new Map();
 function renderMain() {
   const sl = S.slides[S.sel]; if (!sl) return;
   const r = drawLive($('cvLive'), sl, S.sel); S.liveGeo = r.geo;
-  $('capLive').textContent = S.view === 'live' && r.shrunk ? '字多，已自動縮小' : '';
+  $('capLive').textContent = '';
+  $('capName').textContent = S.view === 'live' ? '現場版' : '線上版'; $('capTally').className = 'tally ' + (S.view === 'live' ? 'live' : 'rec'); $('capPage').textContent = `第 ${S.sel + 1} 頁／共 ${S.slides.length} 頁`;
   $('lvCap').hidden = !r.capped; $('lvCap').textContent = '這一頁字比較多，已經是放得下的最大字級；字級往大調不會再變大，往小調才有變化。';
   const n = drawStrip($('cvStrip'), sl, S.page);
   $('svCap').hidden = !drawStrip.capped; $('svCap').textContent = '這一頁字比較多，字條已經是放得下的最大字級；可以拉長字條讓字變大。';
@@ -640,8 +642,8 @@ function select(i) {
   const th = document.querySelectorAll('.thumb')[i]; if (th) th.scrollIntoView({ block: 'nearest' });
 }
 const VIEW_HINT = {
-  live: '可以直接拖曳畫面上的文字；圖片也能拖曳移動，拉圖片右下角可以縮放。',
-  strip: '背景是透明的，直播時疊在畫面上。拖曳字條可以移動位置，拖曳字條左右兩端可以調整長度。',
+  live: '拖曳文字可以移動位置',
+  strip: '背景透明，直播時疊在畫面上；拖曳字條移動，拖兩端調長度',
 };
 function setView(v) {
   S.view = v;
@@ -969,7 +971,9 @@ $('btnSample').onclick = () => start(sampleSlides(), '範例');
 async function renderEmptyPreview() {
   try {
     const sl = sampleSlides(), keep = S.slides; S.slides = sl; loadedChars.clear(); await ensureFonts(); S.slides = keep;
+    if (!tplOn()) S._demo = 'torn_kraft'; bgCache.clear(); _scCache.clear();
     drawLive($('sampleLive'), sl[1], 1); drawStrip($('sampleStrip'), sl[1], 0);
+    S._demo = null; bgCache.clear(); _scCache.clear();
   } catch (e) { }
 }
 ['dragover', 'dragenter'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); $('drop').classList.add('over'); }));

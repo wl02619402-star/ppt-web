@@ -217,6 +217,113 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
 #prog i{display:block;height:4px;background:var(--line);margin-top:12px}
 #prog b{display:block;height:100%;width:0;background:var(--accent);transition:width .15s}
 
+
+/* ---------- 設計整理：影音控台的安靜深灰、監看螢幕、訊號燈 ---------- */
+:root{
+  --bg:#111214; --panel:#17181b; --raise:#202125; --raise2:#28292e; --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.12);
+  --ink:#ececee; --ink2:#b8bac0; --muted:#80838c; --accent:#e9a23b; --accent-ink:#1b1206; --rec:#e5484d; --live:#f4ead6;
+  --r-ctl:8px; --r-card:12px; --ease:cubic-bezier(.2,.7,.2,1);
+}
+body{font-size:14px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+header{height:52px;padding:0 20px;gap:8px;background:var(--panel)}
+header h1{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:500;letter-spacing:.02em}
+.mark{position:relative;width:20px;height:16px;display:inline-block}
+.mark i{position:absolute;left:0;right:0;border:1.5px solid var(--ink2);border-radius:2px}
+.mark i:first-child{top:0;height:11px}
+.mark i:last-child{bottom:0;height:3px;border-color:var(--rec);background:var(--rec)}
+#app{height:calc(100vh - 52px)}
+.btn{height:32px;padding:0 14px;border-radius:var(--r-ctl);border-color:var(--line2);transition:background-color .15s var(--ease),border-color .15s var(--ease)}
+.btn:hover{background:var(--raise);border-color:rgba(255,255,255,.18)}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:#141518;font-weight:500}
+.btn.primary:hover{background:#fff;filter:none}
+.btn.big{height:40px;padding:0 18px;font-size:14px}
+.btn.small{height:28px;padding:0 10px;border-radius:var(--r-ctl)}
+.btn:active{transform:scale(.98)}
+.tally{display:inline-block;width:8px;height:8px;border-radius:50%;background:#45474e;margin-right:8px;vertical-align:1px;flex:none}
+.tally.live.on,.view.on .tally.live,.onair .tally.live{background:var(--live)}
+.tally.rec.on,.view.on .tally.rec,.onair .tally.rec{background:var(--rec)}
+/* 版本切換 */
+.views{gap:12px}
+.view{padding:10px;border-radius:var(--r-card);border-color:var(--line);background:var(--panel);transition:border-color .15s var(--ease),background-color .15s var(--ease)}
+.view:hover{border-color:var(--line2)}
+.view.on{border-color:rgba(255,255,255,.22);background:var(--raise)}
+.view .mini{border-radius:4px;overflow:hidden;outline:1px solid var(--line)}
+.view .vt b{display:flex;align-items:center;font-size:14px}
+/* 監看螢幕 */
+.cap{min-height:36px;gap:16px}
+.onair{display:inline-flex;align-items:center;gap:0;font-size:13px;color:var(--ink2);white-space:nowrap}
+.onair b{color:var(--ink);font-weight:500;margin-right:10px}
+#capPage{color:var(--muted);font-variant-numeric:tabular-nums}
+#viewHint{color:var(--muted);font-size:12px;text-align:right}
+.frame{outline:0;border-radius:3px;box-shadow:0 0 0 10px #0b0c0d,0 0 0 11px var(--line2),0 18px 40px rgba(0,0,0,.35)}
+.frame::after{display:none}
+.stage{padding:12px 11px 0}
+.frame.video{background:linear-gradient(45deg,#1d1e22 25%,transparent 25%,transparent 75%,#1d1e22 75%) 0 0/24px 24px,linear-gradient(45deg,#1d1e22 25%,#18191c 25%,#18191c 75%,#1d1e22 75%) 12px 12px/24px 24px}
+.banner{border-color:var(--line2);background:var(--raise);border-radius:var(--r-card);padding:14px 16px}
+.banner b{display:flex;align-items:center}
+.banner b::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:10px}
+.banner span{color:var(--ink2)}
+.banner a,#drop .flow a{color:var(--ink);text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--muted)}
+/* 左側清單 */
+#list{padding:12px 12px 12px 0}
+.thumb{margin:0 0 12px 30px}
+.thumb canvas{border-radius:3px;outline:1px solid var(--line)}
+.thumb:hover canvas{outline-color:var(--line2)}
+.thumb.sel canvas{outline:2px solid var(--accent);outline-offset:2px}
+.thumb .n{left:-26px}
+.thumb.sel .n{color:var(--accent)}
+.thumb .flag{background:var(--raise2);color:var(--ink);border-radius:4px}
+/* 右側 */
+.tabs button{height:44px;font-size:13px;transition:color .15s var(--ease)}
+.tabs button.on{border-bottom-color:var(--accent)}
+.pane{padding:20px}
+.scope{border-radius:var(--r-ctl);border-color:var(--line2);padding:2px;gap:2px;background:var(--bg)}
+.scope button{height:32px;border-radius:6px;transition:background-color .15s var(--ease),color .15s var(--ease)}
+.scope button.on{background:var(--raise2);color:var(--ink)}
+.pill{height:28px;border-radius:6px;border-color:var(--line2)}
+.pill.sel{background:var(--raise2);color:var(--ink);border-color:rgba(255,255,255,.22)}
+.cbtn{height:30px;border-radius:var(--r-ctl);background:var(--raise);border-color:var(--line)}
+.cbtn:hover{border-color:var(--line2)}
+select,input[type=text]{border-radius:var(--r-ctl);height:34px;border-color:var(--line2);background:var(--bg)}
+.ed{border-radius:var(--r-ctl);border-color:var(--line2);padding:12px}
+.ed:focus{border-color:rgba(255,255,255,.28)}
+.subbox{border-radius:var(--r-card);border-color:var(--line)}
+.sec{margin-bottom:28px}
+.sec h3{font-size:13px;font-weight:500;color:var(--ink);margin-bottom:10px}
+.note{color:var(--muted);font-size:12px}
+.hint{line-height:1.6}
+.capnote{color:var(--accent)}
+.tp img,.ph{border-radius:4px}
+.tp.on img{outline:2px solid var(--accent);outline-offset:1px}
+input[type=range]{accent-color:var(--ink)}
+.check input,.chk input{accent-color:var(--ink)}
+.vtag{display:block}
+.vtag span{display:block;margin-top:2px}
+#toast{border-radius:var(--r-ctl);background:var(--ink);color:#141518}
+#prog>div{border-radius:var(--r-card);border-color:var(--line2)}
+#prog i{border-radius:2px;overflow:hidden}
+#prog b{background:var(--ink)}
+/* 首頁 */
+#drop{max-width:1120px;min-height:calc(100vh - 52px - 96px);margin:0 auto;padding:48px 0;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:64px}
+#drop h2{font-size:34px;font-weight:500;line-height:1.25;margin:0 0 16px;letter-spacing:.01em}
+#drop .lead{font-size:15px;color:var(--ink2);margin:0 0 28px;max-width:30em}
+#drop .actions{gap:12px;margin-bottom:12px}
+#drop .drag{margin:0 0 32px}
+#drop .flow{counter-reset:s;border-top:1px solid var(--line);margin:0}
+#drop .flow li{display:grid;grid-template-columns:28px 1fr;grid-auto-rows:min-content;column-gap:10px;row-gap:2px;padding:14px 0;border-top:0;border-bottom:1px solid var(--line);font-size:13px;line-height:1.6}
+#drop .flow li::before{position:static;grid-row:1/3;width:22px;height:22px;border-radius:50%;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--ink2)}
+#drop .flow b{grid-column:2;color:var(--ink);font-weight:500;font-size:14px}
+#drop .flow span{grid-column:2;color:var(--muted)}
+#tplNow{grid-column:2;color:var(--accent)}
+#tplNow:empty{display:none}
+#drop .fine{margin-top:24px}
+.sample{gap:20px;padding:0;outline:0}
+#drop.over .sample .sframe{box-shadow:0 0 0 10px #0b0c0d,0 0 0 12px var(--accent)}
+.sframe{outline:0;border-radius:3px;box-shadow:0 0 0 10px #0b0c0d,0 0 0 11px var(--line2),0 24px 48px rgba(0,0,0,.4);margin:10px}
+.sframe.strip{background:linear-gradient(45deg,#1d1e22 25%,transparent 25%,transparent 75%,#1d1e22 75%) 0 0/24px 24px,linear-gradient(45deg,#1d1e22 25%,#18191c 25%,#18191c 75%,#1d1e22 75%) 12px 12px/24px 24px}
+.sframe .tag{display:flex;align-items:center;left:12px;top:12px;font-size:12px;line-height:24px;padding:0 10px;background:rgba(10,10,12,.78);border-radius:6px;color:var(--ink)}
+@media (max-width:1100px){#drop{grid-template-columns:1fr;gap:32px;padding:24px 16px;min-height:0}#drop h2{font-size:26px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 @media (max-width:1100px){
   #app{grid-template-columns:1fr;height:auto}
@@ -230,7 +337,7 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
 </head>
 <body class="empty">
 <header>
-  <h1>簡報美編工坊</h1>
+  <h1><span class="mark" aria-hidden="true"><i></i><i></i></span>簡報美編工坊</h1>
   <span class="sp"></span>
   <button class="btn" id="btnOpen">上傳文字檔</button>
   <div class="expwrap">
@@ -249,41 +356,44 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
   <main id="main">
     <div id="drop">
       <div class="intro">
-        <h2>把講道文字檔，排成現場版和線上版</h2>
+        <h2>把講道文字檔排成投影片</h2>
+        <p class="lead">上傳只有文字的 pptx，網站會排好現場版 16:9 和線上字條，匯出就能放進 ProPresenter</p>
+        <div class="row actions">
+          <button class="btn primary big" id="btnPick">上傳文字檔</button>
+          <button class="btn big" id="btnSample">用範例試試</button>
+        </div>
         <ol class="flow">
-          <li><b>上傳講道文字檔</b>（只有文字的 pptx）
-            <div class="row" style="margin-top:8px"><button class="btn primary" id="btnPick">上傳文字檔</button><button class="btn" id="btnSample">用範例試試</button></div></li>
-          <li><b>選模板</b>：上傳後在下一個畫面選。可以到 <a href="https://slidesgo.com/" target="_blank" rel="noopener">Slidesgo</a> 下載喜歡的模板（PowerPoint 格式）。<span id="tplNow"></span>
-            <button class="btn" id="btnPickTpl" hidden>上傳模板</button></li>
-          <li><b>檢查一下，匯出</b>：按右上角「匯出 pptx」，會下載現場版、線上版兩個檔案，放進 ProPresenter。</li>
+          <li><b>上傳文字檔</b><span>只有文字的 pptx 就可以</span></li>
+          <li><b>選模板</b><span>到 <a href="https://slidesgo.com/" target="_blank" rel="noopener">Slidesgo</a> 下載 PowerPoint 格式的模板，進去後上傳</span><span id="tplNow"></span><button class="btn" id="btnPickTpl" hidden>上傳模板</button></li>
+          <li><b>匯出</b><span>按右上角「匯出 pptx」，下載現場版、線上版兩個檔案</span></li>
         </ol>
-        <p class="drag">也可以直接把 .pptx 拖進這個頁面</p>
+        <p class="drag">也可以把 .pptx 直接拖進這個視窗</p>
         <label class="check legacy"><input type="checkbox" id="autoExport"> 上傳後直接匯出給 ProPresenter</label>
         <div class="styleNote" id="styleNote" hidden><span id="styleNoteT"></span> <button class="link" id="styleClear">清除</button></div>
         <p class="fine">檔案只在你的瀏覽器裡處理，不會傳到任何地方</p>
       </div>
       <div class="sample" aria-hidden="true">
-        <div class="sframe live"><canvas id="sampleLive" width="1920" height="1080"></canvas><span class="tag">現場版</span></div>
-        <div class="sframe strip"><canvas id="sampleStrip" width="1920" height="1080"></canvas><span class="tag">線上版</span></div>
+        <div class="sframe live"><canvas id="sampleLive" width="1920" height="1080"></canvas><span class="tag"><i class="tally live on"></i>現場版</span></div>
+        <div class="sframe strip"><canvas id="sampleStrip" width="1920" height="1080"></canvas><span class="tag"><i class="tally rec on"></i>線上版</span></div>
       </div>
     </div>
     <div id="editor" hidden>
       <div class="banner" id="tplBanner" hidden>
-        <div><b>下一步：選一個模板</b><span>目前是白底。到 <a href="https://slidesgo.com/" target="_blank" rel="noopener">Slidesgo</a> 下載喜歡的模板（選 PowerPoint 格式），再上傳到這裡，每一頁就會套上模板。</span></div>
+        <div><b>下一步：選一個模板</b><span>目前是白底。到 <a href="https://slidesgo.com/" target="_blank" rel="noopener">Slidesgo</a> 下載 PowerPoint 格式的模板，上傳後每一頁都會套上</span></div>
         <button class="btn primary" id="btnBannerTpl">上傳模板</button>
       </div>
       <div class="views" role="tablist" aria-label="要看哪一種版本">
         <button class="view on" data-v="live" role="tab">
           <span class="mini"><canvas id="miniLive" width="320" height="180"></canvas></span>
-          <span class="vt"><b>現場版</b><span>投在教會大螢幕，整頁畫面</span></span>
+          <span class="vt"><b><i class="tally live"></i>現場版</b><span>投在大螢幕的整頁畫面</span></span>
         </button>
         <button class="view" data-v="strip" role="tab">
           <span class="mini chk"><canvas id="miniStrip" width="320" height="180"></canvas></span>
-          <span class="vt"><b>線上版</b><span>直播疊在影像上，只有一條字幕</span></span>
+          <span class="vt"><b><i class="tally rec"></i>線上版</b><span>疊在直播畫面上的字條</span></span>
         </button>
       </div>
       <div class="stage">
-        <div class="cap"><span id="viewHint"></span><span id="capLive"></span><div class="pages" id="pages"></div></div>
+        <div class="cap"><span class="onair"><i class="tally" id="capTally"></i><b id="capName">現場版</b><span id="capPage"></span></span><span id="viewHint"></span><span id="capLive"></span><div class="pages" id="pages"></div></div>
         <div class="frame" id="frameLive"><canvas id="cvLive" width="1920" height="1080"></canvas></div>
         <div class="frame video" id="frameStrip" hidden><canvas id="cvStrip" width="1920" height="1080"></canvas></div>
       </div>
@@ -480,7 +590,7 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=60"></script>
+<script src="app.js?v=63"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
