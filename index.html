@@ -27,6 +27,14 @@ button{cursor:pointer}
 header{height:48px;display:flex;align-items:center;gap:8px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line)}
 header h1{font-size:14px;font-weight:600;margin:0 24px 0 0;white-space:nowrap}
 header .sp{flex:1}
+body.empty #list,body.empty #side,body.empty .expwrap,body.empty #btnOpen{display:none}
+body.empty #app{grid-template-columns:1fr}
+.expwrap{position:relative}
+.menu{position:absolute;right:0;top:calc(100% + 6px);z-index:30;width:300px;background:var(--panel);border:1px solid var(--line2);border-radius:6px;padding:4px;box-shadow:0 12px 32px rgba(0,0,0,.45)}
+.menu button{display:block;width:100%;text-align:left;border:0;background:none;color:var(--ink);padding:10px 12px;border-radius:4px;cursor:pointer}
+.menu button:hover,.menu button:focus-visible{background:var(--raise);outline:none}
+.menu b{display:block;font-weight:500;font-size:14px}
+.menu span{display:block;font-size:12px;color:var(--muted);margin-top:2px}
 header select{width:auto;height:32px;font-size:13px}
 .btn{height:32px;padding:0 12px;border:1px solid var(--line2);background:transparent;border-radius:4px;font-weight:500;font-size:13px;white-space:nowrap}
 .btn:hover{background:var(--raise)}
@@ -95,7 +103,8 @@ details.more summary:hover{color:var(--ink)}
 
 /* 空狀態 */
 #drop{max-width:1040px;margin:48px auto 0;display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:48px;align-items:center}
-#drop h2{font-size:28px;line-height:1.3;margin:0 0 16px;font-weight:600}
+#drop h2{font-size:28px;line-height:1.3;margin:0 0 16px;font-weight:600;text-wrap:balance}
+#drop .lead{margin:0 0 24px;color:var(--ink2);line-height:1.7}
 #drop ol{margin:0 0 24px;padding:0;list-style:none;counter-reset:s}
 #drop li{counter-increment:s;display:flex;gap:12px;padding:12px 0;border-top:1px solid var(--line);color:var(--ink2)}
 #drop li::before{content:counter(s);flex:none;width:20px;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -164,6 +173,8 @@ input[type=range]{width:100%;accent-color:var(--ink2);margin:0}
 .ed span[data-c]{font-weight:700}
 .ed div{min-height:1.65em}
 .subbox{margin-top:12px;padding:12px;border:1px solid var(--line2);border-radius:4px}
+.vtag{font-size:13px;font-weight:500;margin-bottom:12px}
+.vtag span{color:var(--muted);font-weight:400;font-size:12px}
 .chk{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13px}
 .sw{width:28px;height:28px;border-radius:4px;border:1px solid var(--line2);padding:0}
 .sw.sel{outline:2px solid var(--accent);outline-offset:1px}
@@ -188,14 +199,19 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
 }
 </style>
 </head>
-<body>
+<body class="empty">
 <header>
   <h1>簡報美編工坊</h1>
   <span class="sp"></span>
   <button class="btn" id="btnOpen">上傳文字檔</button>
-  <button class="btn" id="btnZip" disabled title="把每一頁存成圖片，另外也附兩個 pptx">另存圖片（zip）</button>
-  <select id="exportFmt" title="匯出格式" aria-label="匯出格式"><option value="image">圖片版（版面最準）</option><option value="text">可編輯文字版</option><option value="both">兩種都匯出</option></select>
-  <button class="btn primary" id="btnExport" disabled>匯出給 ProPresenter</button>
+  <div class="expwrap">
+    <button class="btn primary" id="btnExport" aria-haspopup="menu" aria-expanded="false">匯出 <span aria-hidden="true">▾</span></button>
+    <div class="menu" id="expMenu" role="menu" hidden>
+      <button role="menuitem" data-f="image"><b>給 ProPresenter</b><span>現場版、線上版各一個 pptx，畫面跟預覽一樣</span></button>
+      <button role="menuitem" data-f="text"><b>可以改字的 pptx</b><span>之後還能在 PowerPoint 或 Keynote 裡改字，要裝同樣的字型</span></button>
+      <button role="menuitem" data-f="zip"><b>每一頁的圖片</b><span>打包成一個 zip 檔</span></button>
+    </div>
+  </div>
   <input type="file" id="file" accept=".pptx" hidden>
 </header>
 
@@ -204,18 +220,14 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
   <main id="main">
     <div id="drop">
       <div class="intro">
-        <h2>空白文字檔進去，現場版和長條版出來</h2>
-        <ol>
-          <li>上傳只有文字的 pptx</li>
-          <li>自動套用你上次選的背景、字型和位置，第一次才需要挑</li>
-          <li>檢查一下，按「匯出給 ProPresenter」，或勾選直接匯出</li>
-        </ol>
+        <h2>把講道的文字檔，排成現場版和線上版</h2>
+        <p class="lead">上傳只有文字的 pptx，背景、字型、版面會自動排好，也會沿用你上次的選擇。看過沒問題，就能匯出給 ProPresenter。</p>
         <div class="row actions">
           <button class="btn primary" id="btnPick">選擇檔案</button>
           <button class="btn" id="btnSample">用範例試試</button>
         </div>
         <p class="drag">也可以直接把 .pptx 拖進這個頁面</p>
-        <label class="check"><input type="checkbox" id="autoExport"> 上傳後直接匯出，不用再按任何按鈕</label>
+        <label class="check"><input type="checkbox" id="autoExport"> 上傳後直接匯出給 ProPresenter</label>
         <div class="styleNote" id="styleNote" hidden><span id="styleNoteT"></span> <button class="link" id="styleClear">清除</button></div>
         <p class="fine">檔案只在你的瀏覽器裡處理，不會傳到任何地方</p>
       </div>
@@ -249,7 +261,7 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
         <button class="on" data-pane="pText" role="tab">文字</button>
         <button data-pane="pBg" role="tab">背景</button>
         <button data-pane="pLook" role="tab">字型</button>
-        <button data-pane="pPos" role="tab">位置</button>
+        <button data-pane="pPos" role="tab">大小位置</button>
       </div>
 
       <div class="pane" id="pText">
@@ -262,7 +274,7 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
             <label class="cbtn" title="自己挑顏色"><input type="color" id="pickColor" value="#D9822B">自選</label>
           </div>
           <div id="ed" class="ed" contenteditable="true" spellcheck="false"></div>
-          <div class="hint">選取文字，再點上面的顏色就能改色。按 Enter 是新的一段，Shift+Enter 是同一段裡換行。第一段比較短時會當標題。按 Esc 離開文字框後，可以用上下鍵切換頁面。</div>
+          <div class="hint">選取文字再點顏色就能改色。Enter 開新段落，Shift+Enter 在同一段裡換行。</div>
         </div>
         <div class="sec">
           <h3>頁面</h3>
@@ -357,42 +369,23 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
           <label class="chk"><input type="checkbox" id="optShadow"> 文字加陰影（背景很亂時用，深色字不會加）</label>
           <label class="chk"><input type="checkbox" id="optBlocks"> 標題與經文用色塊區分</label>
         </div>
-        <div class="sec">
-          <h3>行距</h3>
-          <div class="scope" id="lgScope">
-            <button class="on" data-s="all">整份簡報</button>
-            <button data-s="slide" id="lgScopeSlide">只有這一頁</button>
-          </div>
-          <div class="hint" id="lgNote" style="margin:8px 0 0"></div>
-          <label class="slider">行距<input type="range" id="lineGap" min="0.8" max="1.5" step="0.05" value="1.1"><output id="lineGapO"></output></label>
-          <div class="hint">對應 PowerPoint 的「多行」倍數，規範建議 1.1 到 1.3。</div>
-          <div class="row" style="margin-top:8px"><button class="btn small" id="lineGapReset">還原預設</button></div>
-        </div>
       </div>
 
       <div class="pane" id="pPos" hidden>
+        <div class="scope" id="layScope">
+          <button class="on" data-s="all">整份簡報</button>
+          <button data-s="slide" id="layScopeSlide">只有這一頁</button>
+        </div>
+        <div class="hint" id="layNote" style="margin:8px 0 16px"></div>
         <div id="posLive">
-          <div class="note"><b>現場版</b>：調整文字在整頁畫面上的位置與大小</div>
+          <div class="vtag">正在調整：現場版<span>（線上版請點上方「線上版」）</span></div>
           <div class="sec">
-            <h3>全部頁面</h3>
-            <label class="slider">字級<input type="range" id="deckScale" min="70" max="140" step="5"><output id="deckScaleO"></output></label>
-            <div class="row" id="anchorRow">
-              <span class="hint" style="margin:0 4px 0 0">垂直位置</span>
-              <button class="pill" data-an="middle">置中</button>
-              <button class="pill" data-an="top">靠上</button>
-            </div>
-            <div class="hint">字級預設已讓整份簡報大小一致，只有很長的頁面會自動縮小</div>
+            <label class="slider">字級<input type="range" id="lvSize" min="60" max="140" step="5"><output id="lvSizeO"></output></label>
+            <label class="slider">行距<input type="range" id="lvGap" min="0.8" max="1.5" step="0.05"><output id="lvGapO"></output></label>
+            <div class="hint">行距對應 PowerPoint 的「多行」倍數，教會規範建議 1.1 到 1.3</div>
           </div>
           <div class="sec">
-            <h3>這一頁的字級</h3>
-            <label class="slider">大小<input type="range" id="fs" min="60" max="130" step="5"><output id="fsO"></output></label>
-          </div>
-          <div class="sec">
-            <h3>文字位置</h3>
-            <div class="row" id="lvScope" style="margin-bottom:6px">
-              <button class="pill" data-s="all">全部頁面一起改</button>
-              <button class="pill" data-s="slide">只改這一頁</button>
-            </div>
+            <h3>位置</h3>
             <label class="slider">左右<input type="range" id="lvX" min="-900" max="900" step="4"><output id="lvXO"></output></label>
             <label class="slider">上下<input type="range" id="lvY" min="-600" max="600" step="4"><output id="lvYO"></output></label>
             <label class="slider">寬度<input type="range" id="lvW" min="700" max="1800" step="10"><output id="lvWO"></output></label>
@@ -402,24 +395,29 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
               <button class="pill" data-a="center">置中</button>
               <button class="pill" data-a="right">靠右</button>
             </div>
-            <div class="hint">也可以直接在預覽上按住拖曳</div>
-            <div class="row" style="margin-top:8px"><button class="btn small" id="lvReset">還原位置</button></div>
+            <div class="row" id="anchorRow" style="margin:8px 0 0">
+              <span class="hint" style="margin:0 4px 0 0">垂直</span>
+              <button class="pill" data-an="middle">置中</button>
+              <button class="pill" data-an="top">靠上</button>
+            </div>
+            <div class="hint">也可以直接在畫面上按住文字拖曳</div>
           </div>
+          <button class="btn small" id="lvReset">還原</button>
         </div>
         <div id="posStrip" hidden>
-          <div class="note"><b>線上版</b>：調整那一條字幕的位置與大小，所有頁面都一樣。</div>
+          <div class="vtag">正在調整：線上版<span>（現場版請點上方「現場版」）</span></div>
           <div class="sec">
-            <h3>這一頁的字級</h3>
-            <label class="slider">大小<input type="range" id="sfs" min="60" max="130" step="5"><output id="sfsO"></output></label>
+            <label class="slider">字級<input type="range" id="svSize" min="60" max="140" step="5"><output id="svSizeO"></output></label>
+            <label class="slider">行距<input type="range" id="svGap" min="0.8" max="1.5" step="0.05"><output id="svGapO"></output></label>
           </div>
           <div class="sec">
-            <h3>字幕條位置</h3>
+            <h3>字幕條位置<span class="hint" style="margin-left:8px">每一頁共用</span></h3>
             <label class="slider">左右<input type="range" id="stripX" min="-700" max="700" step="4"><output id="stripXO"></output></label>
             <label class="slider">離底邊<input type="range" id="stripY" min="0" max="700" step="4"><output id="stripYO"></output></label>
             <label class="slider">寬度<input type="range" id="stripW" min="50" max="96" step="1"><output id="stripWO"></output></label>
-            <div class="hint">也可以直接在預覽上按住字幕條拖曳</div>
-            <div class="row" style="margin-top:8px"><button class="btn small" id="stripReset">還原位置</button></div>
+            <div class="hint">也可以直接在畫面上按住字幕條拖曳</div>
           </div>
+          <button class="btn small" id="stripReset">還原</button>
         </div>
       </div>
     </div>
@@ -431,7 +429,7 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
 <script src="themes.js?v=20"></script>
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=32"></script>
-<script src="app.js?v=37"></script>
+<script src="app.js?v=40"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));

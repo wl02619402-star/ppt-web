@@ -3,7 +3,7 @@
 const S = {
   slides: [], sel: 0, page: 0, themeKey: 'torn_kraft', stripW: 0.81, stripY: 64, stripX: 0, view: 'live', autoExport: false, exportFmt: 'image', deckScale: 1, anchor: 'middle',
   custom: null, customMode: 'dark', customDim: null, fileName: '簡報',
-  fonts: { head: 'theme', body: 'theme', scr: 'same' }, shadow: false, blocks: false, autoVary: true, bgAll: null, bgScope: 'all', localFonts: [], lineGap: null, lgScope: 'all', live: {}, liveScope: 'all',
+  fonts: { head: 'theme', body: 'theme', scr: 'same' }, shadow: false, blocks: false, autoVary: true, bgAll: null, bgScope: 'all', localFonts: [], lineGap: null, stripGap: null, stripScale: 1, layScope: 'all', live: {}, liveScope: 'all',
 };
 const $ = id => document.getElementById(id);
 const measureCtx = mk(10, 10).getContext('2d');
@@ -319,8 +319,9 @@ function drawLive(cv, slide, idx, noText) {
 
 // ---------- 長條版 ----------
 const STRIP = { padL: 100, padR: 140, padT: 46, padB: 46, maxH: 340 };
+const sgapOf = slide => (slide && slide.slg) || S.stripGap || 0.96 * LN;
 function stripOpts(slide) {
-  return { headRule: (pi, ps) => pi === 0 && ps.length > 1, headScale: 1.2, lineGap: Math.max(1.2, gapOf(slide) - .2), paraGap: .3 };
+  return { headRule: (pi, ps) => pi === 0 && ps.length > 1, headScale: 1.2, lineGap: sgapOf(slide), paraGap: .3 };
 }
 function stripPages(slide) {
   if (!slide.paras.length) return { pages: [], o: stripOpts(slide), cardW: Math.round(W * S.stripW) };
@@ -330,7 +331,7 @@ function stripPages(slide) {
   const widths = [base]; for (let k = 1; k <= 3; k++) { const w = Math.round(base + (wide - base) * k / 3); if (w > widths[widths.length - 1]) widths.push(w); }
   const attempt = (cardW, minSize) => {
     const tw_ = cardW - STRIP.padL - STRIP.padR;
-    for (let size = Math.round(46 * sfs); size >= minSize; size -= 2) {
+    for (let size = Math.round(46 * (S.stripScale || 1) * sfs); size >= minSize; size -= 2) {
       const lines = layout(slide.paras, size, tw_, o);
       if (blockH(lines, o) + pv <= STRIP.maxH) return { pages: [lines], o, cardW };
     }
@@ -514,7 +515,7 @@ function renderThumb(i) {
   const full = mk(W, H); drawLive(full, S.slides[i], i);
   const c = cv.getContext('2d'); c.drawImage(full, 0, 0, cv.width, cv.height);
   const badge = cv.parentElement.querySelector('.badge'); const n = stripPages(S.slides[i]).pages.length;
-  badge.textContent = `長條×${n}`; badge.hidden = n < 2;
+  badge.textContent = `線上 ${n} 條`; badge.hidden = n < 2;
   const fl = cv.parentElement.querySelector('.flag'); if (fl) fl.hidden = !S.slides[i].bg;
 }
 function buildList() {
@@ -531,13 +532,12 @@ function select(i) {
   document.querySelectorAll('.thumb').forEach((d, k) => d.classList.toggle('sel', k === i));
   const sl = S.slides[i];
   edRender();
-  $('fs').value = Math.round((sl.fs || 1) * 100); $('sfs').value = Math.round((sl.sfs || 1) * 100);
   syncOut(); renderMain(); syncSlideBgUI();
   const th = document.querySelectorAll('.thumb')[i]; if (th) th.scrollIntoView({ block: 'nearest' });
 }
 const VIEW_HINT = {
-  live: '現場版：投在教會大螢幕的整頁畫面。可以在畫面上拖曳文字。',
-  strip: '線上版：直播時疊在影像上，背景透明，只有一條字幕。可以在畫面上拖曳字幕條。',
+  live: '可以直接拖曳畫面上的文字。',
+  strip: '背景是透明的，直播時疊在畫面上。可以直接拖曳字幕條。',
 };
 function setView(v) {
   S.view = v;
@@ -546,24 +546,47 @@ function setView(v) {
   $('posLive').hidden = v !== 'live'; $('posStrip').hidden = v !== 'strip';
   $('viewHint').textContent = VIEW_HINT[v]; renderMain();
 }
+// ---------- 大小位置：同一個「整份／這一頁」開關，現場版、線上版各自一組 ----------
+const pct = v => Math.round(v * 100) + '%', mul = g => (g / LN).toFixed(2);
 function syncLiveUI() {
-  $('deckScale').value = Math.round(S.deckScale * 100); $('deckScaleO').textContent = Math.round(S.deckScale * 100) + '%';
+  const sl = S.slides[S.sel], one = S.layScope === 'slide' && !!sl;
+  document.querySelectorAll('#layScope button').forEach(b => b.classList.toggle('on', b.dataset.s === S.layScope));
+  $('layScopeSlide').textContent = sl ? `只有這一頁（第 ${S.sel + 1} 頁）` : '只有這一頁';
+  const own = sl && ((sl.fs && sl.fs !== 1) || sl.lg || (sl.sfs && sl.sfs !== 1) || sl.slg || (sl.lv && Object.keys(sl.lv).length));
+  $('layNote').textContent = one ? `下面的調整只會改第 ${S.sel + 1} 頁。` : '下面的調整會套用到每一頁' + (own ? '；這一頁有自己的設定，不會被蓋掉。' : '。');
+  // 現場版
+  const ls = one ? (sl.fs || 1) : S.deckScale, lg = one ? gapOf(sl) : (S.lineGap || 1.1 * LN);
+  $('lvSize').value = Math.round(ls * 100); $('lvSizeO').textContent = pct(ls);
+  $('lvGap').value = mul(lg); $('lvGapO').textContent = mul(lg);
   document.querySelectorAll('#anchorRow .pill').forEach(b => b.classList.toggle('sel', b.dataset.an === S.anchor));
-  const sl = S.slides[S.sel]; if (!sl) return;
+  $('anchorRow').hidden = one;
+  // 線上版
+  const ss = one ? (sl.sfs || 1) : (S.stripScale || 1), sg = one ? sgapOf(sl) : (S.stripGap || 0.96 * LN);
+  $('svSize').value = Math.round(ss * 100); $('svSizeO').textContent = pct(ss);
+  $('svGap').value = mul(sg); $('svGapO').textContent = mul(sg);
+  $('lvReset').textContent = one ? `第 ${S.sel + 1} 頁還原成跟整份一樣` : '還原整份的預設';
+  $('stripReset').textContent = one ? `第 ${S.sel + 1} 頁還原成跟整份一樣` : '還原整份的預設';
+  if (!sl) return;
   const vv = autoVariant(sl, S.sel), L = liveCfg(sl, vv === 'title', vv);
   $('lvX').value = L.dx; $('lvXO').textContent = L.dx; $('lvY').value = L.dy; $('lvYO').textContent = L.dy; $('lvW').value = L.w; $('lvWO').textContent = L.w;
   const al = L.align || sl._autoAlign || 'left'; document.querySelectorAll('#lvAlign .pill').forEach(b => b.classList.toggle('sel', b.dataset.a === al));
-  document.querySelectorAll('#lvScope .pill').forEach(b => b.classList.toggle('sel', b.dataset.s === S.liveScope));
 }
 function editLive(key, val) {
-  if (S.liveScope === 'slide') { const sl = S.slides[S.sel]; sl.lv = sl.lv || {}; sl.lv[key] = val; }
-  else { S.live[key] = val; S.slides.forEach(s => { if (s.lv) delete s.lv[key]; }); }
+  if (S.layScope === 'slide') { const sl = S.slides[S.sel]; sl.lv = sl.lv || {}; sl.lv[key] = val; }
+  else S.live[key] = val;
   syncLiveUI(); redrawSoon();
+}
+function setLay(kind, v) {
+  const sl = S.slides[S.sel], one = S.layScope === 'slide' && sl;
+  if (kind === 'lvSize') one ? (sl.fs = v) : (S.deckScale = v);
+  if (kind === 'lvGap') one ? (sl.lg = v) : (S.lineGap = v);
+  if (kind === 'svSize') one ? (sl.sfs = v) : (S.stripScale = v);
+  if (kind === 'svGap') one ? (sl.slg = v) : (S.stripGap = v);
+  _deck.sig = ''; S.page = 0; syncLiveUI(); redrawSoon();
 }
 function syncOut() {
   syncLiveUI();
-  $('fsO').textContent = $('fs').value + '%'; $('sfsO').textContent = $('sfs').value + '%';
-  syncGapUI(); $('stripXO').textContent = S.stripX; $('stripX').value = S.stripX; $('stripY').value = S.stripY; $('stripYO').textContent = S.stripY; $('stripWO').textContent = Math.round(S.stripW * 100) + '%';
+  $('stripXO').textContent = S.stripX; $('stripX').value = S.stripX; $('stripY').value = S.stripY; $('stripYO').textContent = S.stripY; $('stripWO').textContent = Math.round(S.stripW * 100) + '%';
 }
 const HUE = {
   paper: 'warm', dusk: 'cool', morning: 'warm', olive: 'green', minimal: 'neutral', burgundy: 'warm', sage: 'green', terracotta: 'warm',
@@ -680,14 +703,14 @@ function renderLocalList() {
 }
 
 // ---------- 記住上次的樣式 ----------
-const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, deckScale: S.deckScale, anchor: S.anchor, shadow: S.shadow, blocks: S.blocks, autoVary: S.autoVary, bgAll: S.bgAll, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
+const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, deckScale: S.deckScale, anchor: S.anchor, stripGap: S.stripGap, stripScale: S.stripScale, shadow: S.shadow, blocks: S.blocks, autoVary: S.autoVary, bgAll: S.bgAll, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
 async function applyStyle(v) {
   if (!v) return;
-  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: !!v.autoExport, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: v.anchor || 'middle', shadow: !!v.shadow, blocks: !!v.blocks, autoVary: v.autoVary !== false, bgAll: v.bgAll || null });
+  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: !!v.autoExport, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: v.anchor || 'middle', stripGap: v.stripGap || null, stripScale: v.stripScale || 1, shadow: !!v.shadow, blocks: !!v.blocks, autoVary: v.autoVary !== false, bgAll: v.bgAll || null });
   if (v.fonts) S.fonts = v.fonts;
   for (const f of (v.localFonts || [])) await registerLocal(f.name, f.fam);
   $('optShadow').checked = !!S.shadow; $('optBlocks').checked = !!S.blocks;
-  $('stripW').value = Math.round(S.stripW * 100); $('autoExport').checked = S.autoExport; $('exportFmt').value = S.exportFmt; $('deckScale').value = Math.round(S.deckScale * 100);
+  $('stripW').value = Math.round(S.stripW * 100); $('autoExport').checked = S.autoExport;
   buildFontSelects(); buildThemes(); syncOut();
 }
 function showStyleNote(has) {
@@ -713,7 +736,7 @@ function redrawSoon() { clearTimeout(redrawT); redrawT = setTimeout(renderMain, 
 // ---------- 載入 ----------
 async function start(slides, name, live) {
   S.slides = slides; S.live = live || {}; S.sel = 0; S.page = 0; S.fileName = name.replace(/\.pptx$/i, '');
-  $('drop').hidden = true; $('editor').hidden = false; $('viewHint').textContent = VIEW_HINT[S.view]; $('sideEmpty').hidden = true; $('sideBody').hidden = false; $('btnExport').disabled = false; $('btnZip').disabled = false;
+  $('drop').hidden = true; $('editor').hidden = false; $('viewHint').textContent = VIEW_HINT[S.view]; $('sideEmpty').hidden = true; $('sideBody').hidden = false; document.body.classList.remove('empty');
   await Promise.all(slides.flatMap(x => [].concat(x.bg && x.bg.t === 'img' ? [x.bg.src] : [], (x.pics || []).map(p => p.src))).map(loadBgImg));
   await ensureFonts(); bgCache.clear(); buildCats(); buildThemes(); buildList(); select(0); save();
 }
@@ -745,27 +768,27 @@ async function exportAll(mode = 'zip') {
     prog(`正在輸出第 ${i + 1} / ${total} 頁…`, done / total); await sleep(0);
     drawLive(cv, S.slides[i], i);
     const jb = await blobOf(cv, 'image/jpeg', .93), name = String(i + 1).padStart(3, '0');
-    if (wantZip) zip.file(`現場圖片/現場_${name}.jpg`, jb);
+    if (wantZip) zip.file(`現場版圖片/現場版_${name}.jpg`, jb);
     pL.addSlide().addImage({ data: await dataOf(jb), x: 0, y: 0, w: 13.333, h: 7.5 });
     const n = stripPages(S.slides[i]).pages.length;
     for (let p = 0; p < n; p++) {
       drawStrip(cv, S.slides[i], p);
       const pb = await blobOf(cv, 'image/png');
-      if (wantZip) zip.file(`長條圖片/長條_${name}${n > 1 ? '_' + 'abcdefgh'[p] : ''}.png`, pb);
+      if (wantZip) zip.file(`線上版圖片/線上版_${name}${n > 1 ? '_' + 'abcdefgh'[p] : ''}.png`, pb);
       pS.addSlide().addImage({ data: await dataOf(pb), x: 0, y: 0, w: 13.333, h: 7.5 });
     }
     done++;
   }
   prog('正在打包 pptx…', .95); await sleep(30);
-  const liveName = `${S.fileName}_現場版_給ProPresenter.pptx`, stripName = `${S.fileName}_線上長條版_給ProPresenter.pptx`;
+  const liveName = `${S.fileName}_現場版_給ProPresenter.pptx`, stripName = `${S.fileName}_線上版_給ProPresenter.pptx`;
   const liveBlob = await pL.write({ outputType: 'blob' }), stripBlob = await pS.write({ outputType: 'blob' });
   if (!wantZip) {
     $('prog').style.display = 'none'; download(liveBlob, liveName); await sleep(500); download(stripBlob, stripName);
-    toast('完成！已下載兩個 pptx（現場版、線上長條版）'); return [liveBlob, stripBlob];
+    toast('已下載兩個 pptx：現場版、線上版'); return [liveBlob, stripBlob];
   }
   zip.file(liveName, liveBlob); zip.file(stripName, stripBlob);
   const out = await zip.generateAsync({ type: 'blob' });
-  $('prog').style.display = 'none'; download(out, `${S.fileName}_輸出.zip`); toast('完成！已下載 zip');
+  $('prog').style.display = 'none'; download(out, `${S.fileName}_輸出.zip`); toast('已下載 zip');
   return out;
 }
 
@@ -822,8 +845,8 @@ async function exportEditable() {
   }
   prog('正在打包 pptx…', .95); await sleep(30);
   const a = await pL.write({ outputType: 'blob' }), b = await pS.write({ outputType: 'blob' });
-  $('prog').style.display = 'none'; download(a, `${S.fileName}_現場版_可編輯.pptx`); await sleep(500); download(b, `${S.fileName}_線上長條版_可編輯.pptx`);
-  toast('完成！已下載兩個可編輯文字的 pptx'); return [a, b];
+  $('prog').style.display = 'none'; download(a, `${S.fileName}_現場版_可編輯.pptx`); await sleep(500); download(b, `${S.fileName}_線上版_可編輯.pptx`);
+  toast('已下載兩個可以改字的 pptx'); return [a, b];
 }
 async function exportByFormat() {
   const f = S.exportFmt;
@@ -937,35 +960,23 @@ $('btnDel').onclick = () => {
   if (S.slides.length < 2) { toast('至少要留一頁'); return; }
   S.slides.splice(S.sel, 1); buildList(); select(Math.min(S.sel, S.slides.length - 1)); save();
 };
-$('fs').oninput = () => { S.slides[S.sel].fs = $('fs').value / 100; syncOut(); redrawSoon(); };
-$('sfs').oninput = () => { S.slides[S.sel].sfs = $('sfs').value / 100; syncOut(); redrawSoon(); };
-// 行距：可以改整份，也可以只改這一頁
-function syncGapUI() {
-  const sl = S.slides[S.sel], one = S.lgScope === 'slide', g = one && sl ? gapOf(sl) : (S.lineGap || 1.1 * LN);
-  $('lineGap').value = (g / LN).toFixed(2); $('lineGapO').textContent = (g / LN).toFixed(2);
-  document.querySelectorAll('#lgScope button').forEach(b => b.classList.toggle('on', b.dataset.s === S.lgScope));
-  $('lgScopeSlide').textContent = sl ? `只有這一頁（第 ${S.sel + 1} 頁）` : '只有這一頁';
-  const own = sl && sl.lg;
-  $('lgNote').textContent = one ? (own ? '這一頁用自己的行距，其他頁不受影響。' : '這一頁目前跟整份一樣；拉動滑桿就只改這一頁。') : '改這裡，所有頁面一起變（自己設過行距的頁面除外）。';
-  $('lineGapReset').textContent = one ? '這一頁改回跟整份一樣' : '還原預設';
-  $('lineGapReset').disabled = one && !own;
-}
-$('lineGap').oninput = () => {
-  const v = +$('lineGap').value * LN, sl = S.slides[S.sel];
-  if (S.lgScope === 'slide' && sl) sl.lg = v; else S.lineGap = v;
-  _deck.sig = ''; wcache.clear(); syncGapUI(); S.page = 0; redrawSoon();
-};
-$('lineGapReset').onclick = () => {
-  const sl = S.slides[S.sel];
-  if (S.lgScope === 'slide' && sl) delete sl.lg; else S.lineGap = null;
-  _deck.sig = ''; wcache.clear(); syncGapUI(); S.page = 0; redrawSoon();
-};
-document.querySelectorAll('#lgScope button').forEach(b => b.onclick = () => { S.lgScope = b.dataset.s; syncGapUI(); });
+$('lvSize').oninput = () => setLay('lvSize', $('lvSize').value / 100);
+$('lvGap').oninput = () => setLay('lvGap', $('lvGap').value * LN);
+$('svSize').oninput = () => setLay('svSize', $('svSize').value / 100);
+$('svGap').oninput = () => setLay('svGap', $('svGap').value * LN);
+document.querySelectorAll('#layScope button').forEach(b => b.onclick = () => { S.layScope = b.dataset.s; syncLiveUI(); });
 $('stripY').oninput = () => { S.stripY = +$('stripY').value; syncOut(); redrawSoon(); };
 $('stripW').oninput = () => { S.stripW = $('stripW').value / 100; syncOut(); S.page = 0; redrawSoon(); };
 $('stripW').onchange = () => buildList();
-const runExport = mode => exportAll(mode).catch(e => { console.error(e); $('prog').style.display = 'none'; toast('匯出失敗：' + e.message); });
-$('btnExport').onclick = () => exportByFormat().catch(e => { console.error(e); $('prog').style.display = 'none'; toast('匯出失敗：' + e.message); }); $('btnZip').onclick = () => runExport('zip');
+const expFail = e => { console.error(e); $('prog').style.display = 'none'; toast('匯出失敗：' + e.message); };
+function closeExp() { $('expMenu').hidden = true; $('btnExport').setAttribute('aria-expanded', 'false'); }
+$('btnExport').onclick = e => { e.stopPropagation(); const m = $('expMenu'); m.hidden = !m.hidden; $('btnExport').setAttribute('aria-expanded', String(!m.hidden)); };
+document.addEventListener('click', e => { if (!$('expMenu').hidden && !e.target.closest('.expwrap')) closeExp(); });
+document.querySelectorAll('#expMenu button').forEach(b => b.onclick = () => {
+  closeExp(); const f = b.dataset.f;
+  if (f === 'zip') return exportAll('zip').catch(expFail);
+  S.exportFmt = f; save(); exportByFormat().catch(expFail);
+});
 
 $('btnBg').onclick = () => $('bgFile').click();
 $('bgFile').onchange = e => {
@@ -1051,16 +1062,15 @@ $('btnLocalPick').onclick = async () => {
   catch (e) { toast('沒有取得字型清單的權限，可以改用輸入名稱'); }
 };
 $('variantSel').onchange = () => { const sl = S.slides[S.sel]; sl.variant = $('variantSel').value; syncOut(); renderMain(); save(); };
-$('deckScale').oninput = () => { S.deckScale = $('deckScale').value / 100; syncOut(); redrawSoon(); };
 document.querySelectorAll('#anchorRow .pill').forEach(b => b.onclick = () => { S.anchor = b.dataset.an; syncOut(); redrawSoon(); });
 $('lvX').oninput = () => editLive('dx', +$('lvX').value);
 $('lvY').oninput = () => editLive('dy', +$('lvY').value);
 $('lvW').oninput = () => editLive('w', +$('lvW').value);
 document.querySelectorAll('#lvAlign .pill').forEach(b => b.onclick = () => editLive('align', b.dataset.a));
-document.querySelectorAll('#lvScope .pill').forEach(b => b.onclick = () => { S.liveScope = b.dataset.s; syncLiveUI(); });
 $('lvReset').onclick = () => {
-  if (S.liveScope === 'slide') delete S.slides[S.sel].lv; else { S.live = {}; S.slides.forEach(s => delete s.lv); }
-  syncLiveUI(); redrawSoon();
+  const sl = S.slides[S.sel];
+  if (S.layScope === 'slide' && sl) { delete sl.lv; delete sl.fs; delete sl.lg; } else { S.live = {}; S.deckScale = 1; S.lineGap = null; S.anchor = 'middle'; }
+  _deck.sig = ''; syncLiveUI(); redrawSoon();
 };
 function attachDrag(cv, get, set, hit) {
   let drag = null; cv.style.touchAction = 'none';
@@ -1088,9 +1098,12 @@ attachDrag($('cvLive'), () => { const vv = autoVariant(S.slides[S.sel], S.sel), 
 attachDrag($('cvStrip'), () => ({ x: S.stripX, y: S.stripY }),
   (s, mx, my) => { S.stripX = clampN(snap4(s.x + mx), -700, 700); S.stripY = clampN(snap4(s.y - my), 0, 700); syncOut(); redrawSoon(); });
 $('stripX').oninput = () => { S.stripX = +$('stripX').value; syncOut(); redrawSoon(); };
-$('stripReset').onclick = () => { S.stripX = 0; S.stripY = 64; S.stripW = .81; $('stripY').value = 64; $('stripW').value = 81; S.page = 0; syncOut(); redrawSoon(); };
+$('stripReset').onclick = () => {
+  const sl = S.slides[S.sel];
+  if (S.layScope === 'slide' && sl) { delete sl.sfs; delete sl.slg; } else { S.stripX = 0; S.stripY = 64; S.stripW = .81; S.stripScale = 1; S.stripGap = null; $('stripY').value = 64; $('stripW').value = 81; }
+  S.page = 0; syncOut(); redrawSoon();
+};
 document.querySelectorAll('.view').forEach(b => b.onclick = () => setView(b.dataset.v));
-$('exportFmt').onchange = () => { S.exportFmt = $('exportFmt').value; save(); };
 $('autoExport').onchange = () => { S.autoExport = $('autoExport').checked; save(); };
 $('styleClear').onclick = () => { try { localStorage.removeItem('ppt-web-style'); localStorage.removeItem('ppt-web-v1'); } catch (e) { } location.reload(); };
 // 鍵盤切換頁面：上下鍵（或左右鍵、PageUp/PageDown）；在輸入框裡打字時不攔截，按 Esc 離開輸入框
