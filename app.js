@@ -3,7 +3,7 @@
 const S = {
   slides: [], sel: 0, page: 0, themeKey: 'torn_kraft', stripW: 0.81, stripY: 64, stripX: 0, view: 'live', autoExport: false, exportFmt: 'image', deckScale: 1, anchor: 'middle',
   custom: null, customMode: 'dark', customDim: null, fileName: '簡報',
-  fonts: { head: 'theme', body: 'theme', scr: 'same' }, shadow: false, blocks: false, dashRef: true, autoVary: true, bgAll: null, bgScope: 'all', localFonts: [], lineGap: null, stripGap: null, stripScale: 1, layScope: 'all', live: {}, liveScope: 'all',
+  fonts: { head: 'theme', body: 'theme', scr: 'same' }, shadow: false, blocks: false, dashRef: true, photos: [], autoVary: true, bgAll: null, bgScope: 'all', localFonts: [], lineGap: null, stripGap: null, stripScale: 1, layScope: 'all', live: {}, liveScope: 'all',
 };
 const $ = id => document.getElementById(id);
 const measureCtx = mk(10, 10).getContext('2d');
@@ -102,13 +102,23 @@ function ornaments(c, T, p) {
     if (k === 'tape') tape(c, 190, 52, 190, 44, -.16);
   });
 }
+// ---------- 強調頁：自己的照片（輪流用），沒有照片就用內建光影 ----------
+function spotOrder(idx) { const pl = planVariants(); let k = 0; for (let i = 0; i < idx; i++) if (pl[i] === 'spot') k++; return k; }
+function spotPhoto(k) { const n = S.photos.length; if (!n) return null; const e = imgCache.get(S.photos[k % n]); return e ? e.im : null; }
+function drawSpotPhoto(c, im, k) {
+  const sc = Math.max(W / im.width, H / im.height), w = im.width * sc, h = im.height * sc;
+  c.drawImage(im, (W - w) / 2, (H - h) / 2, w, h);
+  c.fillStyle = 'rgba(28,18,8,.42)'; c.fillRect(0, 0, W, H);   // 壓暗、帶一點暖色，讓白字清楚
+  const g = c.createRadialGradient(W / 2, H / 2, H * .3, W / 2, H / 2, H * 1.05); g.addColorStop(0, 'rgba(0,0,0,.05)'); g.addColorStop(1, 'rgba(0,0,0,.6)'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+  grain(c, W, H, .05);
+}
 const NO_ORN = new Set(['title', 'spot', 'solid', 'spark', 'num', 'band', 'rule', 'brackets', 'side']);
 function getBg(v, p = 0, slide) {
-  const t = curTheme(slide), key = [t.key, v, p % 6, S.customMode, S.custom ? S.custom.src.length : '', dimOf()].join('|');
+  const t = curTheme(slide), sk = v === 'spot' ? spotOrder(p) : 0, key = [t.key, v, p % 6, S.customMode, S.custom ? S.custom.src.length : '', dimOf(), v === 'spot' ? 'k' + sk + ':' + S.photos.map(x => x.length).join(',') : ''].join('|');
   if (!bgCache.has(key)) {
     const c = mk(W, H), x = c.getContext('2d');
     if (COMP.has(v)) composeBg(x, t, v, p);
-    else if (v === 'spot' && !t.flat) drawSpot(x, t, p % 2);
+    else if (v === 'spot' && !t.flat) { const ph = spotPhoto(sk); if (ph) drawSpotPhoto(x, ph, sk); else drawSpot(x, t, sk); }
     else { t.bg.call(t, x, t.ownVariants ? v : (v === 'title' ? 'title' : 'content')); if (!t.ownVariants && !t.flat) decorate(x, t, v, p); }
     if (!t.flat && !NO_ORN.has(v)) ornaments(x, t, p);
     bgCache.set(key, c);
@@ -232,7 +242,7 @@ const gapOf = slide => (slide && slide.lg) || S.lineGap || 1.1 * LN;
 function liveOpts(isTitle, v, slide) {
   return {
     headRule: (pi, ps) => (v === 'spark' || v === 'solid' || v === 'spot') ? false : isTitle ? pi === 0 : (pi === 0 && ps.length > 1 && plain(ps[0]).length <= 28),
-    headScale: isTitle ? 1.9 : 1.16, lineGap: gapOf(slide), paraGap: .45, shadow: S.shadow,
+    headScale: isTitle ? 1.9 : 1.16, lineGap: gapOf(slide), paraGap: .45, shadow: S.shadow || v === 'spot',
   };
 }
 function liveCfg(slide, isTitle, v) {
@@ -338,7 +348,7 @@ function drawLive(cv, slide, idx, noText) {
     const m = ptext(paras[0]).match(NUM_RE);
     if (m) { numeral = /[１-９]/.test(m[1]) ? String(m[1].charCodeAt(0) - 0xFF10) : m[1]; paras = paras.map((p, i) => i ? p : stripLead(p, m[0].length)); }
   }
-  const shift = numeral ? 150 : 0, maxW = (L.userW ? L.w : L.w - sf.r - sf.l) - shift, maxH = H - sf.t - sf.b;
+  const hasPic = !!(slide.pics && slide.pics.length), shift = numeral ? 150 : 0, maxW = (L.userW ? (hasPic ? Math.min(L.w, 1560 - sf.r - sf.l) : L.w) : L.w - sf.r - sf.l) - shift, maxH = H - sf.t - sf.b;
   const base = isTitle ? 56 : isSpark ? 100 : deckSize() * S.deckScale;
   let size = Math.round(base * fs), lines;
   for (; size >= 30; size -= 2) { lines = layout(paras, size, maxW, o); if (blockH(lines, o) <= maxH) break; }
@@ -346,9 +356,14 @@ function drawLive(cv, slide, idx, noText) {
   // 自動對齊：標題、重點句、只有一小段的頁面置中，其餘靠左
   const auto = (isTitle || isSpark || (paras.length <= 1 && lines.length <= 2)) ? 'center' : 'left', align = L.align || auto;
   slide._autoAlign = align;
-  const x = (align === 'left' && !isTitle && !isSpark ? 160 + sf.l : (W - maxW - shift) / 2 + (sf.l - sf.r) / 2) + L.dx + shift;
+  const x = (align === 'left' && !isTitle && !isSpark ? 160 + sf.l : (W - maxW - shift) / 2 + (sf.l - sf.r) / 2) + (hasPic ? 0 : L.dx) + shift;
   const y = ((S.anchor === 'top' && !isTitle && !isSpark) ? sf.t + 24 : Math.max(sf.t, sf.t + (maxH - h) / 2 - 6)) + L.dy;
   const numSize = numeral ? Math.round(lines[0].size * 2.1) : 0, numX = x - shift + 6, numY = numeral ? y + lines[0].h / 2 + lines[0].size * .1 : 0;
+  if (v === 'spot' && spotOrder(idx) % 2 === 1 && lines.length) {
+    // 半透明底板＋掛籤（像燭光那一頁的做法）
+    const bw = Math.max(...lines.map(l => l.w)), bx = align === 'center' ? x + (maxW - bw) / 2 : x, px = bx - 64, py = y - 52;
+    c.save(); c.fillStyle = 'rgba(78,70,62,.58)'; c.fillRect(px, py, bw + 128, h + 104); c.fillStyle = '#6B4A2F'; c.fillRect(px + 36, py - 26, 22, 74); c.restore();
+  }
   if (S.blocks && !isTitle && !isSpark) {
     const gs = textGroups(lines, y, o), multi = gs.length > 1; let anyHead = false;
     gs.forEach(g => {
@@ -437,7 +452,7 @@ function stripCard(T, cw, h, v = 'plain', idx = 0, slide) {
     x.drawImage(bg, sx, sy, sw, h, 0, 0, sw, h); x.restore();
     x.globalAlpha = T.dark ? .55 : .5; x.fillStyle = T.card.fill; x.fillRect(0, 0, cw, h); x.globalAlpha = 1;
   }
-  if (look === 'solid' && v === 'spot') { const tmp = mk(W, H); drawSpot(tmp.getContext('2d'), T, idx % 2); const sy = Math.max(0, Math.min(H - h, H * .32 - h / 2)); x.drawImage(tmp, Math.max(0, (W - cw) / 2), sy, Math.min(cw, W), h, 0, 0, Math.min(cw, W), h); }
+  if (look === 'solid' && v === 'spot') { const tmp = getBg('spot', idx, slide); const sy = Math.max(0, Math.min(H - h, H * .32 - h / 2)); x.drawImage(tmp, Math.max(0, (W - cw) / 2), sy, Math.min(cw, W), h, 0, 0, Math.min(cw, W), h); }
   else if (look === 'solid') { x.globalAlpha = .93; x.fillStyle = A; x.fillRect(0, 0, cw, h); x.globalAlpha = 1; grain(x, cw, h, .08); }
   x.restore();
   // 字條的樣式跟著現場版這一頁的版面走：一般卡、左色塊、右緞帶、底線、整條色塊、標題框
@@ -611,7 +626,7 @@ function select(i) {
   const th = document.querySelectorAll('.thumb')[i]; if (th) th.scrollIntoView({ block: 'nearest' });
 }
 const VIEW_HINT = {
-  live: '可以直接拖曳畫面上的文字。',
+  live: '可以直接拖曳畫面上的文字；圖片也能拖曳移動，拉圖片右下角可以縮放。',
   strip: '背景是透明的，直播時疊在畫面上。可以直接拖曳字幕條。',
 };
 function setView(v) {
@@ -1126,6 +1141,29 @@ function applyColor(c) {
   $('optVary').onchange = () => { S.autoVary = $('optVary').checked; bgCache.clear(); redrawSoon(); buildList(); syncVariantUI(); save(); };
 })();
 
+// ---------- 強調頁照片庫 ----------
+function savePhotos() { try { localStorage.setItem('ppt-web-photos', JSON.stringify(S.photos)); } catch (e) { toast('照片太多，瀏覽器存不下；重新整理後最後幾張可能會消失'); } }
+function renderPhotos() {
+  const box = $('photoList'); box.innerHTML = '';
+  S.photos.forEach((src, i) => {
+    const d = document.createElement('div'); d.className = 'ph'; const im = new Image(); im.src = src; d.appendChild(im);
+    const x = document.createElement('button'); x.className = 'phx'; x.textContent = '×'; x.title = '移除這張照片'; x.onclick = () => { S.photos.splice(i, 1); savePhotos(); renderPhotos(); afterThemeChange(); };
+    d.appendChild(x); box.appendChild(d);
+  });
+  $('photoHint').textContent = S.photos.length ? `已加入 ${S.photos.length} 張，強調頁會輪流使用。` : '還沒有照片，強調頁會用內建的光影。';
+}
+$('btnPhotos').onclick = () => $('photoFile').click();
+$('photoFile').onchange = async e => {
+  const fs = [...e.target.files].slice(0, 8); e.target.value = '';
+  for (const f of fs) {
+    const src = await new Promise(res => { const im = new Image(); im.onload = () => { const sc = Math.min(1, 1600 / Math.max(im.width, im.height)), c = mk(Math.round(im.width * sc), Math.round(im.height * sc)); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); res(c.toDataURL('image/jpeg', .8)); }; im.onerror = () => res(null); im.src = URL.createObjectURL(f); });
+    if (src) { await loadBgImg(src); S.photos.push(src); }
+  }
+  savePhotos(); renderPhotos(); afterThemeChange();
+  if (!planVariants().includes('spot')) toast('照片已加入。目前沒有強調頁，可以在「背景」切到「只有這一頁」，把版面換成「深色強調」。');
+};
+async function loadPhotos() { try { S.photos = JSON.parse(localStorage.getItem('ppt-web-photos') || '[]'); await Promise.all(S.photos.map(loadBgImg)); } catch (e) { S.photos = []; } renderPhotos(); }
+
 // ---------- 啟動：還原上次內容 ----------
 $('fontHead').onchange = e => { S.fonts.head = e.target.value; afterFontChange(); };
 $('fontBody').onchange = e => { S.fonts.body = e.target.value; afterFontChange(); };
@@ -1149,14 +1187,32 @@ $('lvReset').onclick = () => {
   if (S.layScope === 'slide' && sl) { delete sl.lv; delete sl.fs; delete sl.lg; } else { S.live = {}; S.deckScale = 1; S.lineGap = null; S.anchor = 'middle'; }
   _deck.sig = ''; syncLiveUI(); redrawSoon();
 };
-function attachDrag(cv, get, set, hit) {
+const snap4 = v => Math.round(v / 4) * 4, clampN = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+// 投影片上的圖片：拖曳移動，拉右下角縮放；文字會自動讓開
+function pickPic(cx, cy) {
+  const sl = S.slides[S.sel], ps = sl && sl.pics; if (!ps || !ps.length) return null;
+  for (let i = ps.length - 1; i >= 0; i--) {
+    const p = ps[i], x = p.x * W, y = p.y * H, w = p.w * W, h = p.h * H;
+    if (cx < x || cx > x + w || cy < y || cy > y + h) continue;
+    const corner = cx > x + w - 70 && cy > y + h - 70, o = Object.assign({}, p);
+    return { cursor: corner ? 'nwse-resize' : 'move', title: corner ? '拖曳可以縮放圖片' : '拖曳可以移動圖片',
+      move(dx, dy) {
+        if (corner) { const k = Math.max(.25, (o.w * W + dx) / (o.w * W)); p.w = o.w * k; p.h = o.h * k; }
+        else { p.x = clampN(o.x + dx / W, -o.w + .05, .95); p.y = clampN(o.y + dy / H, -o.h + .05, .95); }
+        _deck.sig = ''; redrawSoon();
+      } };
+  }
+  return null;
+}
+function attachDrag(cv, get, set, hit, pick) {
   let drag = null; cv.style.touchAction = 'none';
   const frame = cv.parentElement, guide = document.createElement('div'); guide.className = 'bkg'; guide.hidden = true; frame.appendChild(guide);
   const toCv = e => { const r = cv.getBoundingClientRect(), k = W / r.width; return [(e.clientX - r.left) * k, (e.clientY - r.top) * k]; };
   const hideGuide = () => { guide.hidden = true; cv.style.cursor = 'grab'; };
-  cv.addEventListener('pointerdown', e => { if (!S.slides[S.sel]) return; drag = { x: e.clientX, y: e.clientY, s: get(), k: W / cv.getBoundingClientRect().width, moved: false, t: Date.now() }; cv.setPointerCapture(e.pointerId); hideGuide(); });
+  cv.addEventListener('pointerdown', e => { if (!S.slides[S.sel]) return; drag = { x: e.clientX, y: e.clientY, s: get(), k: W / cv.getBoundingClientRect().width, moved: false, t: Date.now(), obj: pick ? pick(...toCv(e)) : null }; cv.setPointerCapture(e.pointerId); hideGuide(); });
   cv.addEventListener('pointermove', e => {
-    if (drag) { if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 5) drag.moved = true; if (drag.moved) { cv.style.cursor = 'grabbing'; set(drag.s, (e.clientX - drag.x) * drag.k, (e.clientY - drag.y) * drag.k); } return; }
+    if (drag) { if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 5) drag.moved = true; if (drag.moved) { const mx = (e.clientX - drag.x) * drag.k, my = (e.clientY - drag.y) * drag.k; if (drag.obj) { cv.style.cursor = drag.obj.cursor; drag.obj.move(mx, my); } else { cv.style.cursor = 'grabbing'; set(drag.s, mx, my); } } return; }
+    const ob = pick && pick(...toCv(e)); if (ob) { guide.hidden = true; cv.style.cursor = ob.cursor; cv.title = ob.title; return; } cv.title = '';
     const h = hit && hit(...toCv(e));
     if (!h) return hideGuide();
     guide.hidden = false; guide.classList.toggle('rm', !!h.removing); cv.style.cursor = 'text';
@@ -1171,7 +1227,7 @@ function attachDrag(cv, get, set, hit) {
   cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
 }
 attachDrag($('cvLive'), () => { const vv = autoVariant(S.slides[S.sel], S.sel), L = liveCfg(S.slides[S.sel], vv === 'title', vv); return { dx: L.dx, dy: L.dy }; },
-  (s, mx, my) => { editLive('dx', clampN(snap4(s.dx + mx), -900, 900)); editLive('dy', clampN(snap4(s.dy + my), -600, 600)); });
+  (s, mx, my) => { editLive('dx', clampN(snap4(s.dx + mx), -900, 900)); editLive('dy', clampN(snap4(s.dy + my), -600, 600)); }, null, pickPic);
 attachDrag($('cvStrip'), () => ({ x: S.stripX, y: S.stripY }),
   (s, mx, my) => { S.stripX = clampN(snap4(s.x + mx), -700, 700); S.stripY = clampN(snap4(s.y - my), 0, 700); syncOut(); redrawSoon(); });
 $('stripX').oninput = () => { S.stripX = +$('stripX').value; syncOut(); redrawSoon(); };
@@ -1206,7 +1262,7 @@ document.addEventListener('keydown', e => {
     const v = JSON.parse(localStorage.getItem('ppt-web-v1') || 'null');
     const st = JSON.parse(localStorage.getItem('ppt-web-style') || 'null') || (v && v.themeKey ? v : null);
     if (st) { await applyStyle(st); showStyleNote(true); }
-    loadSavedBg();
+    loadSavedBg(); await loadPhotos();
     await renderEmptyPreview();
     if (v && v.slides && v.slides.length) {
       const b = document.createElement('button'); b.className = 'btn'; b.textContent = `繼續上次的「${v.fileName}」`;

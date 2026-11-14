@@ -17,7 +17,7 @@ function planVariants() {
   const sig = (S.autoVary === false ? '0' : '1') + sl.map(s => (s.variant || '') + '|' + s.paras.map(ptext).join('/')).join('#');
   if (sig === _plan.sig) return _plan.v;
   const out = [], last = {}, cnt = {};
-  const GAP = { solid: 3, spot: 4, spark: 2, side: 2, split: 2, card: 2, zoom: 2, flip: 2 };
+  const GAP = { solid: 3, spot: 3, spark: 2, side: 2, split: 2, card: 2, zoom: 2, flip: 2 };
   sl.forEach((s, i) => {
     let v;
     const ps = s.paras.map(ptext).map(x => x.trim()).filter(Boolean), chars = ps.join('').length;
@@ -30,7 +30,7 @@ function planVariants() {
       const short = ps.length && ps.length <= 2 && chars <= 34, headBody = ps.length > 1 && ps[0].length <= 28, scripture = ps.some(x => REF_RE.test(x));
       let cands = short ? ['spark', 'spot', 'solid', 'card']
         : headBody ? (ps[0].length <= 30 ? ['split', 'card', 'plain', 'flip', 'rule', 'band'] : ['card', 'plain', 'flip', 'rule', 'band'])
-        : scripture ? ['card', 'plain', 'zoom', 'flip', 'brackets']
+        : scripture ? (chars <= 90 ? ['card', 'spot', 'plain', 'zoom', 'flip', 'brackets'] : ['card', 'plain', 'zoom', 'flip', 'brackets'])
         : ['plain', 'flip', 'zoom', 'rule', 'band', 'brackets', 'card'];
       if (chars > 170) cands = cands.filter(c => c !== 'card' && c !== 'side');
       if (chars > 260) cands = cands.filter(c => c !== 'split');
@@ -77,7 +77,18 @@ function drawSpot(c, T, p) {
   c.fillStyle = '#14110e'; c.fillRect(0, 0, W, H);
   blob(c, W / 2, H / 2, 900, '#3a2d22', .7);
   const r = rng(77 + p * 13), gold = '#E3A85F';
-  if (p % 2 === 0) {
+  if (p % 3 === 2) {
+    // 光束：從左上斜照進暗處，空氣裡有細小的光塵
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 7; i++) {
+      const x0 = W * (.05 + i * .09 + r() * .04), w0 = 40 + r() * 90;
+      const g = c.createLinearGradient(x0, 0, x0 + 700, H); g.addColorStop(0, 'rgba(255,214,150,.30)'); g.addColorStop(.7, 'rgba(255,214,150,.06)'); g.addColorStop(1, 'rgba(255,214,150,0)');
+      c.fillStyle = g; c.beginPath(); c.moveTo(x0, -20); c.lineTo(x0 + w0, -20); c.lineTo(x0 + w0 + 760, H + 20); c.lineTo(x0 + 560, H + 20); c.closePath(); c.fill();
+    }
+    blob(c, W * .12, 0, 520, '#FFE2B0', .55);
+    for (let i = 0; i < 140; i++) circ(c, r() * W * .8, r() * H, .8 + r() * 2.2, `rgba(255,232,190,${.15 + r() * .5})`);
+    c.restore();
+  } else if (p % 3 === 0) {
     const cx = W * (.28 + r() * .44), cy = H * (.3 + r() * .3);
     blob(c, cx, cy, 560, gold, .5); blob(c, cx, cy, 210, '#FFE2B0', .9); blob(c, cx, cy, 64, '#FFFFFF', 1);
     c.save(); c.globalCompositeOperation = 'lighter';
