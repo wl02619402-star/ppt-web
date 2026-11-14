@@ -11,5 +11,6 @@
 本機測試：`python3 -m http.server 8765` 後開 http://localhost:8765
 
 ## 檔案
+- template.js 讀取 Slidesgo 等模板 pptx：畫出每頁背景、圖片、圖形（去掉範例文字），記下文字框位置
 - index.html 介面　- app.js 解析/排版/編輯/匯出　- themes.js（手繪 40 套）、themes2.js（程式化 72 套）、themes3.js（撕邊紙 5 套與自動版型），共 117 套背景（背景與長條共用同一組裝飾）
 - 需要網路載入：Noto Sans TC 字型、JSZip、PptxGenJS（CDN）

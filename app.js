@@ -3,7 +3,7 @@
 const S = {
   slides: [], sel: 0, page: 0, themeKey: 'torn_kraft', stripW: 0.81, stripY: 64, stripX: 0, view: 'live', autoExport: false, exportFmt: 'image', deckScale: 1, anchor: 'middle',
   custom: null, customMode: 'dark', customDim: null, fileName: '簡報',
-  fonts: { head: 'theme', body: 'theme', scr: 'same' }, shadow: false, blocks: false, dashRef: true, photos: [], autoVary: true, bgAll: null, bgScope: 'all', localFonts: [], lineGap: null, stripGap: null, stripScale: 1, layScope: 'all', live: {}, liveScope: 'all',
+  fonts: { head: 'theme', body: 'theme', scr: 'same' }, shadow: false, blocks: false, dashRef: true, photos: [], tpl: null, autoVary: true, bgAll: null, bgScope: 'all', localFonts: [], lineGap: null, stripGap: null, stripScale: 1, layScope: 'all', live: {}, liveScope: 'all',
 };
 const $ = id => document.getElementById(id);
 const measureCtx = mk(10, 10).getContext('2d');
@@ -43,6 +43,7 @@ function slideBgTheme(bg) {
 const dimOf = () => S.customDim == null ? (S.customMode === 'light' ? .62 : .58) : S.customDim;
 function curTheme(slide) {
   if (slide && slide.bg) { const t = slideBgTheme(slide.bg); if (t) return t; }
+  if (tplOn()) return tplTheme();
   if (S.bgAll) { const t = slideBgTheme(S.bgAll); if (t) return t; }
   if (S.custom) {
     const base = THEMES[S.customMode === 'dark' ? 'dusk' : 'paper'];
@@ -116,13 +117,14 @@ function drawSpotPhoto(c, im, k) {
 }
 const NO_ORN = new Set(['title', 'spot', 'solid', 'spark', 'num', 'band', 'rule', 'brackets', 'side']);
 function getBg(v, p = 0, slide) {
-  const t = curTheme(slide), sk = v === 'spot' ? spotOrder(p) : 0, key = [t.key, v, p % 6, S.customMode, S.custom ? S.custom.src.length : '', dimOf(), v === 'spot' ? 'k' + sk + ':' + S.photos.map(x => x.length).join(',') + ':' + (slide && slide.spotSrc ? slide.spotSrc.length : '') : ''].join('|');
+  const t = curTheme(slide); if (t.tpl) v = 'tpl'; const sk = v === 'spot' ? spotOrder(p) : 0, key = [t.key, v, p % 6, S.customMode, S.custom ? S.custom.src.length : '', dimOf(), v === 'spot' ? 'k' + sk + ':' + S.photos.map(x => x.length).join(',') + ':' + (slide && slide.spotSrc ? slide.spotSrc.length : '') : '', t.tpl ? 'pg' + tplPageIdx(p) : ''].join('|');
   if (!bgCache.has(key)) {
     const c = mk(W, H), x = c.getContext('2d');
-    if (COMP.has(v)) composeBg(x, t, v, p);
+    if (t.tpl) { const im = tplImg(tplPageIdx(p)); if (im) x.drawImage(im, 0, 0, W, H); }
+    else if (COMP.has(v)) composeBg(x, t, v, p);
     else if (v === 'spot' && !t.flat) { const own = slide && slide.spotSrc && imgCache.get(slide.spotSrc), ph = own ? own.im : spotPhoto(sk); if (ph) drawSpotPhoto(x, ph, sk); else drawSpot(x, t, sk); }
     else { t.bg.call(t, x, t.ownVariants ? v : (v === 'title' ? 'title' : 'content')); if (!t.ownVariants && !t.flat) decorate(x, t, v, p); }
-    if (!t.flat && !NO_ORN.has(v)) ornaments(x, t, p);
+    if (!t.flat && !t.tpl && !NO_ORN.has(v)) ornaments(x, t, p);
     bgCache.set(key, c);
   }
   return bgCache.get(key);
@@ -327,6 +329,7 @@ function liveSplit(c, slide, T, o, sf, L, sp, noText) {
   return { shrunk: size < Math.round(base) && size < 48, geo: { lines: body, x: x2, y: top, o: bo, align: 'left', maxW: rw, T, extra } };
 }
 function drawLive(cv, slide, idx, noText) {
+  if (tplOn() && !slide.bg) return drawTplSlide(cv, slide, idx, noText);
   const v = autoVariant(slide, idx), T = slideTheme(curTheme(slide), v), c = cv.getContext('2d');
   const isTitle = v === 'title', isSpark = v === 'spark' || v === 'solid' || (v === 'spot' && isShort(slide));
   c.clearRect(0, 0, W, H);
@@ -449,7 +452,7 @@ function stripCard(T, cw, h, v = 'plain', idx = 0, slide) {
     x.drawImage(tmp, ox, 0, cw, top, 0, 0, cw, top); x.drawImage(tmp, ox, H - bot, cw, bot, 0, top, cw, bot);
   } else {
     // 其他風格：從現場版同一張底圖取一段，每一頁取不同位置；翻轉頁就左右鏡像
-    const bg = getBg('plain', 0, slide), sw = Math.min(cw, W), sx = Math.max(0, Math.min(W - sw, ((idx * 337) % Math.max(1, W - sw)))), sy = Math.max(0, Math.min(H - h, [.5, .2, .8][idx % 3] * (H - h)));
+    const bg = getBg('plain', tplOn() ? idx : 0, slide), sw = Math.min(cw, W), sx = Math.max(0, Math.min(W - sw, ((idx * 337) % Math.max(1, W - sw)))), sy = Math.max(0, Math.min(H - h, [.5, .2, .8][idx % 3] * (H - h)));
     x.save();
     x.drawImage(bg, sx, sy, sw, h, 0, 0, sw, h); x.restore();
     x.globalAlpha = T.dark ? .55 : .5; x.fillStyle = T.card.fill; x.fillRect(0, 0, cw, h); x.globalAlpha = 1;
@@ -1096,7 +1099,7 @@ function syncSlideBgUI() {
   document.querySelectorAll('#bgScope button').forEach(x => x.classList.toggle('on', x.dataset.s === S.bgScope));
   $('scopeSlideBtn').textContent = sl ? `只有第 ${S.sel + 1} 頁` : '只有這一頁';
   $('scopeHint').textContent = slideMode ? `下面的選擇只會改第 ${S.sel + 1} 頁，其他頁不變。` : '下面的選擇會套用到每一頁。想只改某一頁，先點左邊那一頁，再按「只有這一頁」。';
-  $('bgVaryRow').hidden = slideMode; $('bgLayoutRow').hidden = !slideMode; $('slBgPick').textContent = sl ? `只用在第 ${S.sel + 1} 頁…` : '只用在這一頁…'; $('slBgTitle').textContent = `第 ${S.sel + 1} 頁用自己的圖`;
+  $('bgVaryRow').hidden = slideMode || tplOn(); $('bgLayoutRow').hidden = !slideMode; $('slBgPick').textContent = sl ? `只用在第 ${S.sel + 1} 頁…` : '只用在這一頁…'; $('slBgTitle').textContent = `第 ${S.sel + 1} 頁用自己的圖`;
   $('bgResetRow').hidden = !(slideMode && sl && sl.bg);
   $('optVary').checked = S.autoVary !== false;
   const b = sl && sl.bg; $('slBgImg').hidden = !(b && b.t === 'img'); if (typeof renderPhotos === 'function' && $('photoList')) renderPhotos();
@@ -1110,7 +1113,7 @@ function setSlideBg(b) {
 }
 function applyTheme(k) {
   if (S.bgScope === 'slide') return setSlideBg({ t: 'theme', k });
-  S.themeKey = k; S.bgAll = null; clearCustom(false);
+  S.themeKey = k; S.bgAll = null; clearCustom(false); if (S.tpl && S.tpl.on) { S.tpl.on = false; renderTplUI(); tplDB.set('tpl', S.tpl).catch(() => { }); }
   ensureFonts().then(() => { loadedChars.clear(); return ensureFonts(); }).then(afterThemeChange);
 }
 function applyColor(c) {
@@ -1183,6 +1186,102 @@ $('photoFile').onchange = async e => {
   if (false) toast('照片已加入。目前沒有強調頁，可以在「背景」切到「只有這一頁」，把版面換成「深色強調」。');
 };
 async function loadPhotos() { try { S.photos = JSON.parse(localStorage.getItem('ppt-web-photos') || '[]'); await Promise.all(S.photos.map(loadBgImg)); } catch (e) { S.photos = []; } renderPhotos(); }
+
+// ---------- 模板：把 Slidesgo 等模板的頁面當背景，講道文字放進原本的文字框 ----------
+const tplImgs = [];
+const tplOn = () => !!(S.tpl && S.tpl.on && S.tpl.pages && S.tpl.pages.length);
+const tplImg = i => tplImgs[i] || null;
+function tplUsable() { return S.tpl.pages.map((p, i) => p.use ? i : -1).filter(i => i >= 0); }
+function tplTheme() {
+  const pg = S.tpl.pages[tplUsable()[1] ?? tplUsable()[0] ?? 0], dark = pg.lum < .5;
+  return { key: 'tpl:' + S.tpl.name + ':' + tplUsable().join(','), name: S.tpl.name, tpl: true, flat: true, dark, text: dark ? '#FFFFFF' : '#1F1A17', red: dark ? '#FFB3A0' : '#C0392B', accent: pg.accent, card: { fill: dark ? '#1C1C1E' : pg.light, alpha: .92, radius: 12, grain: false, deco: 'leftbar' }, bg(c) { const im = tplImg(S.tpl.pages.indexOf(pg)); if (im) c.drawImage(im, 0, 0, W, H); } };
+}
+// 每一頁講道內容配一頁模板：封面給第一頁；標題＋內文配有兩個文字框的頁面；短句配章節頁；相鄰頁不重複
+let _tplPlan = { sig: '', v: [] };
+function tplPageIdx(idx) {
+  const use = tplUsable(), sig = S.tpl.name + use.join(',') + '|' + S.slides.map(s => (s.tplPage ?? '') + s.paras.map(ptext).join('/')).join('#');
+  if (sig !== _tplPlan.sig) {
+    const P = S.tpl.pages, by = k => use.filter(i => P[i].kind === k), cover = by('cover'), content = by('content'), section = by('section');
+    const cnt = {}, out = [];
+    S.slides.forEach((sl, i) => {
+      if (sl.tplPage != null && P[sl.tplPage]) { out.push(sl.tplPage); return; }
+      const ps = sl.paras.map(ptext).map(x => x.trim()).filter(Boolean), chars = ps.join('').length, headBody = ps.length > 1 && ps[0].length <= 30;
+      let c = i === 0 ? (cover.length ? cover : content) : chars <= 34 && ps.length <= 2 ? (section.length ? section : content) : headBody ? content.filter(k => P[k].title && P[k].body) : content.concat(section).filter(k => P[k].body || P[k].title);
+      if (!c.length) c = use.length ? use : [0];
+      const prev = out[i - 1], pool = c.filter(k => k !== prev).length ? c.filter(k => k !== prev) : c;
+      const k = pool.reduce((a, b) => (cnt[b] || 0) < (cnt[a] || 0) ? b : a); cnt[k] = (cnt[k] || 0) + 1; out.push(k);
+    });
+    _tplPlan = { sig, v: out };
+  }
+  return _tplPlan.v[idx] ?? 0;
+}
+function fitRegion(paras, r, o, maxS, minS) {
+  let size = maxS, lines;
+  for (; size >= minS; size -= 2) { lines = layout(paras, size, r.w, o); if (blockH(lines, o) <= r.h) return { lines, size, fit: true }; }
+  return { lines: layout(paras, minS, r.w, o), size: minS, fit: false };
+}
+function drawTplSlide(cv, slide, idx, noText) {
+  const c = cv.getContext('2d'), pi = tplPageIdx(idx), pg = S.tpl.pages[pi], L = liveCfg(slide, false, 'plain');
+  c.clearRect(0, 0, W, H); c.drawImage(getBg('tpl', idx, slide), 0, 0);
+  (slide.pics || []).forEach(p => { const e = imgCache.get(p.src); if (!e) return; const im = e.im, cr = p.crop || { l: 0, t: 0, r: 0, b: 0 }; c.save(); c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = 26; c.shadowOffsetY = 8; c.drawImage(im, im.width * cr.l, im.height * cr.t, im.width * (1 - cr.l - cr.r), im.height * (1 - cr.t - cr.b), p.x * W, p.y * H, p.w * W, p.h * H); c.restore(); });
+  const colorFor = r => { const dark = (r ? r.lum : pg.lum) < .5; return { text: dark ? '#FFFFFF' : '#1F1A17', red: dark ? '#FFB3A0' : '#C0392B', accent: pg.accent, dark }; };
+  const pad = r => r && { x: r.x + 12 + L.dx, y: r.y + 8 + L.dy, w: Math.max(200, r.w - 24), h: Math.max(80, r.h - 16), align: r.align, anchor: r.anchor, lum: r.lum };
+  // 文字放不下時把文字框往右、往下撐大，但不能蓋到模板上的圖片和圖形
+  const occ = (pg.occ || []).filter(o => !(o.x <= (pg.title || {}).x && o.y <= (pg.title || {}).y && o.x + o.w >= ((pg.title || {}).x + (pg.title || {}).w)));
+  const hits = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  const grow = r => {
+    let w = Math.max(r.w, W - r.x - 110), h = Math.max(r.h, H - r.y - 90);
+    for (const o of occ) { if (hits(r, o)) continue; const cand = { x: r.x, y: r.y, w, h }; if (!hits(cand, o)) continue; if (o.x >= r.x + r.w - 20) w = Math.min(w, o.x - 40 - r.x); else if (o.y >= r.y + r.h - 20) h = Math.min(h, o.y - 30 - r.y); }
+    return { x: r.x, y: r.y, w: Math.max(r.w, w), h: Math.max(r.h, h), align: r.align, anchor: r.anchor, lum: r.lum };
+  };
+  const paras = slide.paras, ps = paras.map(ptext);
+  const headBody = paras.length > 1 && ps[0].trim().length <= 30;
+  let tR = pad(pg.title), bR = pad(pg.body);
+  if (!tR && !bR) tR = { x: 160, y: 140, w: W - 320, h: H - 280, align: 'center', anchor: 'middle', lum: pg.lum };
+  const scale = S.deckScale * (slide.fs || 1), gap = gapOf(slide), parts = [];
+  const place = (pp, r, head, maxS) => {
+    const o = { headRule: head ? (pi2, all) => pi2 === 0 && all.length > 1 : () => false, headScale: 1.2, lineGap: gap, paraGap: .45, shadow: S.shadow };
+    let f = fitRegion(pp, r, o, Math.round(maxS * scale), 40);
+    if (!f.fit) { const g = grow(r), f2 = fitRegion(pp, g, o, Math.round(maxS * scale), 32); if (f2.size > f.size || f2.fit) { f = f2; r = g; } }
+    const h = blockH(f.lines, o), y = r.anchor === 'middle' ? r.y + (r.h - h) / 2 : r.anchor === 'bottom' ? r.y + r.h - h : r.y;
+    const align = f.lines.length > 2 && paras.length > 1 && r.align === 'center' && pp.length > 1 ? 'left' : r.align;
+    parts.push({ lines: f.lines, x: r.x, y: Math.max(40, y), o, w: r.w, align, T: Object.assign({}, curTheme(slide), colorFor(r)), size: f.size });
+  };
+  if (headBody && tR && bR) { place([paras[0]], tR, false, idx === 0 ? 110 : 90); place(paras.slice(1), bR, false, 80); }
+  else if (idx === 0 && tR) { place([paras[0]], tR, false, 110); if (paras.length > 1) place(paras.slice(1), bR || grow({ x: tR.x, y: tR.y + tR.h + 20, w: tR.w, h: 200, align: tR.align, anchor: 'top', lum: tR.lum }), false, 60); }
+  else place(paras, bR || tR, true, (bR ? 80 : 96));
+  if (!noText) parts.forEach(p => drawLines(c, p.lines, p.x, p.y, p.o, p.T, p.align, p.w));
+  const main = parts[parts.length - 1];
+  slide._autoAlign = main.align;
+  return { shrunk: main.size < 44, geo: { lines: main.lines, x: main.x, y: main.y, o: main.o, align: main.align, maxW: main.w, T: main.T, extra: parts.slice(0, -1).map(p => ({ lines: p.lines, x: p.x, y: p.y, o: p.o, w: p.w, T: p.T, align: p.align })) } };
+}
+async function loadTplImages() { tplImgs.length = 0; if (!S.tpl) return; await Promise.all(S.tpl.pages.map((p, i) => new Promise(r => { const im = new Image(); im.onload = () => { tplImgs[i] = im; r(); }; im.onerror = r; im.src = p.img; }))); }
+function renderTplUI() {
+  const has = !!S.tpl; $('tplBox').hidden = !has; if (!has) return;
+  $('tplName').textContent = S.tpl.name; $('tplOn').checked = !!S.tpl.on;
+  const g = $('tplGrid'); g.innerHTML = '';
+  S.tpl.pages.forEach((p, i) => {
+    const d = document.createElement('button'); d.className = 'tp' + (p.use ? ' on' : ''); d.title = p.use ? '使用中，點一下不用這頁' : '沒用到，點一下改成使用';
+    const im = new Image(); im.src = p.img; d.appendChild(im); const sp = document.createElement('span'); sp.textContent = { cover: '封面', content: '內容', section: '章節', free: '純圖', busy: '圖表' }[p.kind] || ''; d.appendChild(sp);
+    d.onclick = () => { p.use = !p.use; if (!tplUsable().length) { p.use = true; toast('至少要留一頁'); } afterTplChange(); }; g.appendChild(d);
+  });
+}
+function afterTplChange() { _tplPlan.sig = ''; bgCache.clear(); _scCache.clear(); renderTplUI(); syncSlideBgUI(); buildList(); renderMain(); tplDB.set('tpl', S.tpl).catch(() => toast('模板太大，瀏覽器存不下；重新整理後要重新上傳')); }
+$('btnTpl').onclick = () => $('tplFile').click();
+$('tplFile').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    prog('正在讀取模板…', 0);
+    const t = await parseTemplate(await f.arrayBuffer(), f.name, (i, n) => prog(`正在讀取模板 第 ${i + 1} / ${n} 頁…`, i / n));
+    $('prog').style.display = 'none';
+    if (!t.pages.length) throw new Error('沒有頁面');
+    S.tpl = Object.assign(t, { on: true }); await loadTplImages(); afterTplChange();
+    toast(`已套用模板「${t.name}」：${tplUsable().length} 頁會輪流當背景`);
+  } catch (err) { console.error(err); $('prog').style.display = 'none'; toast('讀不到這個模板，請確認是 .pptx 檔'); }
+};
+$('tplOn').onchange = () => { S.tpl.on = $('tplOn').checked; afterTplChange(); buildThemes(); };
+$('tplRemove').onclick = () => { S.tpl = null; tplImgs.length = 0; tplDB.del('tpl').catch(() => { }); afterTplChange(); };
+async function loadSavedTpl() { try { const t = await tplDB.get('tpl'); if (t && t.pages) { S.tpl = t; await loadTplImages(); } } catch (e) { } renderTplUI(); }
 
 // ---------- 啟動：還原上次內容 ----------
 $('fontHead').onchange = e => { S.fonts.head = e.target.value; afterFontChange(); };
@@ -1282,7 +1381,7 @@ document.addEventListener('keydown', e => {
     const v = JSON.parse(localStorage.getItem('ppt-web-v1') || 'null');
     const st = JSON.parse(localStorage.getItem('ppt-web-style') || 'null') || (v && v.themeKey ? v : null);
     if (st) { await applyStyle(st); showStyleNote(true); }
-    loadSavedBg(); await loadPhotos();
+    loadSavedBg(); await loadPhotos(); await loadSavedTpl();
     await renderEmptyPreview();
     if (v && v.slides && v.slides.length) {
       const b = document.createElement('button'); b.className = 'btn'; b.textContent = `繼續上次的「${v.fileName}」`;
