@@ -197,6 +197,10 @@ input[type=range]{width:100%;accent-color:var(--ink2);margin:0}
 .tp img{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;outline:1px solid var(--line2)}
 .tp.on img{outline:2px solid var(--accent)}
 .tp span{position:absolute;left:3px;bottom:3px;font-size:10px;background:rgba(0,0,0,.6);color:#fff;padding:0 4px;border-radius:2px}
+.banner{display:flex;gap:16px;align-items:center;justify-content:space-between;padding:12px 16px;margin-bottom:16px;border:1px solid var(--accent);border-radius:6px;background:rgba(255,106,61,.08)}
+.banner b{display:block;font-weight:500;margin-bottom:2px}
+.banner span{font-size:13px;color:var(--ink2)}
+.banner a{color:var(--accent)}
 .chk{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13px}
 .sw{width:28px;height:28px;border-radius:4px;border:1px solid var(--line2);padding:0}
 .sw.sel{outline:2px solid var(--accent);outline-offset:1px}
@@ -242,16 +246,16 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
   <main id="main">
     <div id="drop">
       <div class="intro">
-        <h2>用你挑的模板，把講道文字排成現場版和線上版</h2>
+        <h2>把講道文字檔，排成現場版和線上版</h2>
         <ol class="flow">
-          <li><b>挑模板</b>：到 <a href="https://slidesgo.com/" target="_blank" rel="noopener">Slidesgo</a> 找喜歡的模板，下載 PowerPoint 格式，上傳到這裡。<span id="tplNow"></span>
-            <div class="row" style="margin-top:8px"><button class="btn" id="btnPickTpl">上傳模板</button></div></li>
-          <li><b>上傳講道文字檔</b>：網站會把文字放進模板，現場版 16:9 和線上字條一起排好。
+          <li><b>上傳講道文字檔</b>（只有文字的 pptx）
             <div class="row" style="margin-top:8px"><button class="btn primary" id="btnPick">上傳文字檔</button><button class="btn" id="btnSample">用範例試試</button></div></li>
-          <li><b>微調後匯出</b>：細節自己調一下，匯出 pptx 放進 ProPresenter。</li>
+          <li><b>選模板</b>：上傳後在下一個畫面選。可以到 <a href="https://slidesgo.com/" target="_blank" rel="noopener">Slidesgo</a> 下載喜歡的模板（PowerPoint 格式）。<span id="tplNow"></span>
+            <button class="btn" id="btnPickTpl" hidden>上傳模板</button></li>
+          <li><b>檢查一下，匯出</b>：按右上角「匯出」，把 pptx 放進 ProPresenter。</li>
         </ol>
         <p class="drag">也可以直接把 .pptx 拖進這個頁面</p>
-        <label class="check"><input type="checkbox" id="autoExport"> 上傳後直接匯出給 ProPresenter</label>
+        <label class="check legacy"><input type="checkbox" id="autoExport"> 上傳後直接匯出給 ProPresenter</label>
         <div class="styleNote" id="styleNote" hidden><span id="styleNoteT"></span> <button class="link" id="styleClear">清除</button></div>
         <p class="fine">檔案只在你的瀏覽器裡處理，不會傳到任何地方</p>
       </div>
@@ -261,6 +265,10 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
       </div>
     </div>
     <div id="editor" hidden>
+      <div class="banner" id="tplBanner" hidden>
+        <div><b>下一步：選一個模板</b><span>目前是白底。到 <a href="https://slidesgo.com/" target="_blank" rel="noopener">Slidesgo</a> 下載喜歡的模板（選 PowerPoint 格式），再上傳到這裡，每一頁就會套上模板。</span></div>
+        <button class="btn primary" id="btnBannerTpl">上傳模板</button>
+      </div>
       <div class="views" role="tablist" aria-label="要看哪一種版本">
         <button class="view on" data-v="live" role="tab">
           <span class="mini"><canvas id="miniLive" width="320" height="180"></canvas></span>
@@ -283,7 +291,7 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
     <div id="sideBody" hidden>
       <div class="tabs" role="tablist">
         <button class="on" data-pane="pText" role="tab">文字</button>
-        <button data-pane="pBg" role="tab">背景</button>
+        <button data-pane="pBg" role="tab">模板</button>
         <button data-pane="pLook" role="tab">字型</button>
         <button data-pane="pPos" role="tab">大小位置</button>
       </div>
@@ -410,8 +418,8 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
             <input id="localFilter" type="text" placeholder="搜尋字型名稱" hidden style="margin-top:8px">
             <div class="row" id="localList" style="margin-top:8px"></div>
           </details>
-          <label class="chk"><input type="checkbox" id="optShadow"> 文字加陰影（背景很亂時用，深色字不會加）</label>
-          <label class="chk"><input type="checkbox" id="optBlocks"> 標題與經文用色塊區分</label>
+          <label class="chk legacy"><input type="checkbox" id="optShadow"> 文字加陰影</label>
+          <label class="chk legacy"><input type="checkbox" id="optBlocks"> 標題與經文用色塊區分</label>
           <label class="chk"><input type="checkbox" id="optDash" checked> 經文出處寫成「—— 約11:25」</label>
         </div>
       </div>
@@ -476,7 +484,7 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=53"></script>
+<script src="app.js?v=55"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));

@@ -805,7 +805,7 @@ function renderLocalList() {
 const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, deckScale: S.deckScale, anchor: S.anchor, stripFixed: S.stripFixed, stripGap: S.stripGap, stripScale: S.stripScale, shadow: S.shadow, blocks: S.blocks, dashRef: S.dashRef, autoVary: S.autoVary, bgAll: S.bgAll, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
 async function applyStyle(v) {
   if (!v) return;
-  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: !!v.autoExport, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: v.anchor || 'middle', stripFixed: !!v.stripFixed, stripGap: v.stripGap || null, stripScale: v.stripScale || 1, shadow: !!v.shadow, blocks: !!v.blocks, dashRef: v.dashRef !== false, autoVary: v.autoVary !== false, bgAll: v.bgAll || null });
+  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: false, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: v.anchor || 'middle', stripFixed: !!v.stripFixed, stripGap: v.stripGap || null, stripScale: v.stripScale || 1, shadow: false, blocks: false, dashRef: v.dashRef !== false, autoVary: v.autoVary !== false, bgAll: v.bgAll || null });
   if (v.fonts) S.fonts = v.fonts;
   for (const f of (v.localFonts || [])) await registerLocal(f.name, f.fam);
   $('optShadow').checked = !!S.shadow; $('optDash').checked = S.dashRef !== false; $('optBlocks').checked = !!S.blocks;
@@ -1261,7 +1261,7 @@ function drawTplSlide(cv, slide, idx, noText) {
 }
 async function loadTplImages() { tplImgs.length = 0; if (!S.tpl) return; await Promise.all(S.tpl.pages.map((p, i) => new Promise(r => { const im = new Image(); im.onload = () => { tplImgs[i] = im; r(); }; im.onerror = r; im.src = p.img; }))); }
 function renderTplUI() {
-  const has = !!S.tpl; $('tplBox').hidden = !has; $('tplNow').textContent = has ? `目前的模板：${S.tpl.name}` : '';
+  const has = !!S.tpl; $('tplBox').hidden = !has; $('tplNow').textContent = has ? `已經有模板：${S.tpl.name}（會自動套用）` : ''; $('tplBanner').hidden = has;
   $('btnPickTpl').textContent = has ? '換一個模板' : '上傳模板'; $('btnTpl').textContent = has ? '換一個模板…' : '上傳模板 pptx…';
   $('tplHint').textContent = S.bgScope === 'slide' && S.slides[S.sel] ? `點縮圖，第 ${S.sel + 1} 頁就改用那一頁模板（橘框是目前用的）。` : '橘框的頁面會輪流當背景，點縮圖可以選用或不用。';
   if (!has) return;
@@ -1275,7 +1275,7 @@ function renderTplUI() {
   });
 }
 function afterTplChange() { _tplPlan.sig = ''; bgCache.clear(); _scCache.clear(); renderTplUI(); syncSlideBgUI(); if (!S.slides.length) renderEmptyPreview(); buildList(); renderMain(); tplDB.set('tpl', S.tpl).catch(() => toast('模板太大，瀏覽器存不下；重新整理後要重新上傳')); }
-$('btnTpl').onclick = $('btnPickTpl').onclick = () => $('tplFile').click();
+$('btnTpl').onclick = $('btnPickTpl').onclick = $('btnBannerTpl').onclick = () => $('tplFile').click();
 $('tplFile').onchange = async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
   try {
