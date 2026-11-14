@@ -1070,7 +1070,7 @@ $('stripW').oninput = () => { setStripW($('stripW').value / 100); };
 $('stripW').onchange = () => buildList();
 const expFail = e => { console.error(e); $('prog').style.display = 'none'; toast('匯出失敗：' + e.message); };
 function closeExp() { $('expMenu').hidden = true; $('btnExport').setAttribute('aria-expanded', 'false'); }
-$('btnExport').onclick = e => { e.stopPropagation(); const m = $('expMenu'); m.hidden = !m.hidden; $('btnExport').setAttribute('aria-expanded', String(!m.hidden)); };
+$('btnExport').onclick = () => exportAll('pptx').catch(expFail);   // 一個按鈕：現場版、線上版各一個 pptx
 document.addEventListener('click', e => { if (!$('expMenu').hidden && !e.target.closest('.expwrap')) closeExp(); });
 document.querySelectorAll('#expMenu button').forEach(b => b.onclick = () => {
   closeExp(); const f = b.dataset.f;

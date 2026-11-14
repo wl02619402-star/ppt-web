@@ -231,7 +231,7 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
   <span class="sp"></span>
   <button class="btn" id="btnOpen">上傳文字檔</button>
   <div class="expwrap">
-    <button class="btn primary" id="btnExport" aria-haspopup="menu" aria-expanded="false">匯出 <span aria-hidden="true">▾</span></button>
+    <button class="btn primary" id="btnExport" title="下載兩個 pptx：現場版、線上版，可以直接放進 ProPresenter">匯出 pptx</button>
     <div class="menu" id="expMenu" role="menu" hidden>
       <button role="menuitem" data-f="image"><b>給 ProPresenter</b><span>現場版、線上版各一個 pptx，畫面跟預覽一樣</span></button>
       <button role="menuitem" data-f="text"><b>可以改字的 pptx</b><span>之後還能在 PowerPoint 或 Keynote 裡改字，要裝同樣的字型</span></button>
@@ -252,7 +252,7 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
             <div class="row" style="margin-top:8px"><button class="btn primary" id="btnPick">上傳文字檔</button><button class="btn" id="btnSample">用範例試試</button></div></li>
           <li><b>選模板</b>：上傳後在下一個畫面選。可以到 <a href="https://slidesgo.com/" target="_blank" rel="noopener">Slidesgo</a> 下載喜歡的模板（PowerPoint 格式）。<span id="tplNow"></span>
             <button class="btn" id="btnPickTpl" hidden>上傳模板</button></li>
-          <li><b>檢查一下，匯出</b>：按右上角「匯出」，把 pptx 放進 ProPresenter。</li>
+          <li><b>檢查一下，匯出</b>：按右上角「匯出 pptx」，會下載現場版、線上版兩個檔案，放進 ProPresenter。</li>
         </ol>
         <p class="drag">也可以直接把 .pptx 拖進這個頁面</p>
         <label class="check legacy"><input type="checkbox" id="autoExport"> 上傳後直接匯出給 ProPresenter</label>
@@ -484,7 +484,7 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=55"></script>
+<script src="app.js?v=56"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
