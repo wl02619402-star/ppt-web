@@ -152,10 +152,17 @@ function layout(paras, size, maxW, o) {
     const wt = head ? 700 : 500;
     const scr = !head && isScripture(runs);
     const base = fnt(wt, fs, head, false, scr), redf = fnt(700, fs, head, true, scr);
-    const flat = [];
-    runs.forEach(r => tokenize(r.t.replace(/[\n\v]/g, ' ')).forEach(tk => flat.push({ t: tk, red: r.red })));
+    const flat = []; let pos = 0;
+    runs.forEach(r => {
+      r.t.replace(/[\n\v]/g, ' ').split('↵').forEach((pc, k) => {
+        if (k > 0) { flat.push({ brk: true, t: '', red: r.red }); pos += 1; }
+        let po = pos; tokenize(pc).forEach(tk => { flat.push({ t: tk, red: r.red, o: po }); po += tk.length; });
+        pos += pc.length;
+      });
+    });
     let cur = [], cw = 0;
     for (const tk of flat) {
+      if (tk.brk) { if (cur.length) { lines.push({ pi, segs: cur, size: fs, head, scr, w: cw }); cur = []; cw = 0; } continue; }
       const w = tw(tk.red ? redf : base, tk.t);
       if (cur.length && cw + w > maxW && !NO_START.has(tk.t)) {
         const carry = [];
@@ -337,6 +344,28 @@ function stripPages(slide) {
   if (cur.length) pages.push(cur);
   return { pages, o, cardW: wide };
 }
+// 線上版字條：跟現場版同一套設計（同樣的紙紋／底圖、配色、裝飾），不再是另一種風格的白卡片
+const _scCache = new Map();
+function stripCard(T, cw, h) {
+  const key = [T.key, cw, h, S.custom ? S.custom.src.length : '', dimOf(), S.bgAll ? S.bgAll.c : ''].join('|');
+  if (_scCache.has(key)) return _scCache.get(key);
+  const sc = 2, c = mk(cw * sc, h * sc), x = c.getContext('2d'); x.scale(sc, sc);
+  x.save(); rrect(x, 0, 0, cw, h, T.P ? 4 : T.card.radius); x.clip();
+  if (T.P) {
+    const tmp = mk(W, H), tx = tmp.getContext('2d'), seed = T.P.k.length * 131 + T.P.n.length * 17;
+    paperBase(tx, T.P, seed); tornStrip(tx, T.P, 'top', 22, seed + 8); tornStrip(tx, T.P, 'bottom', 26, seed + 9);
+    const top = Math.ceil(h / 2), bot = h - top;
+    x.drawImage(tmp, 0, 0, cw, top, 0, 0, cw, top); x.drawImage(tmp, 0, H - bot, cw, bot, 0, top, cw, bot);
+  } else {
+    const bg = getBg('plain', 0), sx = Math.max(0, (W - cw) / 2), sy = Math.max(0, Math.min(H - h, (H - h) / 2));
+    x.drawImage(bg, sx, sy, Math.min(cw, W), h, 0, 0, Math.min(cw, W), h);
+    x.globalAlpha = T.dark ? .55 : .5; x.fillStyle = T.card.fill; x.fillRect(0, 0, cw, h); x.globalAlpha = 1;
+  }
+  x.restore();
+  const T2 = Object.assign({}, T, { card: Object.assign({}, T.card, { alpha: 0, grain: false }) });
+  x.drawImage(drawCard(T2, cw, h, 1), 0, 0, cw, h);
+  if (_scCache.size > 40) _scCache.clear(); _scCache.set(key, c); return c;
+}
 function drawStrip(cv, slide, page, noText) {
   const T = curTheme(), c = cv.getContext('2d');
   c.clearRect(0, 0, W, H);
@@ -345,7 +374,7 @@ function drawStrip(cv, slide, page, noText) {
   page = Math.min(page, pages.length - 1);
   const lines = pages[page], h = Math.round(blockH(lines, o) + STRIP.padT + STRIP.padB);
   const x0 = Math.max(0, Math.min(W - cardW, Math.round((W - cardW) / 2) + S.stripX)), y0 = Math.max(0, H - h - S.stripY);
-  const card = drawCard(T, cardW, h, 1);
+  const card = stripCard(T, cardW, h);
   c.save(); c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 24; c.shadowOffsetY = 8;
   c.drawImage(card, x0, y0, cardW, h); c.restore();
   if (!noText) drawLines(c, lines, x0 + STRIP.padL, y0 + STRIP.padT, o, T);
@@ -441,7 +470,7 @@ async function ensureFonts() {
 const thumbCv = new Map();
 function renderMain() {
   const sl = S.slides[S.sel]; if (!sl) return;
-  const r = drawLive($('cvLive'), sl, S.sel);
+  const r = drawLive($('cvLive'), sl, S.sel); S.liveGeo = r.geo;
   $('capLive').textContent = S.view === 'live' && r.shrunk ? '字多，已自動縮小' : '';
   const n = drawStrip($('cvStrip'), sl, S.page);
   $('miniLive').getContext('2d').drawImage($('cvLive'), 0, 0, 320, 180); const mc = $('miniStrip').getContext('2d'); mc.clearRect(0, 0, 320, 180); mc.drawImage($('cvStrip'), 0, 0, 320, 180);
@@ -482,8 +511,8 @@ function select(i) {
   const th = document.querySelectorAll('.thumb')[i]; if (th) th.scrollIntoView({ block: 'nearest' });
 }
 const VIEW_HINT = {
-  live: '現場版：投在教會大螢幕的整頁畫面。可以在畫面上拖曳文字。',
-  strip: '線上版：直播時疊在影像上，背景透明，只有一條字幕。可以在畫面上拖曳字幕條。',
+  live: '現場版：投在教會大螢幕的整頁畫面。點一下文字就能在那裡換行（再點一次取消），拖曳可以移動文字。',
+  strip: '線上版：直播時疊在影像上，背景透明，只有一條字幕。點一下文字就能在那裡換行，拖曳可以移動字幕條。',
 };
 function setView(v) {
   S.view = v;
@@ -914,17 +943,68 @@ $('lvReset').onclick = () => {
   if (S.liveScope === 'slide') delete S.slides[S.sel].lv; else { S.live = {}; S.slides.forEach(s => delete s.lv); }
   syncLiveUI(); redrawSoon();
 };
-function attachDrag(cv, get, set) {
+function attachDrag(cv, get, set, hit) {
   let drag = null; cv.style.touchAction = 'none';
-  cv.addEventListener('pointerdown', e => { if (!S.slides[S.sel]) return; drag = { x: e.clientX, y: e.clientY, s: get(), k: W / cv.getBoundingClientRect().width }; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; });
-  cv.addEventListener('pointermove', e => { if (drag) set(drag.s, (e.clientX - drag.x) * drag.k, (e.clientY - drag.y) * drag.k); });
-  const end = () => { drag = null; cv.style.cursor = 'grab'; }; cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+  const frame = cv.parentElement, guide = document.createElement('div'); guide.className = 'bkg'; guide.hidden = true; frame.appendChild(guide);
+  const toCv = e => { const r = cv.getBoundingClientRect(), k = W / r.width; return [(e.clientX - r.left) * k, (e.clientY - r.top) * k]; };
+  const hideGuide = () => { guide.hidden = true; cv.style.cursor = 'grab'; };
+  cv.addEventListener('pointerdown', e => { if (!S.slides[S.sel]) return; drag = { x: e.clientX, y: e.clientY, s: get(), k: W / cv.getBoundingClientRect().width, moved: false, t: Date.now() }; cv.setPointerCapture(e.pointerId); hideGuide(); });
+  cv.addEventListener('pointermove', e => {
+    if (drag) { if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 5) drag.moved = true; if (drag.moved) { cv.style.cursor = 'grabbing'; set(drag.s, (e.clientX - drag.x) * drag.k, (e.clientY - drag.y) * drag.k); } return; }
+    const h = hit && hit(...toCv(e));
+    if (!h) return hideGuide();
+    guide.hidden = false; guide.classList.toggle('rm', !!h.removing); cv.style.cursor = 'text';
+    Object.assign(guide.style, { left: (h.x / W * 100) + '%', top: (h.y / H * 100) + '%', height: (h.h / H * 100) + '%' });
+    cv.title = h.removing ? '點一下：取消這裡的換行' : '點一下：在這裡換行';
+  });
+  cv.addEventListener('pointerleave', () => { if (!drag) hideGuide(); });
+  const end = e => {
+    if (drag && !drag.moved && Date.now() - drag.t < 600 && hit && e.type === 'pointerup') { const h = hit(...toCv(e)); if (h) toggleBreak(h.pi, h.off); }
+    drag = null; cv.style.cursor = 'grab';
+  };
+  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
 }
-const snap4 = v => Math.round(v / 4) * 4, clampN = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+// ---------- 點畫面換行：在文字裡插入（或移除）一個「↵」，現場版、線上版、輸出都會照辦 ----------
+function hitBreak(geo, cx, cy, align, gx, boxW) {
+  const sl = S.slides[S.sel]; if (!sl || !geo || !geo.lines || !geo.lines.length) return null;
+  let y = geo.y, best = null;
+  geo.lines.forEach((l, i) => {
+    const d = Math.abs(cy - (y + l.h / 2));
+    if (d <= l.h * .75 && (!best || d < best.d)) best = { l, y, d };
+    y += l.h; if (geo.lines[i + 1] && geo.lines[i + 1].pi !== l.pi) y += l.size * geo.o.paraGap;
+  });
+  if (!best) return null;
+  const l = best.l, wt = l.head ? 700 : 500, base = fnt(wt, l.size, l.head, false, l.scr), redf = fnt(700, l.size, l.head, true, l.scr);
+  let px = align === 'center' ? gx + (boxW - l.w) / 2 : align === 'right' ? gx + boxW - l.w : gx;
+  const para = ptext(sl.paras[l.pi]), cands = [];
+  l.segs.forEach((sg, si) => {
+    const f = sg.red ? redf : base;
+    for (let k = 0; k < sg.t.length; k++) {
+      const off = sg.o + k, removing = para[off - 1] === '↵', first = si === 0 && k === 0;
+      if (first && !removing) continue;
+      cands.push({ x: px + tw(f, sg.t.slice(0, k)), off, removing });
+    }
+    px += tw(f, sg.t);
+  });
+  if (!cands.length) return null;
+  const c = cands.reduce((a, b) => Math.abs(b.x - cx) < Math.abs(a.x - cx) ? b : a);
+  return { pi: l.pi, off: c.off, removing: c.removing, x: c.x, y: best.y, h: l.h };
+}
+function toggleBreak(pi, off) {
+  const sl = S.slides[S.sel], runs = sl.paras[pi]; if (!runs) return;
+  const ch = []; runs.forEach(r => { for (let i = 0; i < r.t.length; i++) ch.push({ c: r.t[i], red: r.red }); });
+  if (off > 0 && ch[off - 1] && ch[off - 1].c === '↵') ch.splice(off - 1, 1); else ch.splice(off, 0, { c: '↵', red: false });
+  const out = []; ch.forEach(x => { const last = out[out.length - 1]; if (last && last.red === x.red) last.t += x.c; else out.push({ t: x.c, red: x.red }); });
+  sl.paras[pi] = out.length ? out : [{ t: ' ', red: false }];
+  $('txt').value = sl.paras.map(paraToStr).join('\n');
+  _deck.sig = ''; wcache.clear(); renderMain(); renderThumb(S.sel); save();
+}
 attachDrag($('cvLive'), () => { const vv = autoVariant(S.slides[S.sel], S.sel), L = liveCfg(S.slides[S.sel], vv === 'title', vv); return { dx: L.dx, dy: L.dy }; },
-  (s, mx, my) => { editLive('dx', clampN(snap4(s.dx + mx), -900, 900)); editLive('dy', clampN(snap4(s.dy + my), -600, 600)); });
+  (s, mx, my) => { editLive('dx', clampN(snap4(s.dx + mx), -900, 900)); editLive('dy', clampN(snap4(s.dy + my), -600, 600)); },
+  (cx, cy) => { const g = S.liveGeo; return g && hitBreak(g, cx, cy, g.align, g.x, g.maxW); });
 attachDrag($('cvStrip'), () => ({ x: S.stripX, y: S.stripY }),
-  (s, mx, my) => { S.stripX = clampN(snap4(s.x + mx), -700, 700); S.stripY = clampN(snap4(s.y - my), 0, 700); syncOut(); redrawSoon(); });
+  (s, mx, my) => { S.stripX = clampN(snap4(s.x + mx), -700, 700); S.stripY = clampN(snap4(s.y - my), 0, 700); syncOut(); redrawSoon(); },
+  (cx, cy) => { const g = drawStrip.geo; return g && g.lines && hitBreak(g, cx, cy, 'left', g.x, g.w); });
 $('stripX').oninput = () => { S.stripX = +$('stripX').value; syncOut(); redrawSoon(); };
 $('stripReset').onclick = () => { S.stripX = 0; S.stripY = 64; S.stripW = .81; $('stripY').value = 64; $('stripW').value = 81; S.page = 0; syncOut(); redrawSoon(); };
 document.querySelectorAll('.view').forEach(b => b.onclick = () => setView(b.dataset.v));

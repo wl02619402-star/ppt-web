@@ -152,7 +152,7 @@ function tornBg(c, P, kind) {
   const rest = Object.entries(THEMES); rest.forEach(([k]) => delete THEMES[k]);
   TORN.forEach(P => {
     THEMES['torn_' + P.k] = {
-      name: '撕邊紙・' + P.n, text: P.text, red: '#B3261E', accent: P.acc, dark: false, hue: P.hue, ownVariants: true,
+      P, name: '撕邊紙・' + P.n, text: P.text, red: '#B3261E', accent: P.acc, dark: false, hue: P.hue, ownVariants: true,
       card: { fill: P.card, alpha: .97, radius: 10, grain: false, deco: 'leftbar' },
       bg(c, kind) { tornBg(c, P, kind); }
     };
