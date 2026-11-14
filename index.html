@@ -439,6 +439,17 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 .pane:not([hidden]){animation:fadein .18s var(--ease)}
 @keyframes fadein{from{opacity:0}to{opacity:1}}
 .view,.thumb canvas,.tp img{transition:border-color .15s var(--ease),outline-color .15s var(--ease),background-color .15s var(--ease)}
+
+/* 圖片選取框 */
+.picsel{position:absolute;z-index:3;border:1.5px solid var(--accent);cursor:move;touch-action:none}
+.picsel i{position:absolute;width:12px;height:12px;background:#fff;border:1.5px solid var(--accent);border-radius:3px}
+.picsel i[data-h=nw]{left:-7px;top:-7px;cursor:nwse-resize}
+.picsel i[data-h=ne]{right:-7px;top:-7px;cursor:nesw-resize}
+.picsel i[data-h=sw]{left:-7px;bottom:-7px;cursor:nesw-resize}
+.picsel i[data-h=se]{right:-7px;bottom:-7px;cursor:nwse-resize}
+.picdel{position:absolute;right:0;top:-38px;height:28px;padding:0 10px;border:1px solid var(--line2);border-radius:8px;background:var(--panel);color:var(--ink);font-size:12px;display:none}
+.picsel.pinned .picdel{display:block}
+@media (pointer:coarse){.picsel i{width:20px;height:20px}.picsel i[data-h=nw],.picsel i[data-h=sw]{left:-11px}.picsel i[data-h=ne],.picsel i[data-h=se]{right:-11px}.picsel i[data-h=nw],.picsel i[data-h=ne]{top:-11px}.picsel i[data-h=sw],.picsel i[data-h=se]{bottom:-11px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 @media (max-width:1100px){
   #app{grid-template-columns:1fr;height:auto}
@@ -705,7 +716,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=64"></script>
+<script src="app.js?v=66"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));

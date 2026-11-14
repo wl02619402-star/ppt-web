@@ -634,7 +634,7 @@ function buildList() {
   let i = 0; const step = () => { if (i < S.slides.length) { renderThumb(i++); setTimeout(step, 0); } }; step();
 }
 function select(i) {
-  S.sel = i; S.page = 0;
+  S.sel = i; S.page = 0; if (typeof picSel !== 'undefined') { picSel.hidden = true; picPinned = false; }
   document.querySelectorAll('.thumb').forEach((d, k) => d.classList.toggle('sel', k === i));
   const sl = S.slides[i];
   edRender();
@@ -642,11 +642,11 @@ function select(i) {
   const th = document.querySelectorAll('.thumb')[i]; if (th) th.scrollIntoView({ block: 'nearest' });
 }
 const VIEW_HINT = {
-  live: '拖曳文字可以移動位置',
+  live: '拖曳文字可以移動位置；點圖片可以移動，拉四個角可以縮放',
   strip: '背景透明，直播時疊在畫面上；拖曳字條移動，拖兩端調長度',
 };
 function setView(v) {
-  S.view = v;
+  S.view = v; if (typeof picSel !== 'undefined') { picSel.hidden = true; picPinned = false; }
   document.querySelectorAll('.view').forEach(b => b.classList.toggle('on', b.dataset.v === v));
   $('frameLive').hidden = v !== 'live'; $('frameStrip').hidden = v !== 'strip';
   $('posLive').hidden = v !== 'live'; $('posStrip').hidden = v !== 'strip';
@@ -1316,6 +1316,46 @@ $('tplRemove').onclick = () => { S.tpl = null; tplImgs.length = 0; tplDB.del('tp
 async function loadSavedTpl() { try { const t = await tplDB.get('tpl'); if (t && t.pages) { S.tpl = t; await loadTplImages(); } } catch (e) { } renderTplUI(); }
 
 
+// ---------- 圖片：直接在畫面上選取，拖曳移動、拉四個角縮放（像 PowerPoint） ----------
+const picSel = document.createElement('div'); picSel.className = 'picsel'; picSel.hidden = true;
+picSel.innerHTML = '<i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i><button class="picdel" type="button">移除圖片</button>';
+$('frameLive').appendChild(picSel);
+let selPic = -1, picPinned = false;
+function placePicSel(i) {
+  const sl = S.slides[S.sel], p = sl && sl.pics && sl.pics[i];
+  if (!p || S.view !== 'live') { picSel.hidden = true; selPic = -1; picPinned = false; return; }
+  selPic = i; Object.assign(picSel.style, { left: p.x * 100 + '%', top: p.y * 100 + '%', width: p.w * 100 + '%', height: p.h * 100 + '%' }); picSel.hidden = false;
+}
+function picAt(cx, cy) { const ps = (S.slides[S.sel] || {}).pics || []; for (let i = ps.length - 1; i >= 0; i--) { const p = ps[i]; if (cx >= p.x * W && cx <= (p.x + p.w) * W && cy >= p.y * H && cy <= (p.y + p.h) * H) return i; } return -1; }
+const cvL = $('cvLive'), toCvL = e => { const r = cvL.getBoundingClientRect(), k = W / r.width; return [(e.clientX - r.left) * k, (e.clientY - r.top) * k]; };
+cvL.addEventListener('pointermove', e => { if (picPinned || e.buttons) return; const i = picAt(...toCvL(e)); if (i >= 0) placePicSel(i); });
+cvL.addEventListener('pointerdown', () => { if (picPinned) { picPinned = false; picSel.hidden = true; picSel.classList.remove('pinned'); } });
+picSel.addEventListener('pointerleave', () => { if (!picPinned) picSel.hidden = true; });
+picSel.addEventListener('pointerdown', e => {
+  if (e.target.classList.contains('picdel')) return;
+  e.preventDefault(); e.stopPropagation();
+  const h = e.target.dataset.h || 'move', sl = S.slides[S.sel], p = sl && sl.pics && sl.pics[selPic]; if (!p) return;
+  picPinned = true; picSel.classList.add('pinned');
+  const o = Object.assign({}, p), k = W / cvL.getBoundingClientRect().width, sx = e.clientX, sy = e.clientY;
+  try { picSel.setPointerCapture(e.pointerId); } catch (err) { }
+  const mv = ev => {
+    const dx = (ev.clientX - sx) * k / W, dy = (ev.clientY - sy) * k / H;
+    if (h === 'move') { p.x = clampN(o.x + dx, -o.w + .05, .95); p.y = clampN(o.y + dy, -o.h + .05, .95); }
+    else {
+      const sgn = h.includes('e') ? 1 : -1, nw = Math.max(.06, o.w + sgn * dx), nh = nw * o.h / o.w;
+      p.w = nw; p.h = nh; if (h.includes('w')) p.x = o.x + (o.w - nw); if (h.includes('n')) p.y = o.y + (o.h - nh);
+    }
+    placePicSel(selPic); _deck.sig = ''; redrawSoon();
+  };
+  const up = () => { picSel.removeEventListener('pointermove', mv); picSel.removeEventListener('pointerup', up); renderThumb(S.sel); save(); };
+  picSel.addEventListener('pointermove', mv); picSel.addEventListener('pointerup', up);
+});
+picSel.querySelector('.picdel').onclick = () => {
+  const sl = S.slides[S.sel]; if (!sl || !sl.pics || selPic < 0) return;
+  sl.pics.splice(selPic, 1); if (!sl.pics.length) delete sl.pics; picPinned = false; picSel.hidden = true;
+  _deck.sig = ''; renderMain(); renderThumb(S.sel); save(); toast('已移除這張圖片');
+};
+
 // ---------- 線條圖示（同一套、同一粗細） ----------
 const ICON = {
   upload: '<path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>',
@@ -1417,7 +1457,7 @@ function attachDrag(cv, get, set, hit, pick) {
   cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
 }
 attachDrag($('cvLive'), () => { const vv = autoVariant(S.slides[S.sel], S.sel), L = liveCfg(S.slides[S.sel], vv === 'title', vv); return { dx: L.dx, dy: L.dy }; },
-  (s, mx, my) => { editLive('dx', clampN(snap4(s.dx + mx), -900, 900)); editLive('dy', clampN(snap4(s.dy + my), -600, 600)); }, null, pickPic);
+  (s, mx, my) => { editLive('dx', clampN(snap4(s.dx + mx), -900, 900)); editLive('dy', clampN(snap4(s.dy + my), -600, 600)); }, null, null);
 attachDrag($('cvStrip'), () => ({ x: S.stripX, y: S.stripY }),
   (s, mx, my) => { S.stripX = clampN(snap4(s.x + mx), -700, 700); S.stripY = clampN(snap4(s.y - my), 0, 700); syncOut(); redrawSoon(); }, null, pickStripEdge);
 $('stripX').oninput = () => { S.stripX = +$('stripX').value; syncOut(); redrawSoon(); };
