@@ -183,7 +183,7 @@ function layout(paras, size, maxW, o) {
   // o: {headRule, headScale, lineGap, paraGap}
   const lines = [];
   paras.forEach((runs, pi) => {
-    const head = o.headRule(pi, paras);
+    const ex = runs[0] && runs[0].ps, head = ex ? ex === 'h' : o.headRule(pi, paras);   // 使用者指定的「標題／內文」優先
     const fs = head ? Math.round(size * o.headScale) : size;
     const wt = head ? 700 : 500;
     const scr = !head && isScripture(runs);
@@ -219,9 +219,11 @@ function layout(paras, size, maxW, o) {
   lines.forEach(l => { l.h = l.size * o.lineGap; });
   return lines;
 }
+// 段落間距：兩段標題連在一起時只留小間距，看起來像同一個標題換行
+const pgap = (l, nx, o) => (l.head && nx.head) ? l.size * .08 : l.size * o.paraGap;
 function blockH(lines, o) {
   let h = 0;
-  lines.forEach((l, i) => { h += l.h; if (lines[i + 1] && lines[i + 1].pi !== l.pi) h += l.size * o.paraGap; });
+  lines.forEach((l, i) => { h += l.h; if (lines[i + 1] && lines[i + 1].pi !== l.pi) h += pgap(l, lines[i + 1], o); });
   return h;
 }
 function runColor(s, T) { if (!s.red) return T.text; if (!s.c || s.c === 'red') return T.red; if (s.c === 'accent') return T.accent; return s.c; }
@@ -238,7 +240,7 @@ function drawLines(c, lines, x, y, o, T, align = 'left', boxW = 0) {
       c.fillText(s.t, px, cy); if (shadowOn) { c.shadowColor = 'transparent'; c.shadowBlur = 0; c.shadowOffsetY = 0; }
       px += tw(s.red ? redf : base, s.t);
     });
-    y += l.h; if (lines[i + 1] && lines[i + 1].pi !== l.pi) y += l.size * o.paraGap;
+    y += l.h; if (lines[i + 1] && lines[i + 1].pi !== l.pi) y += pgap(l, lines[i + 1], o);
   });
 }
 const plain = p => p.map(r => r.t).join('');
@@ -277,7 +279,7 @@ function picSafe(slide, sf) {
 }
 function stripLead(runs, n) {
   const out = []; let left = n;
-  for (const r of runs) { if (left >= r.t.length) { left -= r.t.length; continue; } out.push({ t: r.t.slice(left), red: r.red, c: r.c }); left = 0; }
+  for (const r of runs) { if (left >= r.t.length) { left -= r.t.length; continue; } out.push({ t: r.t.slice(left), red: r.red, c: r.c, ps: r.ps }); left = 0; }
   return out.length ? out : [{ t: ' ', red: false }];
 }
 // 整份簡報的統一字級：每頁各自算出「放得下的最大字級」，取中位數，讓相鄰頁面字級一致；太長的頁面才個別縮小
@@ -901,7 +903,7 @@ function textGroups(lines, y, o) {
   lines.forEach((l, i) => {
     if (!cur || cur.pi !== l.pi) { cur = { pi: l.pi, y, size: l.size, head: l.head, scr: l.scr, lines: [], h: 0 }; gs.push(cur); }
     cur.lines.push(l); cur.h += l.h; y += l.h;
-    if (lines[i + 1] && lines[i + 1].pi !== l.pi) y += l.size * o.paraGap;
+    if (lines[i + 1] && lines[i + 1].pi !== l.pi) y += pgap(l, lines[i + 1], o);
   });
   return gs;
 }
@@ -985,9 +987,11 @@ function edColor(c, T) {
 function mixHex(a, b, k) { const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)), A = p(a), B = p(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * k).toString(16).padStart(2, '0')).join(''); }
 function edRender() {
   const sl = S.slides[S.sel]; if (!sl) return; const T = curTheme(sl);
-  ed.innerHTML = sl.paras.map(p => {
+  const v = autoVariant(sl, S.sel), hr = liveOpts(v === 'title', v, sl).headRule;
+  ed.innerHTML = sl.paras.map((p, pi) => {
+    const isH = p[0] && p[0].ps ? p[0].ps === 'h' : hr(pi, sl.paras);
     const h = p.map(r => { const t = escH(r.t).replace(/↵/g, '\n'); return r.red ? `<span data-c="${r.c || 'red'}" style="color:${edColor(r.c, T)}">${t}</span>` : t; }).join('');
-    return '<div>' + (h.trim() ? h : '<br>') + '</div>';
+    return `<div${isH ? ' data-ps="h"' : ''}>` + (h.trim() ? h : '<br>') + '</div>';
   }).join('');
   $('accSw').style.background = curTheme(sl).accent;
 }
@@ -1010,7 +1014,7 @@ function edParse() {
     const block = /^(DIV|P|LI|H\d)$/.test(n.nodeName), cc = n.dataset && 'c' in n.dataset ? (n.dataset.c || null) : c;
     if (block) flush();
     n.childNodes.forEach(k => walk(k, cc));
-    if (block) flush();
+    if (block) { if (cur.length) cur[0].ps = n.dataset.ps === 'h' ? 'h' : 'b'; flush(); }
   };
   ed.childNodes.forEach(n => walk(n, null)); flush();
   return paras;
@@ -1030,7 +1034,7 @@ function colorText(c) {
       ch.push(on ? { x, red: !!c, c: c && c !== 'red' ? c : undefined } : { x, red: run.red, c: run.c });
     } });
     const runs = []; ch.forEach(k => { const l = runs[runs.length - 1]; if (l && l.red === k.red && l.c === k.c) l.t += k.x; else runs.push(k.c ? { t: k.x, red: k.red, c: k.c } : { t: k.x, red: k.red }); });
-    if (runs.length) out.push(runs);
+    if (runs.length) { if (p[0] && p[0].ps) runs[0].ps = p[0].ps; out.push(runs); }
   });
   const sl = S.slides[S.sel]; sl.paras = out.length ? out : [[{ t: ' ', red: false }]];
   edRender(); edSelect(sel); redrawSoon();
@@ -1057,6 +1061,17 @@ ed.addEventListener('paste', e => {
 });
 document.querySelectorAll('#colorBar [data-c]').forEach(b => { b.onmousedown = e => e.preventDefault(); b.onclick = () => colorText(b.dataset.c || null); });
 $('pickColor').onchange = () => colorText($('pickColor').value.toUpperCase());
+// 段落樣式：把游標所在（或選取到）的段落設成標題或內文
+function setParaStyle(ps) {
+  const s = getSelection(); let r = s.rangeCount && ed.contains(s.anchorNode) ? s.getRangeAt(0) : edRange;
+  if (!r || !ed.contains(r.startContainer)) { toast('先在文字框裡點一下要改的那一段'); return; }
+  const top = n => { while (n && n.parentNode !== ed) n = n.parentNode; return n; };
+  const a = top(r.startContainer), b = top(r.endContainer); if (!a) return;
+  const kids = [...ed.children]; let on = false;
+  kids.forEach(d => { if (d === a) on = true; if (on) { if (ps === 'h') d.dataset.ps = 'h'; else delete d.dataset.ps; } if (d === (b || a)) on = false; });
+  ed.dispatchEvent(new Event('input'));
+}
+document.querySelectorAll('#colorBar [data-ps]').forEach(b => { b.onmousedown = e => e.preventDefault(); b.onclick = () => setParaStyle(b.dataset.ps); });
 $('btnAdd').onclick = () => { S.slides.splice(S.sel + 1, 0, { paras: [[{ t: '新的一頁', red: false }]], fs: 1, sfs: 1 }); buildList(); select(S.sel + 1); save(); };
 $('btnDup').onclick = () => { S.slides.splice(S.sel + 1, 0, JSON.parse(JSON.stringify(S.slides[S.sel]))); buildList(); select(S.sel + 1); save(); };
 $('btnDel').onclick = () => {
@@ -1242,7 +1257,9 @@ function drawTplSlide(cv, slide, idx, noText) {
     return { x: r.x, y: r.y, w: Math.max(r.w, w), h: Math.max(r.h, h), align: r.align, anchor: r.anchor, lum: r.lum };
   };
   const paras = slide.paras, ps = paras.map(ptext);
-  const headBody = paras.length > 1 && ps[0].trim().length <= 30;
+  let nh = 0; while (nh < paras.length - 1 && paras[nh][0] && paras[nh][0].ps === 'h') nh++;
+  const hp = paras.slice(0, Math.max(1, nh)), rest = paras.slice(Math.max(1, nh));
+  const headBody = paras.length > 1 && (nh > 0 || ps[0].trim().length <= 30);
   let tR = pad(pg.title), bR = pad(pg.body);
   if (!tR && !bR) tR = { x: 160, y: 140, w: W - 320, h: H - 280, align: 'center', anchor: 'middle', lum: pg.lum };
   const scale = S.deckScale * (slide.fs || 1), gap = gapOf(slide), parts = [];
@@ -1254,8 +1271,8 @@ function drawTplSlide(cv, slide, idx, noText) {
     const align = L.align || (f.lines.length > 2 && paras.length > 1 && r.align === 'center' && pp.length > 1 ? 'left' : r.align);
     parts.push({ capped: f.size < Math.round(maxS * scale), lines: f.lines, x: r.x, y: Math.max(40, y), o, w: r.w, align, T: Object.assign({}, curTheme(slide), colorFor(r)), size: f.size });
   };
-  if (headBody && tR && bR) { place([paras[0]], tR, false, idx === 0 ? 110 : 90); place(paras.slice(1), bR, false, 80); }
-  else if (idx === 0 && tR) { place([paras[0]], tR, false, 110); if (paras.length > 1) place(paras.slice(1), bR || grow({ x: tR.x, y: tR.y + tR.h + 20, w: tR.w, h: 200, align: tR.align, anchor: 'top', lum: tR.lum }), false, 60); }
+  if (headBody && tR && bR) { place(hp, tR, false, idx === 0 ? 110 : 90); place(rest, bR, false, 80); }
+  else if (idx === 0 && tR) { place(hp, tR, false, 110); if (rest.length) place(rest, bR || grow({ x: tR.x, y: tR.y + tR.h + 20, w: tR.w, h: 200, align: tR.align, anchor: 'top', lum: tR.lum }), false, 60); }
   else place(paras, bR || tR, true, (bR ? 80 : 96));
   if (!noText) parts.forEach(p => drawLines(c, p.lines, p.x, p.y, p.o, p.T, p.align, p.w));
   const main = parts[parts.length - 1];
