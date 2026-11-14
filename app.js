@@ -612,8 +612,8 @@ function clearCustom(redraw = true) { S.custom = null; try { localStorage.remove
 function syncBgUi() {
   const has = !!S.custom;
   $('bgCtl').hidden = !has; $('bgThumb').hidden = !has; $('bgUp').classList.toggle('has', has);
-  $('btnBg').textContent = has ? '換一張圖…' : '選一張圖…';
-  $('bgHint').textContent = has ? '已套用到每一頁，重新整理也會記住' : '每一頁都會用這張圖，自動壓暗讓字清楚';
+  $('bgUp').hidden = !has;
+  $('bgHint').textContent = has ? '每一頁都用這張圖（自己設過背景的頁面除外），重新整理也會記住' : '';
   document.querySelectorAll('#bgMode .pill').forEach(x => x.classList.toggle('sel', x.dataset.m === S.customMode));
   $('bgDim').value = Math.round(dimOf() * 100); $('bgDimO').textContent = Math.round(dimOf() * 100) + '%';
   if (has) { const c = $('bgThumbCv').getContext('2d'), im = S.custom, sc = Math.max(320 / im.width, 180 / im.height); c.drawImage(im, (320 - im.width * sc) / 2, (180 - im.height * sc) / 2, im.width * sc, im.height * sc); c.fillStyle = S.customMode === 'light' ? `rgba(255,255,255,${dimOf()})` : `rgba(10,8,6,${dimOf()})`; c.fillRect(0, 0, 320, 180); }
@@ -992,7 +992,7 @@ function syncSlideBgUI() {
   document.querySelectorAll('#bgScope button').forEach(x => x.classList.toggle('on', x.dataset.s === S.bgScope));
   $('scopeSlideBtn').textContent = sl ? `只有這一頁（第 ${S.sel + 1} 頁）` : '只有這一頁';
   $('scopeHint').textContent = slideMode ? `下面的選擇只會改第 ${S.sel + 1} 頁，其他頁不變。` : '下面的選擇會套用到每一頁。想只改某一頁，先點左邊那一頁，再按「只有這一頁」。';
-  $('bgVaryRow').hidden = slideMode; $('bgLayoutRow').hidden = !slideMode; $('bgAllImg').hidden = slideMode; $('bgSlideImg').hidden = !slideMode;
+  $('bgVaryRow').hidden = slideMode; $('bgLayoutRow').hidden = !slideMode; $('slBgPick').textContent = sl ? `只用在第 ${S.sel + 1} 頁…` : '只用在這一頁…'; $('slBgTitle').textContent = `第 ${S.sel + 1} 頁用自己的圖`;
   $('bgResetRow').hidden = !(slideMode && sl && sl.bg);
   $('optVary').checked = S.autoVary !== false;
   const b = sl && sl.bg; $('slBgImg').hidden = !(b && b.t === 'img');
@@ -1020,6 +1020,7 @@ function applyColor(c) {
   document.querySelectorAll('#bgScope button').forEach(b => b.onclick = () => { S.bgScope = b.dataset.s; syncSlideBgUI(); });
   $('slBgReset').onclick = () => setSlideBg(null);
   $('slBgPick').onclick = () => $('slBgFile').click();
+  $('slBgRemove').onclick = () => setSlideBg(null);
   $('slBgFile').onchange = e => {
     const f = e.target.files[0]; e.target.value = ''; if (!f) return;
     const im = new Image();
