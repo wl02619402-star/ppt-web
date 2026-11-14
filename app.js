@@ -91,7 +91,7 @@ function getBg(v, p = 0, slide) {
   const t = curTheme(slide), key = [t.key, v, p % 6, S.customMode, S.custom ? S.custom.src.length : '', dimOf()].join('|');
   if (!bgCache.has(key)) {
     const c = mk(W, H), x = c.getContext('2d');
-    if (COMP.has(v)) composeBg(x, slideTheme(t, v), v, p);
+    if (COMP.has(v)) composeBg(x, t, v, p);
     else if (v === 'spot' && !t.flat) drawSpot(x, t, p % 2);
     else { t.bg.call(t, x, t.ownVariants ? v : (v === 'title' ? 'title' : 'content')); if (!t.ownVariants && !t.flat) decorate(x, t, v, p); }
     bgCache.set(key, c);
@@ -156,7 +156,7 @@ function layout(paras, size, maxW, o) {
     runs.forEach(r => {
       r.t.replace(/[\n\v]/g, ' ').split('↵').forEach((pc, k) => {
         if (k > 0) { flat.push({ brk: true, t: '', red: r.red }); pos += 1; }
-        let po = pos; tokenize(pc).forEach(tk => { flat.push({ t: tk, red: r.red, o: po }); po += tk.length; });
+        let po = pos; tokenize(pc).forEach(tk => { flat.push({ t: tk, red: r.red, c: r.c, o: po }); po += tk.length; });
         pos += pc.length;
       });
     });
@@ -188,6 +188,7 @@ function blockH(lines, o) {
   lines.forEach((l, i) => { h += l.h; if (lines[i + 1] && lines[i + 1].pi !== l.pi) h += l.size * o.paraGap; });
   return h;
 }
+function runColor(s, T) { if (!s.red) return T.text; if (!s.c || s.c === 'red') return T.red; if (s.c === 'accent') return T.accent; return s.c; }
 function drawLines(c, lines, x, y, o, T, align = 'left', boxW = 0) {
   c.textBaseline = 'middle';
   const shadowOn = !!o.shadow && lumOf(T.text) > .6;
@@ -196,7 +197,7 @@ function drawLines(c, lines, x, y, o, T, align = 'left', boxW = 0) {
     let px = align === 'center' ? x + (boxW - l.w) / 2 : align === 'right' ? x + boxW - l.w : x;
     const cy = y + l.h / 2;
     l.segs.forEach(s => {
-      c.font = s.red ? redf : base; c.fillStyle = (l.head && o.headColor) ? o.headColor : s.red ? T.red : T.text;
+      c.font = s.red ? redf : base; c.fillStyle = (l.head && o.headColor) ? o.headColor : runColor(s, T);
       if (shadowOn) { c.shadowColor = 'rgba(0,0,0,.6)'; c.shadowBlur = 12; c.shadowOffsetY = 3; }
       c.fillText(s.t, px, cy); if (shadowOn) { c.shadowColor = 'transparent'; c.shadowBlur = 0; c.shadowOffsetY = 0; }
       px += tw(s.red ? redf : base, s.t);
@@ -239,7 +240,7 @@ function picSafe(slide, sf) {
 }
 function stripLead(runs, n) {
   const out = []; let left = n;
-  for (const r of runs) { if (left >= r.t.length) { left -= r.t.length; continue; } out.push({ t: r.t.slice(left), red: r.red }); left = 0; }
+  for (const r of runs) { if (left >= r.t.length) { left -= r.t.length; continue; } out.push({ t: r.t.slice(left), red: r.red, c: r.c }); left = 0; }
   return out.length ? out : [{ t: ' ', red: false }];
 }
 // 整份簡報的統一字級：每頁各自算出「放得下的最大字級」，取中位數，讓相鄰頁面字級一致；太長的頁面才個別縮小
@@ -346,35 +347,54 @@ function stripPages(slide) {
 }
 // 線上版字條：跟現場版同一套設計（同樣的紙紋／底圖、配色、裝飾），不再是另一種風格的白卡片
 const _scCache = new Map();
-function stripCard(T, cw, h) {
-  const key = [T.key, cw, h, S.custom ? S.custom.src.length : '', dimOf(), S.bgAll ? S.bgAll.c : ''].join('|');
+const STRIP_LOOK = { title: 'frame', card: 'paper', plain: 'block', flip: 'ribbon', band: 'ribbon', zoom: 'rule', rule: 'rule', brackets: 'block', num: 'block', side: 'block', spark: 'solid', solid: 'solid', spot: 'solid' };
+const stripLook = v => STRIP_LOOK[v] || 'paper';
+function stripCard(T, cw, h, v = 'plain', idx = 0, slide) {
+  const key = [T.key, cw, h, v, idx % 6, S.custom ? S.custom.src.length : '', dimOf(), S.bgAll ? S.bgAll.c : '', slide && slide.bg ? JSON.stringify(slide.bg).length : ''].join('|');
   if (_scCache.has(key)) return _scCache.get(key);
   const sc = 2, c = mk(cw * sc, h * sc), x = c.getContext('2d'); x.scale(sc, sc);
+  const A = T.accent, look = stripLook(v);
   x.save(); rrect(x, 0, 0, cw, h, T.P ? 4 : T.card.radius); x.clip();
   if (T.P) {
-    const tmp = mk(W, H), tx = tmp.getContext('2d'), seed = T.P.k.length * 131 + T.P.n.length * 17;
-    paperBase(tx, T.P, seed); tornStrip(tx, T.P, 'top', 22, seed + 8); tornStrip(tx, T.P, 'bottom', 26, seed + 9);
-    const top = Math.ceil(h / 2), bot = h - top;
-    x.drawImage(tmp, 0, 0, cw, top, 0, 0, cw, top); x.drawImage(tmp, 0, H - bot, cw, bot, 0, top, cw, bot);
+    // 撕邊紙：同一張紙，每一頁的撕邊位置不同（上下、只有上、只有下）
+    const tmp = mk(W, H), tx = tmp.getContext('2d'), seed = T.P.k.length * 131 + T.P.n.length * 17 + idx * 7, edge = v === 'title' ? 0 : idx % 3;
+    paperBase(tx, T.P, seed);
+    if (edge !== 2) tornStrip(tx, T.P, 'top', 22, seed + 8);
+    if (edge !== 1) tornStrip(tx, T.P, 'bottom', 26, seed + 9);
+    const top = Math.ceil(h / 2), bot = h - top, ox = (idx * 211) % Math.max(1, W - cw);
+    x.drawImage(tmp, ox, 0, cw, top, 0, 0, cw, top); x.drawImage(tmp, ox, H - bot, cw, bot, 0, top, cw, bot);
   } else {
-    const bg = getBg('plain', 0), sx = Math.max(0, (W - cw) / 2), sy = Math.max(0, Math.min(H - h, (H - h) / 2));
-    x.drawImage(bg, sx, sy, Math.min(cw, W), h, 0, 0, Math.min(cw, W), h);
+    // 其他風格：從現場版同一張底圖取一段，每一頁取不同位置；翻轉頁就左右鏡像
+    const bg = getBg('plain', 0, slide), sw = Math.min(cw, W), sx = Math.max(0, Math.min(W - sw, ((idx * 337) % Math.max(1, W - sw)))), sy = Math.max(0, Math.min(H - h, [.5, .2, .8][idx % 3] * (H - h)));
+    x.save();
+    x.drawImage(bg, sx, sy, sw, h, 0, 0, sw, h); x.restore();
     x.globalAlpha = T.dark ? .55 : .5; x.fillStyle = T.card.fill; x.fillRect(0, 0, cw, h); x.globalAlpha = 1;
   }
+  if (look === 'solid') { x.globalAlpha = .93; x.fillStyle = v === 'spot' ? '#1d1712' : A; x.fillRect(0, 0, cw, h); x.globalAlpha = 1; grain(x, cw, h, .08); }
   x.restore();
-  const T2 = Object.assign({}, T, { card: Object.assign({}, T.card, { alpha: 0, grain: false }) });
-  x.drawImage(drawCard(T2, cw, h, 1), 0, 0, cw, h);
-  if (_scCache.size > 40) _scCache.clear(); _scCache.set(key, c); return c;
+  // 字條的樣式跟著現場版這一頁的版面走：一般卡、左色塊、右緞帶、底線、整條色塊、標題框
+  const W8 = 'rgba(255,255,255,.55)';
+  x.save();
+  switch (look) {
+    case 'block': x.fillStyle = A; x.fillRect(0, 0, 64, h); star(x, 32, h / 2, 14, W8); break;
+    case 'ribbon': x.fillStyle = A; x.fillRect(cw - 112, 0, 112, h); x.fillStyle = hexA(A, .5); x.fillRect(cw - 124, 0, 4, h); star(x, cw - 56, h / 2 - 10, 20, W8); star(x, cw - 34, h / 2 + 26, 8, W8); break;
+    case 'rule': x.fillStyle = A; x.fillRect(40, h - 20, cw - 120, 4); star(x, cw - 56, h - 18, 16, A); x.fillRect(40, 22, 36, 6); break;
+    case 'solid': star(x, cw - 90, 54, 24, W8); star(x, cw - 124, 32, 10, W8); star(x, cw - 70, h - 40, 12, W8); break;
+    case 'frame': if (T.P) gridNote(x, cw - 120, h / 2, 130, 110, .08); else { x.strokeStyle = hexA(A, .75); x.lineWidth = 2; rrect(x, 10, 10, cw - 20, h - 20, Math.max(2, T.card.radius - 4)); x.stroke(); x.lineWidth = 1; rrect(x, 18, 18, cw - 36, h - 36, Math.max(2, T.card.radius - 8)); x.stroke(); star(x, cw - 80, 50, 18, A); } break;
+    default: { const T2 = Object.assign({}, T, { card: Object.assign({}, T.card, { alpha: 0, grain: false }) }); x.drawImage(drawCard(T2, cw, h, 1), 0, 0, cw, h); }
+  }
+  x.restore();
+  if (_scCache.size > 60) _scCache.clear(); _scCache.set(key, c); return c;
 }
 function drawStrip(cv, slide, page, noText) {
-  const T = curTheme(), c = cv.getContext('2d');
+  const idx = Math.max(0, S.slides.indexOf(slide)), v = autoVariant(slide, idx), T0 = curTheme(slide), T = slideTheme(T0, stripLook(v) === 'solid' ? (v === 'spot' ? 'spot' : 'solid') : 'plain'), c = cv.getContext('2d');
   c.clearRect(0, 0, W, H);
   const { pages, o, cardW } = stripPages(slide);
   if (!pages.length) { drawStrip.geo = { lines: [], x: 0, y: 0, o, w: 0, T }; return 0; }
   page = Math.min(page, pages.length - 1);
   const lines = pages[page], h = Math.round(blockH(lines, o) + STRIP.padT + STRIP.padB);
   const x0 = Math.max(0, Math.min(W - cardW, Math.round((W - cardW) / 2) + S.stripX)), y0 = Math.max(0, H - h - S.stripY);
-  const card = stripCard(T, cardW, h);
+  const card = stripCard(T0, cardW, h, v, idx, slide);
   c.save(); c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 24; c.shadowOffsetY = 8;
   c.drawImage(card, x0, y0, cardW, h); c.restore();
   if (!noText) drawLines(c, lines, x0 + STRIP.padL, y0 + STRIP.padT, o, T);
@@ -429,10 +449,14 @@ async function parsePptx(buf) {
           if (n.nodeName !== 'a:r') return;
           const t = (n.getElementsByTagName('a:t')[0] || {}).textContent || '';
           const clr = n.getElementsByTagName('a:srgbClr')[0];
-          let red = false;
-          if (clr) { const v = clr.getAttribute('val'), r = parseInt(v.slice(0, 2), 16), g = parseInt(v.slice(2, 4), 16), b = parseInt(v.slice(4, 6), 16); red = r > 150 && g < 90 && b < 90; }
+          let red = false, cc;
+          if (clr) {
+            const v = clr.getAttribute('val'), r = parseInt(v.slice(0, 2), 16), g = parseInt(v.slice(2, 4), 16), b = parseInt(v.slice(4, 6), 16);
+            const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+            if (r > 150 && g < 90 && b < 90) red = true; else if (mx - mn > 70 && mx > 90) { red = true; cc = '#' + v.toUpperCase(); }
+          }
           const last = runs[runs.length - 1];
-          if (last && last.red === red) last.t += t; else runs.push({ t, red });
+          if (last && last.red === red && last.c === cc) last.t += t; else runs.push(cc ? { t, red, c: cc } : { t, red });
         });
         if (runs.map(r => r.t).join('').trim()) paras.push(runs);
       });
@@ -505,14 +529,14 @@ function select(i) {
   S.sel = i; S.page = 0;
   document.querySelectorAll('.thumb').forEach((d, k) => d.classList.toggle('sel', k === i));
   const sl = S.slides[i];
-  $('txt').value = sl.paras.map(paraToStr).join('\n');
+  edRender();
   $('fs').value = Math.round((sl.fs || 1) * 100); $('sfs').value = Math.round((sl.sfs || 1) * 100);
   syncOut(); renderMain(); syncSlideBgUI();
   const th = document.querySelectorAll('.thumb')[i]; if (th) th.scrollIntoView({ block: 'nearest' });
 }
 const VIEW_HINT = {
-  live: '現場版：投在教會大螢幕的整頁畫面。點一下文字就能在那裡換行（再點一次取消），拖曳可以移動文字。',
-  strip: '線上版：直播時疊在影像上，背景透明，只有一條字幕。點一下文字就能在那裡換行，拖曳可以移動字幕條。',
+  live: '現場版：投在教會大螢幕的整頁畫面。可以在畫面上拖曳文字。',
+  strip: '線上版：直播時疊在影像上，背景透明，只有一條字幕。可以在畫面上拖曳字幕條。',
 };
 function setView(v) {
   S.view = v;
@@ -582,7 +606,7 @@ function buildThemes() {
   $('themeCount').textContent = box.children.length + ' / ' + Object.keys(THEMES).length; if (typeof markBgSel === 'function') markBgSel();
 }
 function getBgFor(k) { const c = mk(W, H); THEMES[k].bg.call(THEMES[k], c.getContext('2d'), 'content'); return c; }
-function afterThemeChange() { bgCache.clear(); buildThemes(); buildList(); renderMain(); save(); }
+function afterThemeChange() { bgCache.clear(); _scCache.clear(); buildThemes(); buildList(); renderMain(); if (document.activeElement !== ed) edRender(); save(); }
 function clearCustom(redraw = true) { S.custom = null; try { localStorage.removeItem('ppt-web-bg'); } catch (e) { } syncBgUi(); if (redraw) afterThemeChange(); }
 function syncBgUi() {
   const has = !!S.custom;
@@ -766,9 +790,9 @@ function addTextGroups(sl, lines, y, o, x, w, align, T) {
     g.lines.forEach((l, li) => {
       let last = null;
       l.segs.forEach(s => {
-        const key = s.red ? 'r' : 't';
+        const key = s.red ? 'r' + (s.c || '') : 't';
         if (last && last.key === key && !last.fresh) { last.run.text += s.t; return; }
-        const opt = { color: hexNo((g.head && o.headColor) ? o.headColor : s.red ? T.red : T.text), bold: f.bold || !!s.red, fontFace: f.face };
+        const opt = { color: hexNo((g.head && o.headColor) ? o.headColor : runColor(s, T)), bold: f.bold || !!s.red, fontFace: f.face };
         if (li > 0 && !last) opt.softBreakBefore = true;
         const run = { text: s.t, options: opt }; runs.push(run); last = { key, run };
       });
@@ -823,16 +847,89 @@ async function renderEmptyPreview() {
 ['dragleave', 'drop'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); $('drop').classList.remove('over'); }));
 document.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) loadFile(f); });
 
-$('txt').oninput = async () => {
-  const sl = S.slides[S.sel]; sl.paras = strToParas($('txt').value);
-  if (!sl.paras.length) sl.paras = [[{ t: ' ', red: false }]];
+// ---------- 文字編輯：所見即所得，選字直接點顏色 ----------
+const ed = $('ed');
+const escH = t => t.replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
+function edColor(c, T) {
+  let col = !c || c === 'red' ? '#FF6B5E' : c === 'accent' ? T.accent : c;
+  if (c && c !== 'red' && lumOf(col) < .42) col = mixHex(col, '#FFFFFF', .45);   // 編輯框是深色底，太暗的顏色稍微提亮才看得到
+  return col;
+}
+function mixHex(a, b, k) { const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)), A = p(a), B = p(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * k).toString(16).padStart(2, '0')).join(''); }
+function edRender() {
+  const sl = S.slides[S.sel]; if (!sl) return; const T = curTheme(sl);
+  ed.innerHTML = sl.paras.map(p => {
+    const h = p.map(r => { const t = escH(r.t).replace(/↵/g, '\n'); return r.red ? `<span data-c="${r.c || 'red'}" style="color:${edColor(r.c, T)}">${t}</span>` : t; }).join('');
+    return '<div>' + (h.trim() ? h : '<br>') + '</div>';
+  }).join('');
+  $('accSw').style.background = curTheme(sl).accent;
+}
+function edParse() {
+  const paras = []; let cur = [];
+  const push = (t, c) => {
+    if (!t) return; const red = !!c, cc = c && c !== 'red' ? c : undefined, last = cur[cur.length - 1];
+    if (last && last.red === red && last.c === cc) last.t += t; else cur.push(cc ? { t, red, c: cc } : { t, red });
+  };
+  const flush = () => {
+    cur.forEach(r => { r.t = r.t.replace(/\u00a0/g, ' '); });
+    while (cur.length && /^↵/.test(cur[0].t)) { cur[0].t = cur[0].t.slice(1); if (!cur[0].t) cur.shift(); }
+    while (cur.length && /↵$/.test(cur[cur.length - 1].t)) { const l = cur[cur.length - 1]; l.t = l.t.slice(0, -1); if (!l.t) cur.pop(); }
+    if (cur.map(r => r.t).join('').replace(/[↵\s]/g, '')) paras.push(cur); cur = [];
+  };
+  const walk = (n, c) => {
+    if (n.nodeType === 3) return push(n.nodeValue.replace(/\n/g, '↵'), c);
+    if (n.nodeType !== 1) return;
+    if (n.nodeName === 'BR') return push('↵', c);
+    const block = /^(DIV|P|LI|H\d)$/.test(n.nodeName), cc = n.dataset && 'c' in n.dataset ? (n.dataset.c || null) : c;
+    if (block) flush();
+    n.childNodes.forEach(k => walk(k, cc));
+    if (block) flush();
+  };
+  ed.childNodes.forEach(n => walk(n, null)); flush();
+  return paras;
+}
+let edRange = null;
+document.addEventListener('selectionchange', () => { const s = getSelection(); if (s.rangeCount && ed.contains(s.anchorNode) && !s.isCollapsed) edRange = s.getRangeAt(0).cloneRange(); });
+function colorText(c) {
+  const s = getSelection(); let r = s.rangeCount && ed.contains(s.anchorNode) && !s.isCollapsed ? s.getRangeAt(0) : edRange;
+  if (!r || r.collapsed || !ed.contains(r.commonAncestorContainer)) { toast('先在文字框裡選取要改顏色的字'); return; }
+  const r2 = r.cloneRange(); r2.collapse(false); r2.insertNode(document.createTextNode('\uE001'));
+  const r1 = r.cloneRange(); r1.collapse(true); r1.insertNode(document.createTextNode('\uE000'));
+  let on = false, sel = null; const out = [];
+  edParse().forEach((p, pi) => {
+    const ch = []; p.forEach(run => { for (const x of run.t) {
+      if (x === '\uE000') { on = true; sel = sel || { a: [out.length, ch.length] }; continue; }
+      if (x === '\uE001') { on = false; if (sel) sel.b = [out.length, ch.length]; continue; }
+      ch.push(on ? { x, red: !!c, c: c && c !== 'red' ? c : undefined } : { x, red: run.red, c: run.c });
+    } });
+    const runs = []; ch.forEach(k => { const l = runs[runs.length - 1]; if (l && l.red === k.red && l.c === k.c) l.t += k.x; else runs.push(k.c ? { t: k.x, red: k.red, c: k.c } : { t: k.x, red: k.red }); });
+    if (runs.length) out.push(runs);
+  });
+  const sl = S.slides[S.sel]; sl.paras = out.length ? out : [[{ t: ' ', red: false }]];
+  edRender(); edSelect(sel); redrawSoon();
+}
+function edSelect(sel) {
+  if (!sel || !sel.b) return;
+  const pos = ([pi, ci]) => {
+    const div = ed.children[pi]; if (!div) return null; let left = ci, found = null;
+    const walk = n => { if (found) return; if (n.nodeType === 3) { if (left <= n.nodeValue.length) { found = [n, left]; return; } left -= n.nodeValue.length; } else if (n.nodeName === 'BR') { if (left === 0) { found = [n.parentNode, [...n.parentNode.childNodes].indexOf(n)]; return; } left -= 1; } else n.childNodes.forEach(walk); };
+    walk(div); return found;
+  };
+  const a = pos(sel.a), b = pos(sel.b); if (!a || !b) return;
+  const r = document.createRange(); r.setStart(a[0], a[1]); r.setEnd(b[0], b[1]); const s = getSelection(); s.removeAllRanges(); s.addRange(r); edRange = r.cloneRange();
+}
+ed.addEventListener('input', async () => {
+  const sl = S.slides[S.sel]; if (!sl) return;
+  sl.paras = edParse(); if (!sl.paras.length) sl.paras = [[{ t: ' ', red: false }]];
   if (await ensureFonts()) buildList();
   redrawSoon();
-};
-$('btnRed').onclick = () => {
-  const t = $('txt'), a = t.selectionStart, b = t.selectionEnd; if (a === b) { toast('先在文字框選取要變紅的字'); return; }
-  t.value = t.value.slice(0, a) + '**' + t.value.slice(a, b) + '**' + t.value.slice(b); t.oninput();
-};
+});
+ed.addEventListener('paste', e => {
+  e.preventDefault(); const t = (e.clipboardData || window.clipboardData).getData('text/plain').replace(/\r/g, '');
+  t.split('\n').forEach((line, i) => { if (i) document.execCommand('insertParagraph'); if (line) document.execCommand('insertText', false, line); });
+});
+document.querySelectorAll('#colorBar [data-c]').forEach(b => { b.onmousedown = e => e.preventDefault(); b.onclick = () => colorText(b.dataset.c || null); });
+$('pickColor').onchange = () => colorText($('pickColor').value.toUpperCase());
 $('btnAdd').onclick = () => { S.slides.splice(S.sel + 1, 0, { paras: [[{ t: '新的一頁', red: false }]], fs: 1, sfs: 1 }); buildList(); select(S.sel + 1); save(); };
 $('btnDup').onclick = () => { S.slides.splice(S.sel + 1, 0, JSON.parse(JSON.stringify(S.slides[S.sel]))); buildList(); select(S.sel + 1); save(); };
 $('btnDel').onclick = () => {
@@ -964,47 +1061,10 @@ function attachDrag(cv, get, set, hit) {
   };
   cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
 }
-// ---------- 點畫面換行：在文字裡插入（或移除）一個「↵」，現場版、線上版、輸出都會照辦 ----------
-function hitBreak(geo, cx, cy, align, gx, boxW) {
-  const sl = S.slides[S.sel]; if (!sl || !geo || !geo.lines || !geo.lines.length) return null;
-  let y = geo.y, best = null;
-  geo.lines.forEach((l, i) => {
-    const d = Math.abs(cy - (y + l.h / 2));
-    if (d <= l.h * .75 && (!best || d < best.d)) best = { l, y, d };
-    y += l.h; if (geo.lines[i + 1] && geo.lines[i + 1].pi !== l.pi) y += l.size * geo.o.paraGap;
-  });
-  if (!best) return null;
-  const l = best.l, wt = l.head ? 700 : 500, base = fnt(wt, l.size, l.head, false, l.scr), redf = fnt(700, l.size, l.head, true, l.scr);
-  let px = align === 'center' ? gx + (boxW - l.w) / 2 : align === 'right' ? gx + boxW - l.w : gx;
-  const para = ptext(sl.paras[l.pi]), cands = [];
-  l.segs.forEach((sg, si) => {
-    const f = sg.red ? redf : base;
-    for (let k = 0; k < sg.t.length; k++) {
-      const off = sg.o + k, removing = para[off - 1] === '↵', first = si === 0 && k === 0;
-      if (first && !removing) continue;
-      cands.push({ x: px + tw(f, sg.t.slice(0, k)), off, removing });
-    }
-    px += tw(f, sg.t);
-  });
-  if (!cands.length) return null;
-  const c = cands.reduce((a, b) => Math.abs(b.x - cx) < Math.abs(a.x - cx) ? b : a);
-  return { pi: l.pi, off: c.off, removing: c.removing, x: c.x, y: best.y, h: l.h };
-}
-function toggleBreak(pi, off) {
-  const sl = S.slides[S.sel], runs = sl.paras[pi]; if (!runs) return;
-  const ch = []; runs.forEach(r => { for (let i = 0; i < r.t.length; i++) ch.push({ c: r.t[i], red: r.red }); });
-  if (off > 0 && ch[off - 1] && ch[off - 1].c === '↵') ch.splice(off - 1, 1); else ch.splice(off, 0, { c: '↵', red: false });
-  const out = []; ch.forEach(x => { const last = out[out.length - 1]; if (last && last.red === x.red) last.t += x.c; else out.push({ t: x.c, red: x.red }); });
-  sl.paras[pi] = out.length ? out : [{ t: ' ', red: false }];
-  $('txt').value = sl.paras.map(paraToStr).join('\n');
-  _deck.sig = ''; wcache.clear(); renderMain(); renderThumb(S.sel); save();
-}
 attachDrag($('cvLive'), () => { const vv = autoVariant(S.slides[S.sel], S.sel), L = liveCfg(S.slides[S.sel], vv === 'title', vv); return { dx: L.dx, dy: L.dy }; },
-  (s, mx, my) => { editLive('dx', clampN(snap4(s.dx + mx), -900, 900)); editLive('dy', clampN(snap4(s.dy + my), -600, 600)); },
-  (cx, cy) => { const g = S.liveGeo; return g && hitBreak(g, cx, cy, g.align, g.x, g.maxW); });
+  (s, mx, my) => { editLive('dx', clampN(snap4(s.dx + mx), -900, 900)); editLive('dy', clampN(snap4(s.dy + my), -600, 600)); });
 attachDrag($('cvStrip'), () => ({ x: S.stripX, y: S.stripY }),
-  (s, mx, my) => { S.stripX = clampN(snap4(s.x + mx), -700, 700); S.stripY = clampN(snap4(s.y - my), 0, 700); syncOut(); redrawSoon(); },
-  (cx, cy) => { const g = drawStrip.geo; return g && g.lines && hitBreak(g, cx, cy, 'left', g.x, g.w); });
+  (s, mx, my) => { S.stripX = clampN(snap4(s.x + mx), -700, 700); S.stripY = clampN(snap4(s.y - my), 0, 700); syncOut(); redrawSoon(); });
 $('stripX').oninput = () => { S.stripX = +$('stripX').value; syncOut(); redrawSoon(); };
 $('stripReset').onclick = () => { S.stripX = 0; S.stripY = 64; S.stripW = .81; $('stripY').value = 64; $('stripW').value = 81; S.page = 0; syncOut(); redrawSoon(); };
 document.querySelectorAll('.view').forEach(b => b.onclick = () => setView(b.dataset.v));
@@ -1014,7 +1074,7 @@ $('styleClear').onclick = () => { try { localStorage.removeItem('ppt-web-style')
 // 鍵盤切換頁面：上下鍵（或左右鍵、PageUp/PageDown）；在輸入框裡打字時不攔截，按 Esc 離開輸入框
 document.addEventListener('keydown', e => {
   const t = e.target, tag = t.tagName, type = (t.type || '').toLowerCase();
-  const typing = tag === 'TEXTAREA' || tag === 'SELECT' || (tag === 'INPUT' && !['range', 'checkbox', 'button'].includes(type));
+  const typing = t.isContentEditable || tag === 'TEXTAREA' || tag === 'SELECT' || (tag === 'INPUT' && !['range', 'checkbox', 'button'].includes(type));
   if (e.key === 'Escape' && typing) { t.blur(); return; }
   if (typing || e.metaKey || e.ctrlKey || e.altKey || !S.slides.length || !$('editor') || $('editor').hidden) return;
   let to = null;

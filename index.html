@@ -153,6 +153,16 @@ input[type=range]{width:100%;accent-color:var(--ink2);margin:0}
 .scope button{flex:1;height:36px;border:0;background:none;color:var(--muted);font-weight:500}
 .scope button.on{background:var(--ink);color:var(--bg)}
 .thumb .flag{position:absolute;left:6px;bottom:6px;font-size:11px;background:var(--accent);color:#fff;padding:1px 6px;border-radius:3px}
+.colorbar{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.cbtn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:1px solid var(--line2);border-radius:4px;background:var(--raise);color:var(--ink);font-size:13px;cursor:pointer}
+.cbtn:hover{border-color:var(--muted)}
+.cbtn i{width:12px;height:12px;border-radius:2px;display:inline-block;outline:1px solid rgba(255,255,255,.25)}
+.cbtn i.sw0{background:var(--ink)}
+.cbtn input[type=color]{width:16px;height:16px;border:0;padding:0;background:none}
+.ed{min-height:220px;max-height:46vh;overflow:auto;background:var(--bg);border:1px solid var(--line2);border-radius:4px;padding:10px;line-height:1.65;outline:none;white-space:pre-wrap;word-break:break-word}
+.ed:focus{border-color:var(--muted)}
+.ed span[data-c]{font-weight:700}
+.ed div{min-height:1.65em}
 .chk{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13px}
 .sw{width:28px;height:28px;border-radius:4px;border:1px solid var(--line2);padding:0}
 .sw.sel{outline:2px solid var(--accent);outline-offset:1px}
@@ -244,11 +254,14 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
       <div class="pane" id="pText">
         <div class="sec">
           <h3>這一頁的文字</h3>
-          <textarea id="txt" spellcheck="false"></textarea>
-          <div class="hint">一行就是一段；第一行比較短時會當標題。想標紅字，用兩個星號包起來，例如 **耶穌**。「↵」是手動換行，也可以直接在右邊畫面上點文字來換行。按 Esc 離開輸入框後，可以用上下鍵切換頁面。</div>
-          <div class="row" style="margin-top:10px">
-            <button class="btn small" id="btnRed">選取的字變紅字</button>
+          <div class="colorbar" id="colorBar">
+            <button class="cbtn" data-c="" title="一般字色"><i class="sw0"></i>一般</button>
+            <button class="cbtn" data-c="red" title="強調紅字"><i style="background:#E5484D"></i>紅字</button>
+            <button class="cbtn" data-c="accent" title="這套風格的主題色"><i id="accSw"></i>主題色</button>
+            <label class="cbtn" title="自己挑顏色"><input type="color" id="pickColor" value="#D9822B">自選</label>
           </div>
+          <div id="ed" class="ed" contenteditable="true" spellcheck="false"></div>
+          <div class="hint">選取文字，再點上面的顏色就能改色。按 Enter 是新的一段，Shift+Enter 是同一段裡換行。第一段比較短時會當標題。按 Esc 離開文字框後，可以用上下鍵切換頁面。</div>
         </div>
         <div class="sec">
           <h3>頁面</h3>
@@ -408,8 +421,8 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
 <div id="prog"><div><div id="progT">處理中…</div><i><b id="progB"></b></i></div></div>
 <script src="themes.js?v=20"></script>
 <script src="themes2.js?v=20"></script>
-<script src="themes3.js?v=31"></script>
-<script src="app.js?v=31"></script>
+<script src="themes3.js?v=32"></script>
+<script src="app.js?v=35"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));

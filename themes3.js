@@ -48,7 +48,7 @@ function autoVariant(sl, idx) {
 }
 function slideTheme(T, v) {
   if (v === 'spot' && !T.flat) return Object.assign({}, T, { text: '#F7F0E6', red: '#FF9C86', dark: true });
-  if (v === 'solid') { const lt = lumOf(T.accent) > .55; return Object.assign({}, T, { text: lt ? '#1E1914' : '#FBF6EC', red: lt ? '#B3261E' : '#FFD27A', dark: !lt }); }
+  if (v === 'solid') { const lt = lumOf(T.accent) > .55; return Object.assign({}, T, { text: lt ? '#1E1914' : '#FBF6EC', red: lt ? '#B3261E' : '#FFD27A', accent: lt ? '#1E1914' : '#FFE3A3', dark: !lt }); }
   return T;
 }
 
