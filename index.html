@@ -175,6 +175,9 @@ input[type=range]{width:100%;accent-color:var(--ink2);margin:0}
 .subbox{margin-top:12px;padding:12px;border:1px solid var(--line2);border-radius:4px}
 .vtag{font-size:13px;font-weight:500;margin-bottom:12px}
 .vtag span{color:var(--muted);font-weight:400;font-size:12px}
+.spotlist{font-size:13px;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
+.spotlist .link{border:0;background:none;color:var(--accent);padding:0;cursor:pointer;font-size:13px;text-decoration:underline;text-underline-offset:2px}
+.ph{cursor:pointer}.ph.sel{outline:2px solid var(--accent)}
 .photos{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
 .photos:empty{display:none}
 .ph{position:relative;aspect-ratio:16/9;overflow:hidden;border-radius:3px;outline:1px solid var(--line2)}
@@ -352,12 +355,13 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
           </div>
         </div>
         <div class="sec">
-          <h3>強調頁照片</h3>
-          <div class="row"><button class="btn small" id="btnPhotos">加入照片…</button></div>
+          <h3>強調頁</h3>
+          <div class="hint" style="margin:0 0 8px">用來突顯重點的深色頁面：背景是壓暗的照片或光暈，字是白色。網站會自動挑短句或重點經文來做。</div>
+          <div class="spotlist" id="spotList"></div>
+          <div class="row" style="margin-top:8px"><button class="btn small" id="btnSpotToggle">設成強調頁</button><button class="btn small" id="btnPhotos">加入照片…</button></div>
           <input type="file" id="photoFile" accept="image/*" multiple hidden>
           <div class="photos" id="photoList"></div>
           <div class="hint" id="photoHint"></div>
-          <div class="hint">深色強調頁（短句、重點經文）會輪流用這些照片，自動壓暗讓字清楚。燭光、光線、自然風景這類照片效果最好。</div>
         </div>
         <div class="sec" id="bgResetRow" hidden>
           <button class="btn" id="slBgReset">這一頁還原成跟整份一樣</button>
@@ -442,8 +446,8 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
 <div id="prog"><div><div id="progT">處理中…</div><i><b id="progB"></b></i></div></div>
 <script src="themes.js?v=20"></script>
 <script src="themes2.js?v=20"></script>
-<script src="themes3.js?v=46"></script>
-<script src="app.js?v=46"></script>
+<script src="themes3.js?v=47"></script>
+<script src="app.js?v=47"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));

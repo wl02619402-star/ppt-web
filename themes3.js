@@ -39,7 +39,7 @@ function planVariants() {
       const pool = ok.length ? ok : cands.filter(c => c !== prev);
       v = (pool.length ? pool : ['plain']).reduce((best, c) => ((cnt[c] || 0) < (cnt[best] || 0) ? c : best));
     }
-    out.push(v); cnt[v] = (cnt[v] || 0) + 1; last[v] = i;
+    out.push(v); if (!(s.variant && s.variant !== 'auto')) cnt[v] = (cnt[v] || 0) + 1; last[v] = i;   // 手動指定的頁面不影響其他頁的自動安排
   });
   _plan = { sig, v: out }; return out;
 }

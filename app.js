@@ -116,11 +116,11 @@ function drawSpotPhoto(c, im, k) {
 }
 const NO_ORN = new Set(['title', 'spot', 'solid', 'spark', 'num', 'band', 'rule', 'brackets', 'side']);
 function getBg(v, p = 0, slide) {
-  const t = curTheme(slide), sk = v === 'spot' ? spotOrder(p) : 0, key = [t.key, v, p % 6, S.customMode, S.custom ? S.custom.src.length : '', dimOf(), v === 'spot' ? 'k' + sk + ':' + S.photos.map(x => x.length).join(',') : ''].join('|');
+  const t = curTheme(slide), sk = v === 'spot' ? spotOrder(p) : 0, key = [t.key, v, p % 6, S.customMode, S.custom ? S.custom.src.length : '', dimOf(), v === 'spot' ? 'k' + sk + ':' + S.photos.map(x => x.length).join(',') + ':' + (slide && slide.spotSrc ? slide.spotSrc.length : '') : ''].join('|');
   if (!bgCache.has(key)) {
     const c = mk(W, H), x = c.getContext('2d');
     if (COMP.has(v)) composeBg(x, t, v, p);
-    else if (v === 'spot' && !t.flat) { const ph = spotPhoto(sk); if (ph) drawSpotPhoto(x, ph, sk); else drawSpot(x, t, sk); }
+    else if (v === 'spot' && !t.flat) { const own = slide && slide.spotSrc && imgCache.get(slide.spotSrc), ph = own ? own.im : spotPhoto(sk); if (ph) drawSpotPhoto(x, ph, sk); else drawSpot(x, t, sk); }
     else { t.bg.call(t, x, t.ownVariants ? v : (v === 'title' ? 'title' : 'content')); if (!t.ownVariants && !t.flat) decorate(x, t, v, p); }
     if (!t.flat && !NO_ORN.has(v)) ornaments(x, t, p);
     bgCache.set(key, c);
@@ -1099,7 +1099,7 @@ function syncSlideBgUI() {
   $('bgVaryRow').hidden = slideMode; $('bgLayoutRow').hidden = !slideMode; $('slBgPick').textContent = sl ? `只用在第 ${S.sel + 1} 頁…` : '只用在這一頁…'; $('slBgTitle').textContent = `第 ${S.sel + 1} 頁用自己的圖`;
   $('bgResetRow').hidden = !(slideMode && sl && sl.bg);
   $('optVary').checked = S.autoVary !== false;
-  const b = sl && sl.bg; $('slBgImg').hidden = !(b && b.t === 'img');
+  const b = sl && sl.bg; $('slBgImg').hidden = !(b && b.t === 'img'); if (typeof renderPhotos === 'function' && $('photoList')) renderPhotos();
   if (b && b.t === 'img') { const d = Math.round((b.dim == null ? .45 : b.dim) * 100); $('slBgDim').value = d; $('slBgDimO').textContent = d + '%'; }
   markBgSel();
 }
@@ -1148,12 +1148,30 @@ function savePhotos() { try { localStorage.setItem('ppt-web-photos', JSON.string
 function renderPhotos() {
   const box = $('photoList'); box.innerHTML = '';
   S.photos.forEach((src, i) => {
-    const d = document.createElement('div'); d.className = 'ph'; const im = new Image(); im.src = src; d.appendChild(im);
-    const x = document.createElement('button'); x.className = 'phx'; x.textContent = '×'; x.title = '移除這張照片'; x.onclick = () => { S.photos.splice(i, 1); savePhotos(); renderPhotos(); afterThemeChange(); };
+    const sl = S.slides[S.sel], d = document.createElement('div'); d.className = 'ph' + (sl && sl.spotSrc === src ? ' sel' : ''); d.title = '點一下：這一頁用這張照片當強調頁';
+    const im = new Image(); im.src = src; d.appendChild(im);
+    im.onclick = () => { const s2 = S.slides[S.sel]; if (!s2) return; s2.spotSrc = src; s2.variant = 'spot'; afterSpotChange(); };
+    const x = document.createElement('button'); x.className = 'phx'; x.textContent = '×'; x.title = '移除這張照片'; x.onclick = e => { e.stopPropagation(); S.slides.forEach(z => { if (z.spotSrc === src) delete z.spotSrc; }); S.photos.splice(i, 1); savePhotos(); afterSpotChange(); };
     d.appendChild(x); box.appendChild(d);
   });
-  $('photoHint').textContent = S.photos.length ? `已加入 ${S.photos.length} 張，強調頁會輪流使用。` : '還沒有照片，強調頁會用內建的光影。';
+  $('photoHint').textContent = S.photos.length ? '點照片，就會把左邊選中的這一頁變成用這張照片的強調頁。' : '還沒有照片，強調頁會用內建的光影（深色背景＋光暈）。';
+  syncSpotUI();
 }
+function syncSpotUI() {
+  const sl = S.slides[S.sel]; if (!$('spotList')) return;
+  const pl = planVariants(), list = pl.map((v, i) => v === 'spot' ? i : -1).filter(i => i >= 0);
+  const box = $('spotList'); box.innerHTML = '';
+  const lead = document.createElement('span'); lead.textContent = list.length ? '目前的強調頁：' : '目前沒有強調頁。'; box.appendChild(lead);
+  list.forEach(i => { const b = document.createElement('button'); b.className = 'link'; b.textContent = `第 ${i + 1} 頁`; b.onclick = () => select(i); box.appendChild(b); });
+  const on = sl && autoVariant(sl, S.sel) === 'spot';
+  $('btnSpotToggle').textContent = sl ? (on ? `第 ${S.sel + 1} 頁取消強調頁` : `第 ${S.sel + 1} 頁設成強調頁`) : '設成強調頁';
+}
+function afterSpotChange() { bgCache.clear(); _scCache.clear(); _deck.sig = ''; renderPhotos(); buildList(); renderMain(); syncVariantUI(); save(); }
+$('btnSpotToggle').onclick = () => {
+  const sl = S.slides[S.sel]; if (!sl) return;
+  if (autoVariant(sl, S.sel) === 'spot') { sl.variant = 'plain'; delete sl.spotSrc; } else sl.variant = 'spot';
+  afterSpotChange();
+};
 $('btnPhotos').onclick = () => $('photoFile').click();
 $('photoFile').onchange = async e => {
   const fs = [...e.target.files].slice(0, 8); e.target.value = '';
@@ -1162,7 +1180,7 @@ $('photoFile').onchange = async e => {
     if (src) { await loadBgImg(src); S.photos.push(src); }
   }
   savePhotos(); renderPhotos(); afterThemeChange();
-  if (!planVariants().includes('spot')) toast('照片已加入。目前沒有強調頁，可以在「背景」切到「只有這一頁」，把版面換成「深色強調」。');
+  if (false) toast('照片已加入。目前沒有強調頁，可以在「背景」切到「只有這一頁」，把版面換成「深色強調」。');
 };
 async function loadPhotos() { try { S.photos = JSON.parse(localStorage.getItem('ppt-web-photos') || '[]'); await Promise.all(S.photos.map(loadBgImg)); } catch (e) { S.photos = []; } renderPhotos(); }
 
