@@ -600,6 +600,7 @@ const thumbCv = new Map();
 function renderMain() {
   const sl = S.slides[S.sel]; if (!sl) return;
   const r = drawLive($('cvLive'), sl, S.sel); S.liveGeo = r.geo;
+  const key = S.sel + '|' + S.view; if (key !== renderMain._k) { renderMain._k = key; [$('cvLive'), $('cvStrip')].forEach(c => { c.classList.remove('swap'); void c.offsetWidth; c.classList.add('swap'); }); }
   $('capLive').textContent = '';
   $('capName').textContent = S.view === 'live' ? '現場版' : '線上版'; $('capTally').className = 'tally ' + (S.view === 'live' ? 'live' : 'rec'); $('capPage').textContent = `第 ${S.sel + 1} 頁／共 ${S.slides.length} 頁`;
   $('lvCap').hidden = !r.capped; $('lvCap').textContent = '這一頁字比較多，已經是放得下的最大字級；字級往大調不會再變大，往小調才有變化。';
@@ -630,6 +631,7 @@ function buildList() {
     const d = document.createElement('div'); d.className = 'thumb' + (i === S.sel ? ' sel' : '');
     d.innerHTML = `<canvas width="400" height="225"></canvas><span class="n">${i + 1}</span><span class="badge" hidden></span><span class="flag" hidden>單頁背景</span>`;
     d.onclick = () => select(i); list.appendChild(d); thumbCv.set(i, d.querySelector('canvas'));
+    if (S._ripple) { d.classList.add('ripple'); d.style.animationDelay = Math.min(i, 20) * 45 + 'ms'; }
   });
   let i = 0; const step = () => { if (i < S.slides.length) { renderThumb(i++); setTimeout(step, 0); } }; step();
 }
@@ -860,7 +862,15 @@ function sampleSlides() { return SAMPLE.map(ps => ({ paras: strToParas(ps.map(p 
 
 // ---------- 匯出 ----------
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-function prog(t, p) { $('prog').style.display = 'flex'; $('progT').textContent = t; $('progB').style.width = (p * 100) + '%'; }
+function prog(t, p) {
+  $('prog').style.display = 'flex'; $('progT').textContent = t; $('progB').style.width = (p * 100) + '%';
+  // 每一頁一個小格，做完的亮起來，看得出還剩多少
+  const m = t.match(/第\s*(\d+)\s*\/\s*(\d+)\s*頁/), box = $('progDots');
+  if (!m) { if (p >= .95) box.querySelectorAll('i').forEach(d => d.classList.add('on')); return; }
+  const cur = +m[1], n = +m[2];
+  if (box.children.length !== n) box.innerHTML = '<i></i>'.repeat(n);
+  [...box.children].forEach((d, k) => { d.classList.toggle('on', k < cur - 1); d.classList.toggle('now', k === cur - 1); });
+}
 const blobOf = (cv, type, q) => new Promise(r => cv.toBlob(r, type, q));
 const dataOf = blob => new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(blob); });
 function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
@@ -1080,7 +1090,8 @@ $('btnAdd').onclick = () => { S.slides.splice(S.sel + 1, 0, { paras: [[{ t: '新
 $('btnDup').onclick = () => { S.slides.splice(S.sel + 1, 0, JSON.parse(JSON.stringify(S.slides[S.sel]))); buildList(); select(S.sel + 1); save(); };
 $('btnDel').onclick = () => {
   if (S.slides.length < 2) { toast('至少要留一頁'); return; }
-  S.slides.splice(S.sel, 1); buildList(); select(Math.min(S.sel, S.slides.length - 1)); save();
+  const th = document.querySelectorAll('.thumb')[S.sel], done = () => { S.slides.splice(S.sel, 1); buildList(); select(Math.min(S.sel, S.slides.length - 1)); save(); toast('已刪除這一頁'); };
+  if (th && !matchMedia('(prefers-reduced-motion: reduce)').matches) { th.classList.add('leaving'); setTimeout(done, 180); } else done();
 };
 $('lvSize').oninput = () => setLay('lvSize', $('lvSize').value / 100);
 $('lvGap').oninput = () => setLay('lvGap', $('lvGap').value * LN);
@@ -1307,7 +1318,7 @@ $('tplFile').onchange = async e => {
     const t = await parseTemplate(await f.arrayBuffer(), f.name, (i, n) => prog(`正在讀取模板 第 ${i + 1} / ${n} 頁…`, i / n));
     $('prog').style.display = 'none';
     if (!t.pages.length) throw new Error('沒有頁面');
-    S.tpl = Object.assign(t, { on: true }); await loadTplImages(); afterTplChange();
+    S.tpl = Object.assign(t, { on: true }); await loadTplImages(); S._ripple = true; afterTplChange(); S._ripple = false;
     toast(`已套用模板「${t.name}」：${tplUsable().length} 頁會輪流當背景`);
   } catch (err) { console.error(err); $('prog').style.display = 'none'; toast('讀不到這個模板，請確認是 .pptx 檔'); }
 };
