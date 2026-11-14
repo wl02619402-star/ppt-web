@@ -29,7 +29,7 @@ button{cursor:pointer}
 header{height:48px;display:flex;align-items:center;gap:8px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line)}
 header h1{font-size:14px;font-weight:600;margin:0 24px 0 0;white-space:nowrap}
 header .sp{flex:1}
-body.empty #list,body.empty #side,body.empty .expwrap,body.empty #btnOpen{display:none}
+body.empty #list,body.empty #side,body.empty .expwrap,body.empty #btnOpen,body.empty .undo{display:none}
 body.empty #app{grid-template-columns:1fr}
 .expwrap{position:relative}
 .menu{position:absolute;right:0;top:calc(100% + 6px);z-index:30;width:300px;background:var(--panel);border:1px solid var(--line2);border-radius:6px;padding:4px;box-shadow:0 12px 32px rgba(0,0,0,.45)}
@@ -460,6 +460,12 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 #prog .dots i{display:block;width:10px;height:10px;margin:0;border-radius:2px;background:var(--raise2);overflow:visible;transition:background-color .2s var(--ease)}
 #prog .dots i.on{background:var(--ink2)}
 #prog .dots i.now{background:var(--accent)}
+.undo{display:flex;gap:4px;margin-right:8px}
+.undo .btn{padding:0 10px}
+.undo .btn:disabled{opacity:.35}
+@media (max-width:640px){.undo .btn{font-size:0;gap:0;width:40px;padding:0}.undo .btn .ic{width:18px;height:18px}.undo{margin-right:2px}}
+.thumb .warn{position:absolute;left:6px;top:6px;font-size:11px;line-height:18px;padding:0 6px;border-radius:4px;background:var(--accent);color:#1b1206;font-weight:500}
+@media (max-width:440px){header h1 .t{display:none}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 @media (max-width:1100px){
   #app{grid-template-columns:1fr;height:auto}
@@ -473,8 +479,9 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 </head>
 <body class="empty">
 <header>
-  <h1><span class="mark" aria-hidden="true"><i></i><i></i></span>簡報美編工坊</h1>
+  <h1><span class="mark" aria-hidden="true"><i></i><i></i></span><span class="t">簡報美編工坊</span></h1>
   <span class="sp"></span>
+  <div class="undo"><button class="btn iconbtn" id="btnUndo" title="復原（⌘Z／Ctrl+Z）" aria-label="復原" disabled>復原</button><button class="btn iconbtn" id="btnRedo" title="重做（⇧⌘Z／Ctrl+Y）" aria-label="重做" disabled>重做</button></div>
   <button class="btn" id="btnOpen" aria-label="上傳文字檔" title="上傳文字檔">上傳文字檔</button>
   <div class="expwrap">
     <button class="btn primary" id="btnExport" title="下載兩個 pptx：現場版、線上版，可以直接放進 ProPresenter">匯出 pptx</button>
@@ -726,7 +733,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=67"></script>
+<script src="app.js?v=69"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));

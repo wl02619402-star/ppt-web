@@ -197,25 +197,38 @@ function layout(paras, size, maxW, o) {
         pos += pc.length;
       });
     });
-    let cur = [], cw = 0;
-    for (const tk of flat) {
-      if (tk.brk) { if (cur.length) { lines.push({ pi, segs: cur, size: fs, head, scr, w: cw }); cur = []; cw = 0; } continue; }
-      const w = tw(tk.red ? redf : base, tk.t);
-      if (cur.length && cw + w > maxW && !NO_START.has(tk.t)) {
-        const carry = [];
-        while (cur.length && NO_END.has(cur[cur.length - 1].t)) carry.unshift(cur.pop());
-        // 新的一行不要以太短的詞開頭：把前面的詞一起帶下來，湊到至少 4 個字（例如「死亡之路」整個放到下一行）
-        if (isCJK(tk.t[0]) && tk.t.length <= 2) {
-          let n = carry.reduce((a, x) => a + x.t.length, 0) + tk.t.length;
-          while (n < 4 && cur.length > 2 && isCJK(cur[cur.length - 1].t[0])) { const x = cur.pop(); carry.unshift(x); n += x.t.length; }
+    const wrap = mw => {
+      const out = []; let cur = [], cw = 0;
+      for (const tk of flat) {
+        if (tk.brk) { if (cur.length) { out.push({ pi, segs: cur, size: fs, head, scr, w: cw }); cur = []; cw = 0; } continue; }
+        const w = tw(tk.red ? redf : base, tk.t);
+        if (cur.length && cw + w > mw && !NO_START.has(tk.t)) {
+          const carry = [];
+          while (cur.length && NO_END.has(cur[cur.length - 1].t)) carry.unshift(cur.pop());
+          // 新的一行不要以太短的詞開頭：把前面的詞一起帶下來，湊到至少 4 個字（例如「死亡之路」整個放到下一行）
+          if (isCJK(tk.t[0]) && tk.t.length <= 2) {
+            let n = carry.reduce((a, x) => a + x.t.length, 0) + tk.t.length;
+            while (n < 4 && cur.length > 2 && isCJK(cur[cur.length - 1].t[0])) { const x = cur.pop(); carry.unshift(x); n += x.t.length; }
+          }
+          out.push({ pi, segs: cur, size: fs, head, scr, w: cw });
+          cur = carry; cw = carry.reduce((a, s) => a + tw(s.red ? redf : base, s.t), 0);
         }
-        lines.push({ pi, segs: cur, size: fs, head, scr, w: cw });
-        cur = carry; cw = carry.reduce((a, s) => a + tw(s.red ? redf : base, s.t), 0);
+        if (tk.t === ' ' && !cur.length) continue;
+        cur.push(tk); cw += w;
       }
-      if (tk.t === ' ' && !cur.length) continue;
-      cur.push(tk); cw += w;
+      if (cur.length) out.push({ pi, segs: cur, size: fs, head, scr, w: cw });
+      return out;
+    };
+    // 換行平均：最後一行如果只剩幾個字，就把每行稍微縮短重排，讓各行長度接近（行數不增加）
+    let best = wrap(maxW);
+    const shortLast = ls => ls.length > 1 && ls[ls.length - 1].w < maxW * .34;
+    if (shortLast(best) && !flat.some(t => t.brk)) {
+      for (const k of [.95, .9, .85, .8, .75, .7]) {
+        const t = wrap(maxW * k); if (t.length !== best.length) break;
+        best = t; if (!shortLast(t)) break;
+      }
     }
-    if (cur.length) lines.push({ pi, segs: cur, size: fs, head, scr, w: cw });
+    lines.push(...best);
   });
   lines.forEach(l => { l.h = l.size * o.lineGap; });
   return lines;
@@ -619,17 +632,21 @@ function syncVariantUI() {
 }
 function renderThumb(i) {
   const cv = thumbCv.get(i); if (!cv) return;
-  const full = mk(W, H); drawLive(full, S.slides[i], i);
+  const full = mk(W, H), r = drawLive(full, S.slides[i], i);
   const c = cv.getContext('2d'); c.drawImage(full, 0, 0, cv.width, cv.height);
   const badge = cv.parentElement.querySelector('.badge'); const n = stripPages(S.slides[i]).pages.length;
   badge.textContent = `線上 ${n} 條`; badge.hidden = n < 2;
   const fl = cv.parentElement.querySelector('.flag'); if (fl) fl.hidden = !S.slides[i].bg;
+  // 需要看一下：字被縮得很小，或線上版要拆成好幾條
+  const wn = cv.parentElement.querySelector('.warn'), why = r.shrunk ? '這頁字很多，字被縮小了' : n > 2 ? `線上版要拆成 ${n} 條字條` : '';
+  if (wn) { wn.hidden = !why; wn.title = why; }
+  S.slides[i]._warn = why;
 }
 function buildList() {
   const list = $('list'); list.innerHTML = ''; thumbCv.clear();
   S.slides.forEach((sl, i) => {
     const d = document.createElement('div'); d.className = 'thumb' + (i === S.sel ? ' sel' : '');
-    d.innerHTML = `<canvas width="400" height="225"></canvas><span class="n">${i + 1}</span><span class="badge" hidden></span><span class="flag" hidden>單頁背景</span>`;
+    d.innerHTML = `<canvas width="400" height="225"></canvas><span class="n">${i + 1}</span><span class="badge" hidden></span><span class="flag" hidden>單頁背景</span><span class="warn" hidden>看一下</span>`;
     d.onclick = () => select(i); list.appendChild(d); thumbCv.set(i, d.querySelector('canvas'));
     if (S._ripple) { d.classList.add('ripple'); d.style.animationDelay = Math.min(i, 20) * 45 + 'ms'; }
   });
@@ -828,6 +845,7 @@ function showStyleNote(has) {
 let saveT;
 function save() {
   clearTimeout(saveT); saveT = setTimeout(() => {
+    histCommit();
     try { localStorage.setItem('ppt-web-style', JSON.stringify(styleObj())); } catch (e) { }
     const mk1 = sl => ({ slides: sl, themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, live: S.live, fileName: S.fileName, fonts: S.fonts, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
     try { localStorage.setItem('ppt-web-v1', JSON.stringify(mk1(S.slides))); }
@@ -846,7 +864,8 @@ async function start(slides, name, live) {
   S.slides = slides; S.live = live || {}; S.sel = 0; S.page = 0; S.fileName = name.replace(/\.pptx$/i, '');
   $('drop').hidden = true; $('editor').hidden = false; $('viewHint').textContent = VIEW_HINT[S.view]; $('sideEmpty').hidden = true; $('sideBody').hidden = false; document.body.classList.remove('empty');
   await Promise.all(slides.flatMap(x => [].concat(x.bg && x.bg.t === 'img' ? [x.bg.src] : [], (x.pics || []).map(p => p.src))).map(loadBgImg));
-  await ensureFonts(); bgCache.clear(); buildCats(); buildThemes(); buildList(); select(0); save();
+  await ensureFonts(); bgCache.clear(); buildCats(); buildThemes(); buildList(); select(0); save(); histReset();
+  setTimeout(() => { const w = S.slides.map((s, i) => s._warn ? i + 1 : 0).filter(Boolean); if (w.length) toast(`排好了。第 ${w.slice(0, 5).join('、')}${w.length > 5 ? ' 等' : ''} 頁字比較多，縮圖上有標「看一下」`); }, 1500);
 }
 async function loadFile(f) {
   try { const slides = await parsePptx(await f.arrayBuffer()); if (!slides.length) throw new Error('empty'); await start(slides, f.name); toast(`已讀入 ${slides.length} 頁`); if (S.autoExport) await exportByFormat().catch(e => { console.error(e); $('prog').style.display = 'none'; toast('匯出失敗：' + e.message); }); }
@@ -1257,7 +1276,19 @@ function fitRegion(paras, r, o, maxS, minS) {
   for (; size >= minS; size -= 2) { lines = layout(paras, size, r.w, o); if (blockH(lines, o) <= r.h) return { lines, size, fit: true }; }
   return { lines: layout(paras, minS, r.w, o), size: minS, fit: false };
 }
-function drawTplSlide(cv, slide, idx, noText) {
+// 套模板時整份內文字級一致：先算每頁放得下的內文字級，取中位數，太大的頁面往下對齊
+let _tplDeck = { sig: '', v: 0 };
+function tplDeckSize() {
+  tplPageIdx(0);
+  const sig = _tplPlan.sig + '|' + S.deckScale + '|' + (S.lineGap || '') + JSON.stringify(S.fonts) + S.slides.map(s => (s.fs || 1) + '/' + (s.lg || '') + '/' + (s.bg ? 1 : 0)).join(',');
+  if (sig === _tplDeck.sig) return _tplDeck.v;
+  _tplDeck = { sig, v: 0 };
+  const c = mk(W, H), sizes = [];
+  S.slides.forEach((sl, i) => { if (i === 0 || sl.bg) return; const r = drawTplSlide(c, sl, i, true, true); if (r.bodySize) sizes.push(r.bodySize / (sl.fs || 1)); });
+  sizes.sort((a, b) => a - b);
+  _tplDeck.v = sizes.length ? sizes[Math.floor(sizes.length / 2)] : 0; return _tplDeck.v;
+}
+function drawTplSlide(cv, slide, idx, noText, dry) {
   const c = cv.getContext('2d'), pi = tplPageIdx(idx), pg = S.tpl.pages[pi], L = liveCfg(slide, false, 'plain');
   c.clearRect(0, 0, W, H); c.drawImage(getBg('tpl', idx, slide), 0, 0);
   (slide.pics || []).forEach(p => { const e = imgCache.get(p.src); if (!e) return; const im = e.im, cr = p.crop || { l: 0, t: 0, r: 0, b: 0 }; c.save(); c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = 26; c.shadowOffsetY = 8; c.drawImage(im, im.width * cr.l, im.height * cr.t, im.width * (1 - cr.l - cr.r), im.height * (1 - cr.t - cr.b), p.x * W, p.y * H, p.w * W, p.h * H); c.restore(); });
@@ -1278,21 +1309,24 @@ function drawTplSlide(cv, slide, idx, noText) {
   let tR = pad(pg.title), bR = pad(pg.body);
   if (!tR && !bR) tR = { x: 160, y: 140, w: W - 320, h: H - 280, align: 'center', anchor: 'middle', lum: pg.lum };
   const scale = S.deckScale * (slide.fs || 1), gap = gapOf(slide), parts = [];
-  const place = (pp, r, head, maxS) => {
+  const cap = dry ? 0 : tplDeckSize();
+  const place = (pp, r, head, maxS, body) => {
+    if (body && cap) maxS = Math.min(maxS, Math.round(cap * 1.12 / scale));
     const o = { headRule: head ? (pi2, all) => pi2 === 0 && all.length > 1 : () => false, headScale: 1.2, lineGap: gap, paraGap: .45, shadow: S.shadow };
     let f = fitRegion(pp, r, o, Math.round(maxS * scale), 40);
     if (!f.fit) { const g = grow(r), f2 = fitRegion(pp, g, o, Math.round(maxS * scale), 32); if (f2.size > f.size || f2.fit) { f = f2; r = g; } }
     const h = blockH(f.lines, o), y = r.anchor === 'middle' ? r.y + (r.h - h) / 2 : r.anchor === 'bottom' ? r.y + r.h - h : r.y;
     const align = L.align || (f.lines.length > 2 && paras.length > 1 && r.align === 'center' && pp.length > 1 ? 'left' : r.align);
-    parts.push({ capped: f.size < Math.round(maxS * scale), lines: f.lines, x: r.x, y: Math.max(40, y), o, w: r.w, align, T: Object.assign({}, curTheme(slide), colorFor(r)), size: f.size });
+    parts.push({ body: !!body, capped: f.size < Math.round(maxS * scale), lines: f.lines, x: r.x, y: Math.max(40, y), o, w: r.w, align, T: Object.assign({}, curTheme(slide), colorFor(r)), size: f.size });
   };
-  if (headBody && tR && bR) { place(hp, tR, false, idx === 0 ? 110 : 90); place(rest, bR, false, 80); }
+  if (headBody && tR && bR) { place(hp, tR, false, idx === 0 ? 110 : 90); place(rest, bR, false, 80, true); }
   else if (idx === 0 && tR) { place(hp, tR, false, 110); if (rest.length) place(rest, bR || grow({ x: tR.x, y: tR.y + tR.h + 20, w: tR.w, h: 200, align: tR.align, anchor: 'top', lum: tR.lum }), false, 60); }
-  else place(paras, bR || tR, true, (bR ? 80 : 96));
+  else place(paras, bR || tR, true, (bR ? 80 : 96), idx !== 0);
   if (!noText) parts.forEach(p => drawLines(c, p.lines, p.x, p.y, p.o, p.T, p.align, p.w));
   const main = parts[parts.length - 1];
   slide._autoAlign = main.align;
-  return { shrunk: main.size < 44, capped: parts.some(p => p.capped), geo: { lines: main.lines, x: main.x, y: main.y, o: main.o, align: main.align, maxW: main.w, T: main.T, extra: parts.slice(0, -1).map(p => ({ lines: p.lines, x: p.x, y: p.y, o: p.o, w: p.w, T: p.T, align: p.align })) } };
+  const bp = parts.find(p => p.body);
+  return { bodySize: bp ? bp.size : 0, shrunk: main.size < 44, capped: parts.some(p => p.capped), geo: { lines: main.lines, x: main.x, y: main.y, o: main.o, align: main.align, maxW: main.w, T: main.T, extra: parts.slice(0, -1).map(p => ({ lines: p.lines, x: p.x, y: p.y, o: p.o, w: p.w, T: p.T, align: p.align })) } };
 }
 async function loadTplImages() { tplImgs.length = 0; if (!S.tpl) return; await Promise.all(S.tpl.pages.map((p, i) => new Promise(r => { const im = new Image(); im.onload = () => { tplImgs[i] = im; r(); }; im.onerror = r; im.src = p.img; }))); }
 function renderTplUI() {
@@ -1367,8 +1401,39 @@ picSel.querySelector('.picdel').onclick = () => {
   _deck.sig = ''; renderMain(); renderThumb(S.sel); save(); toast('已移除這張圖片');
 };
 
+// ---------- 復原／重做：每次修改（停下來 0.3 秒後）存一個版本，最多 60 步 ----------
+const HIST = { undo: [], redo: [], cur: null, sig: '', busy: false };
+function stateSnap() {
+  return { slides: structuredClone(S.slides), live: structuredClone(S.live), deckScale: S.deckScale, lineGap: S.lineGap, stripScale: S.stripScale, stripGap: S.stripGap, stripW: S.stripW, stripFixed: S.stripFixed, stripX: S.stripX, stripY: S.stripY, fonts: structuredClone(S.fonts), dashRef: S.dashRef, tplUse: S.tpl ? S.tpl.pages.map(p => p.use) : null };
+}
+const snapSig = st => JSON.stringify(st, (k, v) => k.startsWith('_') ? undefined : k === 'src' && typeof v === 'string' ? v.length : v);   // _開頭是畫面暫存，不算修改
+function histReset() { HIST.undo = []; HIST.redo = []; HIST.cur = stateSnap(); HIST.sig = snapSig(HIST.cur); syncUndoUI(); }
+function histCommit() {
+  if (HIST.busy || !S.slides.length) return;
+  const st = stateSnap(), sig = snapSig(st); if (sig === HIST.sig) return;
+  if (HIST.cur) { HIST.undo.push(HIST.cur); if (HIST.undo.length > 60) HIST.undo.shift(); }
+  HIST.redo = []; HIST.cur = st; HIST.sig = sig; syncUndoUI();
+}
+function histApply(st) {
+  HIST.busy = true;
+  S.slides = structuredClone(st.slides); S.live = structuredClone(st.live); S.fonts = structuredClone(st.fonts);
+  ['deckScale', 'lineGap', 'stripScale', 'stripGap', 'stripW', 'stripFixed', 'stripX', 'stripY', 'dashRef'].forEach(k => S[k] = st[k]);
+  if (S.tpl && st.tplUse && st.tplUse.length === S.tpl.pages.length) S.tpl.pages.forEach((p, i) => p.use = st.tplUse[i]);
+  HIST.cur = st; HIST.sig = snapSig(st);
+  bgCache.clear(); _scCache.clear(); _deck.sig = ''; if (typeof _tplPlan !== 'undefined') _tplPlan.sig = ''; wcache.clear();
+  buildFontSelects(); $('optDash').checked = S.dashRef !== false;
+  buildList(); select(Math.min(S.sel, S.slides.length - 1)); if (typeof renderTplUI === 'function') renderTplUI();
+  HIST.busy = false; syncUndoUI(); save();
+}
+function histUndo() { if (!HIST.undo.length) { toast('沒有可以復原的步驟'); return; } clearTimeout(saveT); histCommit(); if (!HIST.undo.length) return; HIST.redo.push(HIST.cur); histApply(HIST.undo.pop()); toast('已復原'); }
+function histRedo() { if (!HIST.redo.length) return; HIST.undo.push(HIST.cur); histApply(HIST.redo.pop()); toast('已重做'); }
+function syncUndoUI() { $('btnUndo').disabled = !HIST.undo.length; $('btnRedo').disabled = !HIST.redo.length; }
+$('btnUndo').onclick = histUndo; $('btnRedo').onclick = histRedo;
+
 // ---------- 線條圖示（同一套、同一粗細） ----------
 const ICON = {
+  undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
+  redo: '<path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/>',
   upload: '<path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>',
   download: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>',
   text: '<path d="M4 7V5h16v2"/><path d="M12 5v14"/><path d="M9 19h6"/>',
@@ -1382,7 +1447,7 @@ const ICON = {
   image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
 };
 const ic = n => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICON[n]}</svg>`;
-[['btnOpen', 'upload'], ['btnExport', 'download'], ['btnPick', 'upload'], ['btnSample', 'file'], ['btnBannerTpl', 'image'], ['btnTpl', 'image'], ['btnAdd', 'plus'], ['btnDup', 'copy'], ['btnDel', 'trash']].forEach(([id, n]) => { const b = $(id); if (b && !b.querySelector('.ic')) b.insertAdjacentHTML('afterbegin', ic(n)); });
+[['btnUndo', 'undo'], ['btnRedo', 'redo'], ['btnOpen', 'upload'], ['btnExport', 'download'], ['btnPick', 'upload'], ['btnSample', 'file'], ['btnBannerTpl', 'image'], ['btnTpl', 'image'], ['btnAdd', 'plus'], ['btnDup', 'copy'], ['btnDel', 'trash']].forEach(([id, n]) => { const b = $(id); if (b && !b.querySelector('.ic')) b.insertAdjacentHTML('afterbegin', ic(n)); });
 document.querySelectorAll('.tabs button').forEach(b => { const n = { pText: 'text', pBg: 'layout', pLook: 'type', pPos: 'move' }[b.dataset.pane]; if (n && !b.querySelector('.ic')) b.insertAdjacentHTML('afterbegin', ic(n)); });
 // 滑桿：已經拉到的那一段亮一點
 function paintRange(r) { const min = +r.min || 0, max = +r.max || 100, v = +r.value; r.style.setProperty('--p', ((v - min) / (max - min) * 100) + '%'); }
@@ -1485,6 +1550,7 @@ document.addEventListener('keydown', e => {
   const t = e.target, tag = t.tagName, type = (t.type || '').toLowerCase();
   const typing = t.isContentEditable || tag === 'TEXTAREA' || tag === 'SELECT' || (tag === 'INPUT' && !['range', 'checkbox', 'button'].includes(type));
   if (e.key === 'Escape' && typing) { t.blur(); return; }
+  if (!typing && (e.metaKey || e.ctrlKey) && !e.altKey && (e.key.toLowerCase() === 'z' || e.key.toLowerCase() === 'y') && S.slides.length) { e.preventDefault(); (e.key.toLowerCase() === 'y' || e.shiftKey) ? histRedo() : histUndo(); return; }
   if (typing || e.metaKey || e.ctrlKey || e.altKey || !S.slides.length || !$('editor') || $('editor').hidden) return;
   let to = null;
   if (e.key === 'ArrowDown' || e.key === 'PageDown') to = S.sel + 1;
