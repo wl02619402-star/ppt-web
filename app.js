@@ -1,7 +1,7 @@
 'use strict';
 // ---------- 狀態 ----------
 const S = {
-  slides: [], sel: 0, page: 0, themeKey: 'torn_kraft', stripW: 0.81, stripY: 64, stripX: 0, view: 'live', autoExport: false, exportFmt: 'image', deckScale: 1, anchor: 'middle',
+  slides: [], sel: 0, page: 0, themeKey: 'torn_kraft', stripW: 0.81, stripFixed: false, stripY: 64, stripX: 0, view: 'live', autoExport: false, exportFmt: 'image', deckScale: 1, anchor: 'middle',
   custom: null, customMode: 'dark', customDim: null, fileName: '簡報',
   fonts: { head: 'theme', body: 'theme', scr: 'same' }, shadow: false, blocks: false, dashRef: true, photos: [], tpl: null, autoVary: true, bgAll: null, bgScope: 'all', localFonts: [], lineGap: null, stripGap: null, stripScale: 1, layScope: 'all', live: {}, liveScope: 'all',
 };
@@ -394,8 +394,10 @@ const sgapOf = slide => (slide && slide.slg) || S.stripGap || 0.96 * LN;
 function stripOpts(slide) {
   return { headRule: (pi, ps) => pi === 0 && ps.length > 1, headScale: 1.2, lineGap: sgapOf(slide), paraGap: .3 };
 }
+// 字條寬度：沒調過就自動貼合內容；調過（整份或這一頁）就照設定的寬度
+const stripFixedW = slide => slide.sw ? Math.round(W * slide.sw) : S.stripFixed ? Math.round(W * S.stripW) : 0;
 function stripSplitLayout(slide, sp) {
-  const cardW = Math.round(W * .96), iw = cardW - STRIP.padL - STRIP.padR, leftW = Math.round(iw * .3), gap = 48, rw = iw - leftW - gap;
+  const cardW = stripFixedW(slide) || Math.round(W * .96), iw = cardW - STRIP.padL - STRIP.padR, leftW = Math.round(iw * .3), gap = 48, rw = iw - leftW - gap;
   const o = Object.assign(stripOpts(slide), { headRule: () => false }), pv = STRIP.padT + STRIP.padB;
   const ho = { headRule: () => true, headScale: 1, lineGap: o.lineGap, paraGap: .3 }, co = { headRule: () => false, headScale: 1, lineGap: o.lineGap, paraGap: .3 };
   for (let size = Math.round(46 * (S.stripScale || 1) * (slide.sfs || 1)); size >= 30; size -= 2) {
@@ -412,7 +414,7 @@ function stripPages(slide) {
   const idx = S.slides.indexOf(slide), v = idx >= 0 ? autoVariant(slide, idx) : 'plain';
   if (v === 'split') { const sp = splitParts(slide.paras), r = sp && stripSplitLayout(slide, sp); if (r) return r; }
   const o = stripOpts(slide), sfs = slide.sfs || 1, pv = STRIP.padT + STRIP.padB;
-  const base = Math.round(W * S.stripW), wide = Math.round(W * .96);
+  const fixed = stripFixedW(slide), base = fixed || Math.round(W * S.stripW), wide = fixed || Math.round(W * .96);
   const widths = [base]; for (let k = 1; k <= 3; k++) { const w = Math.round(base + (wide - base) * k / 3); if (w > widths[widths.length - 1]) widths.push(w); }
   const attempt = (cardW, minSize) => {
     const tw_ = cardW - STRIP.padL - STRIP.padR;
@@ -482,9 +484,9 @@ function drawStrip(cv, slide, page, noText) {
   page = Math.min(page, pages.length - 1);
   const lines = pages[page], h = Math.round((split ? Math.max(split.bh, split.lh) : blockH(lines, o)) + STRIP.padT + STRIP.padB);
   // 字條寬度貼合內容：短的字條就短，不再每條都一樣長
-  if (!split) { const mw = Math.max(...pages.flat().map(l => l.w)); cardW = Math.min(cardW, Math.max(Math.round(W * .34), Math.ceil(mw) + STRIP.padL + STRIP.padR + 8)); }
+  if (!split && !stripFixedW(slide)) { const mw = Math.max(...pages.flat().map(l => l.w)); cardW = Math.min(cardW, Math.max(Math.round(W * .34), Math.ceil(mw) + STRIP.padL + STRIP.padR + 8)); }
   const x0 = Math.max(0, Math.min(W - cardW, Math.round((W - cardW) / 2) + S.stripX)), y0 = Math.max(0, H - h - S.stripY);
-  const card = stripCard(T0, cardW, h, v, idx, slide);
+  const card = stripCard(T0, cardW, h, v, idx, slide); drawStrip.card = { x: x0, y: y0, w: cardW, h };
   c.save(); c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 24; c.shadowOffsetY = 8;
   c.drawImage(card, x0, y0, cardW, h); c.restore();
   if (split) {
@@ -632,7 +634,7 @@ function select(i) {
 }
 const VIEW_HINT = {
   live: '可以直接拖曳畫面上的文字；圖片也能拖曳移動，拉圖片右下角可以縮放。',
-  strip: '背景是透明的，直播時疊在畫面上。可以直接拖曳字幕條。',
+  strip: '背景是透明的，直播時疊在畫面上。拖曳字條可以移動位置，拖曳字條左右兩端可以調整長度。',
 };
 function setView(v) {
   S.view = v;
@@ -681,7 +683,7 @@ function setLay(kind, v) {
 }
 function syncOut() {
   syncLiveUI();
-  $('stripXO').textContent = S.stripX; $('stripX').value = S.stripX; $('stripY').value = S.stripY; $('stripYO').textContent = S.stripY; $('stripWO').textContent = Math.round(S.stripW * 100) + '%';
+  $('stripXO').textContent = S.stripX; $('stripX').value = S.stripX; $('stripY').value = S.stripY; $('stripYO').textContent = S.stripY; syncStripW();
 }
 const HUE = {
   paper: 'warm', dusk: 'cool', morning: 'warm', olive: 'green', minimal: 'neutral', burgundy: 'warm', sage: 'green', terracotta: 'warm',
@@ -798,14 +800,14 @@ function renderLocalList() {
 }
 
 // ---------- 記住上次的樣式 ----------
-const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, deckScale: S.deckScale, anchor: S.anchor, stripGap: S.stripGap, stripScale: S.stripScale, shadow: S.shadow, blocks: S.blocks, dashRef: S.dashRef, autoVary: S.autoVary, bgAll: S.bgAll, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
+const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, deckScale: S.deckScale, anchor: S.anchor, stripFixed: S.stripFixed, stripGap: S.stripGap, stripScale: S.stripScale, shadow: S.shadow, blocks: S.blocks, dashRef: S.dashRef, autoVary: S.autoVary, bgAll: S.bgAll, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
 async function applyStyle(v) {
   if (!v) return;
-  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: !!v.autoExport, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: v.anchor || 'middle', stripGap: v.stripGap || null, stripScale: v.stripScale || 1, shadow: !!v.shadow, blocks: !!v.blocks, dashRef: v.dashRef !== false, autoVary: v.autoVary !== false, bgAll: v.bgAll || null });
+  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: !!v.autoExport, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: v.anchor || 'middle', stripFixed: !!v.stripFixed, stripGap: v.stripGap || null, stripScale: v.stripScale || 1, shadow: !!v.shadow, blocks: !!v.blocks, dashRef: v.dashRef !== false, autoVary: v.autoVary !== false, bgAll: v.bgAll || null });
   if (v.fonts) S.fonts = v.fonts;
   for (const f of (v.localFonts || [])) await registerLocal(f.name, f.fam);
   $('optShadow').checked = !!S.shadow; $('optDash').checked = S.dashRef !== false; $('optBlocks').checked = !!S.blocks;
-  $('stripW').value = Math.round(S.stripW * 100); $('autoExport').checked = S.autoExport;
+  $('autoExport').checked = S.autoExport;
   buildFontSelects(); buildThemes(); syncOut();
 }
 function showStyleNote(has) {
@@ -1060,9 +1062,9 @@ $('lvSize').oninput = () => setLay('lvSize', $('lvSize').value / 100);
 $('lvGap').oninput = () => setLay('lvGap', $('lvGap').value * LN);
 $('svSize').oninput = () => setLay('svSize', $('svSize').value / 100);
 $('svGap').oninput = () => setLay('svGap', $('svGap').value * LN);
-document.querySelectorAll('#layScope button').forEach(b => b.onclick = () => { S.layScope = b.dataset.s; syncLiveUI(); });
+document.querySelectorAll('#layScope button').forEach(b => b.onclick = () => { S.layScope = b.dataset.s; syncOut(); });
 $('stripY').oninput = () => { S.stripY = +$('stripY').value; syncOut(); redrawSoon(); };
-$('stripW').oninput = () => { S.stripW = $('stripW').value / 100; syncOut(); S.page = 0; redrawSoon(); };
+$('stripW').oninput = () => { setStripW($('stripW').value / 100); };
 $('stripW').onchange = () => buildList();
 const expFail = e => { console.error(e); $('prog').style.display = 'none'; toast('匯出失敗：' + e.message); };
 function closeExp() { $('expMenu').hidden = true; $('btnExport').setAttribute('aria-expanded', 'false'); }
@@ -1306,6 +1308,22 @@ $('lvReset').onclick = () => {
   if (S.layScope === 'slide' && sl) { delete sl.lv; delete sl.fs; delete sl.lg; } else { S.live = {}; S.deckScale = 1; S.lineGap = null; S.anchor = 'middle'; }
   _deck.sig = ''; syncLiveUI(); redrawSoon();
 };
+function setStripW(v) {
+  const sl = S.slides[S.sel]; v = Math.max(.3, Math.min(.98, v));
+  if (S.layScope === 'slide' && sl) sl.sw = v; else { S.stripW = v; S.stripFixed = true; }
+  _scCache.clear(); S.page = 0; syncStripW(); redrawSoon();
+}
+function syncStripW() {
+  const sl = S.slides[S.sel], own = S.layScope === 'slide' && sl && sl.sw, auto = !own && !S.stripFixed && !(sl && sl.sw && S.layScope === 'slide');
+  const v = own ? sl.sw : S.stripW; $('stripW').value = Math.round(v * 100); $('stripWO').textContent = auto ? '自動' : Math.round(v * 100) + '%';
+}
+// 線上版：拖曳字條左右兩端可以直接拉長、縮短
+function pickStripEdge(cx, cy) {
+  const r = drawStrip.card; if (!r || S.view !== 'strip' || cy < r.y || cy > r.y + r.h) return null;
+  const left = Math.abs(cx - r.x) < 28, right = Math.abs(cx - (r.x + r.w)) < 28; if (!left && !right) return null;
+  const w0 = r.w;
+  return { cursor: 'ew-resize', title: '拖曳可以調整字條長度', move(dx) { setStripW((w0 + (right ? dx : -dx) * 2) / W); } };
+}
 const snap4 = v => Math.round(v / 4) * 4, clampN = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 // 投影片上的圖片：拖曳移動，拉右下角縮放；文字會自動讓開
 function pickPic(cx, cy) {
@@ -1348,11 +1366,11 @@ function attachDrag(cv, get, set, hit, pick) {
 attachDrag($('cvLive'), () => { const vv = autoVariant(S.slides[S.sel], S.sel), L = liveCfg(S.slides[S.sel], vv === 'title', vv); return { dx: L.dx, dy: L.dy }; },
   (s, mx, my) => { editLive('dx', clampN(snap4(s.dx + mx), -900, 900)); editLive('dy', clampN(snap4(s.dy + my), -600, 600)); }, null, pickPic);
 attachDrag($('cvStrip'), () => ({ x: S.stripX, y: S.stripY }),
-  (s, mx, my) => { S.stripX = clampN(snap4(s.x + mx), -700, 700); S.stripY = clampN(snap4(s.y - my), 0, 700); syncOut(); redrawSoon(); });
+  (s, mx, my) => { S.stripX = clampN(snap4(s.x + mx), -700, 700); S.stripY = clampN(snap4(s.y - my), 0, 700); syncOut(); redrawSoon(); }, null, pickStripEdge);
 $('stripX').oninput = () => { S.stripX = +$('stripX').value; syncOut(); redrawSoon(); };
 $('stripReset').onclick = () => {
   const sl = S.slides[S.sel];
-  if (S.layScope === 'slide' && sl) { delete sl.sfs; delete sl.slg; } else { S.stripX = 0; S.stripY = 64; S.stripW = .81; S.stripScale = 1; S.stripGap = null; $('stripY').value = 64; $('stripW').value = 81; }
+  if (S.layScope === 'slide' && sl) { delete sl.sfs; delete sl.slg; delete sl.sw; } else { S.stripX = 0; S.stripY = 64; S.stripW = .81; S.stripFixed = false; S.stripScale = 1; S.stripGap = null; $('stripY').value = 64; }
   S.page = 0; syncOut(); redrawSoon();
 };
 document.querySelectorAll('.view').forEach(b => b.onclick = () => setView(b.dataset.v));
