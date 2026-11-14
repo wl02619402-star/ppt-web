@@ -43,9 +43,10 @@ function planVariants() {
   });
   _plan = { sig, v: out }; return out;
 }
+// 改成以使用者上傳的模板為主：不再自動套用內建的版面變化（標題頁以外都是一般頁）
 function autoVariant(sl, idx) {
   if (sl.variant && sl.variant !== 'auto') return sl.variant;
-  return planVariants()[idx] || 'plain';
+  return idx === 0 ? 'title' : 'plain';
 }
 function slideTheme(T, v) {
   if (v === 'spot' && !T.flat) return Object.assign({}, T, { text: '#F7F0E6', red: '#FF9C86', dark: true });

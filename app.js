@@ -40,10 +40,12 @@ function slideBgTheme(bg) {
   }
   return null;
 }
+const BLANK = { key: 'blank', name: '白底', text: '#1F1A17', red: '#C0392B', accent: '#8A8F98', dark: false, flat: true, card: { fill: '#FFFFFF', alpha: .96, radius: 10, grain: false, deco: 'none' }, bg(c) { c.fillStyle = '#FFFFFF'; c.fillRect(0, 0, W, H); } };
 const dimOf = () => S.customDim == null ? (S.customMode === 'light' ? .62 : .58) : S.customDim;
 function curTheme(slide) {
   if (slide && slide.bg) { const t = slideBgTheme(slide.bg); if (t) return t; }
   if (tplOn()) return tplTheme();
+  return BLANK;
   if (S.bgAll) { const t = slideBgTheme(S.bgAll); if (t) return t; }
   if (S.custom) {
     const base = THEMES[S.customMode === 'dark' ? 'dusk' : 'paper'];
@@ -437,7 +439,7 @@ function stripPages(slide) {
 // 線上版字條：跟現場版同一套設計（同樣的紙紋／底圖、配色、裝飾），不再是另一種風格的白卡片
 const _scCache = new Map();
 const STRIP_LOOK = { title: 'frame', card: 'paper', plain: 'block', flip: 'ribbon', band: 'ribbon', zoom: 'rule', rule: 'rule', brackets: 'block', num: 'block', side: 'block', spark: 'solid', solid: 'solid', spot: 'solid' };
-const stripLook = v => STRIP_LOOK[v] || 'paper';
+const stripLook = v => 'paper';   // 字條沿用模板本身的樣子，不加內建裝飾
 function stripCard(T, cw, h, v = 'plain', idx = 0, slide) {
   const key = [T.key, cw, h, v, idx % 6, S.custom ? S.custom.src.length : '', dimOf(), S.bgAll ? S.bgAll.c : '', slide && slide.bg ? JSON.stringify(slide.bg).length : ''].join('|');
   if (_scCache.has(key)) return _scCache.get(key);
@@ -1098,11 +1100,11 @@ function markBgSel() {
 }
 function syncSlideBgUI() {
   const slideMode = S.bgScope === 'slide', sl = S.slides[S.sel]; if (!$('bgScope')) return;
-  document.querySelectorAll('#bgScope button').forEach(x => x.classList.toggle('on', x.dataset.s === S.bgScope));
+  document.querySelectorAll('#bgScope button').forEach(x => x.classList.toggle('on', x.dataset.s === S.bgScope)); $('pBg').classList.toggle('allscope', !slideMode); if (typeof renderTplUI === 'function') renderTplUI();
   $('scopeSlideBtn').textContent = sl ? `只有第 ${S.sel + 1} 頁` : '只有這一頁';
-  $('scopeHint').textContent = slideMode ? `下面的選擇只會改第 ${S.sel + 1} 頁，其他頁不變。` : '下面的選擇會套用到每一頁。想只改某一頁，先點左邊那一頁，再按「只有這一頁」。';
+  $('scopeHint').textContent = slideMode ? `下面的選擇只會改第 ${S.sel + 1} 頁，其他頁不變。` : '想讓某一頁換成模板的另一頁、純色或自己的圖，先點左邊那一頁，再按「只有這一頁」。';
   $('bgVaryRow').hidden = slideMode || tplOn(); $('bgLayoutRow').hidden = !slideMode; $('slBgPick').textContent = sl ? `只用在第 ${S.sel + 1} 頁…` : '只用在這一頁…'; $('slBgTitle').textContent = `第 ${S.sel + 1} 頁用自己的圖`;
-  $('bgResetRow').hidden = !(slideMode && sl && sl.bg);
+  $('bgResetRow').hidden = !(slideMode && sl && (sl.bg || sl.tplPage != null));
   $('optVary').checked = S.autoVary !== false;
   const b = sl && sl.bg; $('slBgImg').hidden = !(b && b.t === 'img'); if (typeof renderPhotos === 'function' && $('photoList')) renderPhotos();
   if (b && b.t === 'img') { const d = Math.round((b.dim == null ? .45 : b.dim) * 100); $('slBgDim').value = d; $('slBgDimO').textContent = d + '%'; }
@@ -1127,7 +1129,7 @@ function applyColor(c) {
   SW.forEach(c => { const b = document.createElement('button'); b.className = 'sw'; b.dataset.c = c; b.style.background = c; b.title = c; b.onclick = () => applyColor(c); box.appendChild(b); });
   const pick = document.createElement('input'); pick.type = 'color'; pick.value = '#F4EFE6'; pick.title = '自選顏色'; pick.onchange = () => applyColor(pick.value); box.appendChild(pick);
   document.querySelectorAll('#bgScope button').forEach(b => b.onclick = () => { S.bgScope = b.dataset.s; syncSlideBgUI(); });
-  $('slBgReset').onclick = () => setSlideBg(null);
+  $('slBgReset').onclick = () => { delete S.slides[S.sel].tplPage; setSlideBg(null); afterTplChange(); };
   $('slBgPick').onclick = () => $('slBgFile').click();
   $('slBgRemove').onclick = () => setSlideBg(null);
   $('slBgFile').onchange = e => {
@@ -1196,7 +1198,7 @@ const tplImg = i => tplImgs[i] || null;
 function tplUsable() { return S.tpl.pages.map((p, i) => p.use ? i : -1).filter(i => i >= 0); }
 function tplTheme() {
   const pg = S.tpl.pages[tplUsable()[1] ?? tplUsable()[0] ?? 0], dark = pg.lum < .5;
-  return { key: 'tpl:' + S.tpl.name + ':' + tplUsable().join(','), name: S.tpl.name, tpl: true, flat: true, dark, text: dark ? '#FFFFFF' : '#1F1A17', red: dark ? '#FFB3A0' : '#C0392B', accent: pg.accent, card: { fill: dark ? '#1C1C1E' : pg.light, alpha: .92, radius: 12, grain: false, deco: 'leftbar' }, bg(c) { const im = tplImg(S.tpl.pages.indexOf(pg)); if (im) c.drawImage(im, 0, 0, W, H); } };
+  return { key: 'tpl:' + S.tpl.name + ':' + tplUsable().join(','), name: S.tpl.name, tpl: true, flat: true, dark, text: dark ? '#FFFFFF' : '#1F1A17', red: dark ? '#FFB3A0' : '#C0392B', accent: pg.accent, card: { fill: dark ? '#1C1C1E' : pg.light, alpha: .92, radius: 12, grain: false, deco: 'none' }, bg(c) { const im = tplImg(S.tpl.pages.indexOf(pg)); if (im) c.drawImage(im, 0, 0, W, H); } };
 }
 // 每一頁講道內容配一頁模板：封面給第一頁；標題＋內文配有兩個文字框的頁面；短句配章節頁；相鄰頁不重複
 let _tplPlan = { sig: '', v: [] };
@@ -1215,7 +1217,7 @@ function tplPageIdx(idx) {
     });
     _tplPlan = { sig, v: out };
   }
-  return _tplPlan.v[idx] ?? 0;
+  return _tplPlan.v[idx] ?? (tplUsable().find(i => S.tpl.pages[i].kind === 'content') ?? tplUsable()[0] ?? 0);
 }
 function fitRegion(paras, r, o, maxS, minS) {
   let size = maxS, lines;
@@ -1259,17 +1261,21 @@ function drawTplSlide(cv, slide, idx, noText) {
 }
 async function loadTplImages() { tplImgs.length = 0; if (!S.tpl) return; await Promise.all(S.tpl.pages.map((p, i) => new Promise(r => { const im = new Image(); im.onload = () => { tplImgs[i] = im; r(); }; im.onerror = r; im.src = p.img; }))); }
 function renderTplUI() {
-  const has = !!S.tpl; $('tplBox').hidden = !has; if (!has) return;
+  const has = !!S.tpl; $('tplBox').hidden = !has; $('tplNow').textContent = has ? `目前的模板：${S.tpl.name}` : '';
+  $('btnPickTpl').textContent = has ? '換一個模板' : '上傳模板'; $('btnTpl').textContent = has ? '換一個模板…' : '上傳模板 pptx…';
+  $('tplHint').textContent = S.bgScope === 'slide' && S.slides[S.sel] ? `點縮圖，第 ${S.sel + 1} 頁就改用那一頁模板（橘框是目前用的）。` : '橘框的頁面會輪流當背景，點縮圖可以選用或不用。';
+  if (!has) return;
   $('tplName').textContent = S.tpl.name; $('tplOn').checked = !!S.tpl.on;
   const g = $('tplGrid'); g.innerHTML = '';
   S.tpl.pages.forEach((p, i) => {
-    const d = document.createElement('button'); d.className = 'tp' + (p.use ? ' on' : ''); d.title = p.use ? '使用中，點一下不用這頁' : '沒用到，點一下改成使用';
+    const one = S.bgScope === 'slide' && S.slides[S.sel], mine = one && tplOn() && tplPageIdx(S.sel) === i;
+    const d = document.createElement('button'); d.className = 'tp' + ((one ? mine : p.use) ? ' on' : ''); d.title = one ? `第 ${S.sel + 1} 頁改用這一頁模板` : p.use ? '使用中，點一下不用這頁' : '沒用到，點一下改成使用';
     const im = new Image(); im.src = p.img; d.appendChild(im); const sp = document.createElement('span'); sp.textContent = { cover: '封面', content: '內容', section: '章節', free: '純圖', busy: '圖表' }[p.kind] || ''; d.appendChild(sp);
-    d.onclick = () => { p.use = !p.use; if (!tplUsable().length) { p.use = true; toast('至少要留一頁'); } afterTplChange(); }; g.appendChild(d);
+    d.onclick = () => { if (one) { S.slides[S.sel].tplPage = i; delete S.slides[S.sel].bg; save(); afterTplChange(); return; } p.use = !p.use; if (!tplUsable().length) { p.use = true; toast('至少要留一頁'); } afterTplChange(); }; g.appendChild(d);
   });
 }
-function afterTplChange() { _tplPlan.sig = ''; bgCache.clear(); _scCache.clear(); renderTplUI(); syncSlideBgUI(); buildList(); renderMain(); tplDB.set('tpl', S.tpl).catch(() => toast('模板太大，瀏覽器存不下；重新整理後要重新上傳')); }
-$('btnTpl').onclick = () => $('tplFile').click();
+function afterTplChange() { _tplPlan.sig = ''; bgCache.clear(); _scCache.clear(); renderTplUI(); syncSlideBgUI(); if (!S.slides.length) renderEmptyPreview(); buildList(); renderMain(); tplDB.set('tpl', S.tpl).catch(() => toast('模板太大，瀏覽器存不下；重新整理後要重新上傳')); }
+$('btnTpl').onclick = $('btnPickTpl').onclick = () => $('tplFile').click();
 $('tplFile').onchange = async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
   try {

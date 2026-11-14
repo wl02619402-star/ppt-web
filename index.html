@@ -21,6 +21,8 @@ body{background:var(--bg);color:var(--ink);font:14px/1.5 "Noto Sans TC","PingFan
 button,input,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 [hidden]{display:none!important}
+.legacy{display:none!important}
+#pBg.allscope .slideonly{display:none}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 /* 頂列 */
@@ -104,6 +106,12 @@ details.more summary:hover{color:var(--ink)}
 /* 空狀態 */
 #drop{max-width:1040px;margin:48px auto 0;display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:48px;align-items:center}
 #drop h2{font-size:28px;line-height:1.3;margin:0 0 16px;font-weight:600;text-wrap:balance}
+#drop .flow{margin:0 0 20px;padding:0;color:var(--ink2);line-height:1.7}
+#drop .flow li{display:block;position:relative;padding:14px 0 14px 32px;margin:0}
+#drop .flow li::before{position:absolute;left:0;top:14px}
+#drop .flow a{color:var(--accent)}
+#drop .flow b{color:var(--ink);font-weight:500}
+#tplNow{display:block;font-size:12px;color:var(--accent);margin-top:4px}
 #drop .lead{margin:0 0 24px;color:var(--ink2);line-height:1.7}
 #drop ol{margin:0 0 24px;padding:0;list-style:none;counter-reset:s}
 #drop li{counter-increment:s;display:flex;gap:12px;padding:12px 0;border-top:1px solid var(--line);color:var(--ink2)}
@@ -234,12 +242,14 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
   <main id="main">
     <div id="drop">
       <div class="intro">
-        <h2>把講道的文字檔，排成現場版和線上版</h2>
-        <p class="lead">上傳只有文字的 pptx，背景、字型、版面會自動排好，也會沿用你上次的選擇。看過沒問題，就能匯出給 ProPresenter。</p>
-        <div class="row actions">
-          <button class="btn primary" id="btnPick">選擇檔案</button>
-          <button class="btn" id="btnSample">用範例試試</button>
-        </div>
+        <h2>用你挑的模板，把講道文字排成現場版和線上版</h2>
+        <ol class="flow">
+          <li><b>挑模板</b>：到 <a href="https://slidesgo.com/" target="_blank" rel="noopener">Slidesgo</a> 找喜歡的模板，下載 PowerPoint 格式，上傳到這裡。<span id="tplNow"></span>
+            <div class="row" style="margin-top:8px"><button class="btn" id="btnPickTpl">上傳模板</button></div></li>
+          <li><b>上傳講道文字檔</b>：網站會把文字放進模板，現場版 16:9 和線上字條一起排好。
+            <div class="row" style="margin-top:8px"><button class="btn primary" id="btnPick">上傳文字檔</button><button class="btn" id="btnSample">用範例試試</button></div></li>
+          <li><b>微調後匯出</b>：細節自己調一下，匯出 pptx 放進 ProPresenter。</li>
+        </ol>
         <p class="drag">也可以直接把 .pptx 拖進這個頁面</p>
         <label class="check"><input type="checkbox" id="autoExport"> 上傳後直接匯出給 ProPresenter</label>
         <div class="styleNote" id="styleNote" hidden><span id="styleNoteT"></span> <button class="link" id="styleClear">清除</button></div>
@@ -308,42 +318,42 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
         <div class="hint" id="scopeHint" style="margin:8px 0 16px"></div>
 
         <div class="sec">
-          <h3>用模板（Slidesgo 等）</h3>
+          <h3>模板</h3>
           <div class="row"><button class="btn small" id="btnTpl">上傳模板 pptx…</button></div>
           <input type="file" id="tplFile" accept=".pptx" hidden>
-          <div class="hint">在 Slidesgo 下載 PowerPoint 格式的模板直接上傳。範例文字會自動拿掉，講道文字會放進原本的文字框。</div>
+          <div class="hint">到 <a href="https://slidesgo.com/" target="_blank" rel="noopener" style="color:var(--accent)">Slidesgo</a> 下載 PowerPoint 格式的模板直接上傳。範例文字會自動拿掉，講道文字會放進原本的文字框。</div>
           <div id="tplBox" class="subbox" hidden>
-            <div class="row"><b id="tplName" style="font-size:13px;font-weight:500"></b><label class="chk" style="margin:0 0 0 auto"><input type="checkbox" id="tplOn"> 使用</label><button class="btn small" id="tplRemove">移除</button></div>
-            <div class="hint">橘框的頁面會輪流當背景，點縮圖可以選用或不用。</div>
+            <div class="row"><b id="tplName" style="font-size:13px;font-weight:500"></b><label class="chk" style="margin:0 0 0 auto" hidden><input type="checkbox" id="tplOn"> 使用</label><button class="btn small" id="tplRemove">移除</button></div>
+            <div class="hint" id="tplHint">橘框的頁面會輪流當背景，點縮圖可以選用或不用。</div>
             <div class="tplgrid" id="tplGrid"></div>
           </div>
         </div>
-        <div class="sec" id="bgVaryRow">
+        <div class="sec legacy" id="bgVaryRow">
           <label class="chk" style="margin-top:0"><input type="checkbox" id="optVary"> 每一頁自動換版面（同一種風格，不同編排）</label>
           <div class="hint">關掉就是每一頁用一樣的版面。</div>
         </div>
-        <div class="sec" id="bgLayoutRow" hidden>
+        <div class="sec legacy" id="bgLayoutRow" hidden>
           <h3>這一頁的版面</h3>
           <select id="variantSel"></select>
           <div class="hint">同一種風格有多種編排：標題頁、左右分欄、卡片框、整頁色塊……</div>
         </div>
 
-        <div class="sec">
+        <div class="sec legacy">
           <h3>風格</h3>
           <div class="themebar"><span id="themeCount"></span></div>
           <div class="cats" id="themeCats"></div>
           <div class="themes" id="themes"></div>
         </div>
-        <div class="sec">
-          <h3>純色</h3>
+        <div class="sec slideonly">
+          <h3>這一頁改用純色</h3>
           <div class="row" id="bgSwatches"></div>
           <div class="hint">只放圖片的頁面，用純色最乾淨。</div>
         </div>
-        <div class="sec">
-          <h3>自己的圖</h3>
+        <div class="sec slideonly">
+          <h3>這一頁改用自己的圖</h3>
           <div class="row">
             <button class="btn small" id="slBgPick">只用在這一頁…</button>
-            <button class="btn small" id="btnBg">用在全部頁面…</button>
+            <button class="btn small legacy" id="btnBg">用在全部頁面…</button>
           </div>
           <div class="hint">先在左邊點選要換的那一頁，再按「只用在這一頁」，其他頁不受影響。</div>
           <div id="slBgImg" class="subbox" hidden>
@@ -351,7 +361,7 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
             <label class="slider">遮罩<input type="range" id="slBgDim" min="0" max="90" step="5"><output id="slBgDimO"></output></label>
           </div>
           <input type="file" id="slBgFile" accept="image/*" hidden>
-          <div id="bgAllImg">
+          <div id="bgAllImg" class="legacy">
             <div class="bgup subbox" id="bgUp" hidden>
               <div class="bgthumb" id="bgThumb" hidden><canvas id="bgThumbCv" width="320" height="180"></canvas></div>
               <div class="bgup-body">
@@ -371,7 +381,7 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
             <input type="file" id="bgFile" accept="image/*" hidden>
           </div>
         </div>
-        <div class="sec">
+        <div class="sec legacy">
           <h3>強調頁</h3>
           <div class="hint" style="margin:0 0 8px">用來突顯重點的深色頁面：背景是壓暗的照片或光暈，字是白色。網站會自動挑短句或重點經文來做。</div>
           <div class="spotlist" id="spotList"></div>
@@ -464,9 +474,9 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
 <div id="prog"><div><div id="progT">處理中…</div><i><b id="progB"></b></i></div></div>
 <script src="themes.js?v=20"></script>
 <script src="themes2.js?v=20"></script>
-<script src="themes3.js?v=47"></script>
+<script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=51"></script>
+<script src="app.js?v=53"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
