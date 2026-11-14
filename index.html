@@ -365,6 +365,27 @@ input[type=range]{accent-color:var(--ink)}
   #drop .actions .btn{flex:1}
   .sframe{margin:10px 10px 18px}
 }
+
+/* 手機：上面是頁面縮圖和預覽，下面是編輯區（自己捲動），不用整頁往下滑 */
+@media (max-width:640px){
+  body:not(.empty){height:100dvh;overflow:hidden}
+  body:not(.empty) #app{display:grid;grid-template-rows:auto auto minmax(0,1fr);height:calc(100dvh - 52px)}
+  body:not(.empty) #list{padding:6px 12px;gap:6px}
+  body:not(.empty) .thumb{min-width:92px;margin:0 0 0 18px}
+  body:not(.empty) .thumb .n{left:-18px;width:14px;font-size:11px}
+  body:not(.empty) main{overflow:visible;padding:8px 12px 4px}
+  body:not(.empty) .banner{flex-direction:row;align-items:center;padding:8px 12px;margin-bottom:8px;gap:8px}
+  body:not(.empty) .banner span{display:none}
+  body:not(.empty) .banner .btn{width:auto;min-height:36px}
+  body:not(.empty) .views{margin-bottom:6px}
+  body:not(.empty) .view{padding:6px;min-height:40px}
+  body:not(.empty) .cap{min-height:24px;margin-bottom:12px}
+  body:not(.empty) .stage{margin:0 auto 6px;padding:4px 11px 0;width:min(100%,calc((100dvh - 520px) * 16 / 9))}
+  body:not(.empty) #side{min-height:0;overflow:hidden;border-top:1px solid var(--line2)}
+  body:not(.empty) .tabs button{height:44px}
+  body:not(.empty) .pane{overflow:auto;-webkit-overflow-scrolling:touch}
+  body:not(.empty) .ed{min-height:120px;max-height:none}
+}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 @media (max-width:1100px){
   #app{grid-template-columns:1fr;height:auto}
