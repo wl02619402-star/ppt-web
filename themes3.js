@@ -89,10 +89,11 @@ function drawSpot(c, T, p) {
     for (let i = 0; i < 140; i++) circ(c, r() * W * .8, r() * H, .8 + r() * 2.2, `rgba(255,232,190,${.15 + r() * .5})`);
     c.restore();
   } else if (p % 3 === 0) {
-    const cx = W * (.28 + r() * .44), cy = H * (.3 + r() * .3);
-    blob(c, cx, cy, 560, gold, .5); blob(c, cx, cy, 210, '#FFE2B0', .9); blob(c, cx, cy, 64, '#FFFFFF', 1);
+    // 光暈放在右上角，不放在文字後面
+    const cx = W * (.76 + r() * .1), cy = H * (.14 + r() * .08);
+    blob(c, cx, cy, 520, gold, .42); blob(c, cx, cy, 170, '#FFE2B0', .85); blob(c, cx, cy, 52, '#FFFFFF', 1);
     c.save(); c.globalCompositeOperation = 'lighter';
-    for (let i = 0; i < 16; i++) { c.save(); c.translate(cx, cy); c.rotate(i * Math.PI / 8); const g = c.createLinearGradient(0, 0, 560, 0); g.addColorStop(0, 'rgba(255,226,176,.45)'); g.addColorStop(1, 'rgba(255,226,176,0)'); c.fillStyle = g; c.fillRect(0, -2, 560, 4); c.restore(); }
+    for (let i = 0; i < 16; i++) { c.save(); c.translate(cx, cy); c.rotate(i * Math.PI / 8); const g = c.createLinearGradient(0, 0, 380, 0); g.addColorStop(0, 'rgba(255,226,176,.3)'); g.addColorStop(1, 'rgba(255,226,176,0)'); c.fillStyle = g; c.fillRect(0, -1.5, 380, 3); c.restore(); }
     c.restore();
   } else {
     for (let i = 0; i < 24; i++) blob(c, r() * W, r() * H * .95, 30 + r() * 100, r() < .6 ? '#FFD9A0' : gold, .16 + r() * .3);

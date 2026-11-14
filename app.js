@@ -103,6 +103,8 @@ function ornaments(c, T, p) {
   });
 }
 // ---------- 強調頁：自己的照片（輪流用），沒有照片就用內建光影 ----------
+// 短句（兩段以內、34 字以內）才置中放大；長一點的經文靠左、用一般字級，避免一堆長短不一的置中行
+const isShort = sl => { const ps = sl.paras.map(ptext).map(x => x.trim()).filter(Boolean); return ps.length <= 2 && ps.join('').length <= 34; };
 function spotOrder(idx) { const pl = planVariants(); let k = 0; for (let i = 0; i < idx; i++) if (pl[i] === 'spot') k++; return k; }
 function spotPhoto(k) { const n = S.photos.length; if (!n) return null; const e = imgCache.get(S.photos[k % n]); return e ? e.im : null; }
 function drawSpotPhoto(c, im, k) {
@@ -241,7 +243,7 @@ const plain = p => p.map(r => r.t).join('');
 const gapOf = slide => (slide && slide.lg) || S.lineGap || 1.1 * LN;
 function liveOpts(isTitle, v, slide) {
   return {
-    headRule: (pi, ps) => (v === 'spark' || v === 'solid' || v === 'spot') ? false : isTitle ? pi === 0 : (pi === 0 && ps.length > 1 && plain(ps[0]).length <= 28),
+    headRule: (pi, ps) => (v === 'spark' || v === 'solid' || (v === 'spot' && slide && isShort(slide))) ? false : isTitle ? pi === 0 : (pi === 0 && ps.length > 1 && plain(ps[0]).length <= 28),
     headScale: isTitle ? 1.9 : 1.16, lineGap: gapOf(slide), paraGap: .45, shadow: S.shadow || v === 'spot',
   };
 }
@@ -281,7 +283,7 @@ function deckSize() {
   if (sig === _deck.sig) return _deck.val;
   const fits = [];
   S.slides.forEach((sd, i) => {
-    const v = autoVariant(sd, i); if (v === 'title' || v === 'spark' || v === 'solid' || v === 'spot') return;
+    const v = autoVariant(sd, i); if (v === 'title' || v === 'spark' || v === 'solid' || (v === 'spot' && isShort(sd))) return;
     let paras = sd.paras, shift = 0;
     if (v === 'num') { const m = ptext(paras[0]).match(NUM_RE); if (m) { shift = 150; paras = paras.map((p, k) => k ? p : stripLead(p, m[0].length)); } }
     const sf = picSafe(sd, safeOf(slideTheme(curTheme(sd), v), v, i)), o = liveOpts(false, v, sd), maxW = (S.live.w ? S.live.w : 1560 - sf.r - sf.l) - shift, maxH = H - sf.t - sf.b;
@@ -326,7 +328,7 @@ function liveSplit(c, slide, T, o, sf, L, sp, noText) {
 }
 function drawLive(cv, slide, idx, noText) {
   const v = autoVariant(slide, idx), T = slideTheme(curTheme(slide), v), c = cv.getContext('2d');
-  const isTitle = v === 'title', isSpark = v === 'spark' || v === 'solid' || v === 'spot';
+  const isTitle = v === 'title', isSpark = v === 'spark' || v === 'solid' || (v === 'spot' && isShort(slide));
   c.clearRect(0, 0, W, H);
   c.drawImage(getBg(v, idx, slide), 0, 0);
   (slide.pics || []).forEach(p => {
