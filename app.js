@@ -772,7 +772,7 @@ function buildFontSelects() {
     const first = k === 'scr' ? 'same' : 'theme';
     const sel = $(id); sel.innerHTML = '';
     const add = (v, t, dis) => { const o = document.createElement('option'); o.value = v; o.textContent = t; if (dis) o.disabled = true; sel.appendChild(o); };
-    add(first, k === 'scr' ? '跟內文一樣' : '跟著背景主題');
+    add(first, k === 'scr' ? '跟內文一樣' : '預設');
     FONT_OPTS.forEach(o => add(o.id, o.label));
     S.localFonts.forEach(f => add('L:' + f.fam, '本機：' + f.name + (f.ok === false ? '（找不到）' : ''), f.ok === false));
     sel.value = (fontOpt(S.fonts[k]) || S.fonts[k] === first) ? S.fonts[k] : first;
@@ -806,7 +806,7 @@ const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stri
 async function applyStyle(v) {
   if (!v) return;
   Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: false, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: v.anchor || 'middle', stripFixed: !!v.stripFixed, stripGap: v.stripGap || null, stripScale: v.stripScale || 1, shadow: false, blocks: false, dashRef: v.dashRef !== false, autoVary: v.autoVary !== false, bgAll: v.bgAll || null });
-  if (v.fonts) S.fonts = v.fonts;
+  if (v.fonts) S.fonts = Object.assign({}, v.fonts, { scr: 'same' });
   for (const f of (v.localFonts || [])) await registerLocal(f.name, f.fam);
   $('optShadow').checked = !!S.shadow; $('optDash').checked = S.dashRef !== false; $('optBlocks').checked = !!S.blocks;
   $('autoExport').checked = S.autoExport;
@@ -1298,7 +1298,7 @@ $('fontScr').onchange = e => { S.fonts.scr = e.target.value; afterFontChange(); 
 $('btnLocalAdd').onclick = async () => { const f = await addLocalFontByName($('localName').value); if (f && f.ok) { $('localName').value = ''; save(); } };
 $('localName').onkeydown = e => { if (e.key === 'Enter') $('btnLocalAdd').click(); };
 $('localFilter').oninput = renderLocalList;
-if (!window.queryLocalFonts) $('btnLocalPick').hidden = true;
+if (!window.queryLocalFonts) $('btnLocalPick').hidden = true; else $('localName').placeholder = '或直接打字型名稱';
 $('btnLocalPick').onclick = async () => {
   try { _localAll = await window.queryLocalFonts(); $('localFilter').hidden = false; renderLocalList(); }
   catch (e) { toast('沒有取得字型清單的權限，可以改用輸入名稱'); }

@@ -404,23 +404,24 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
       </div>
 
       <div class="pane" id="pLook" hidden>
-        <div class="note">字型、行距、文字效果：現場版和線上版會一起套用</div>
+        <div class="note">現場版和線上版會一起套用</div>
         <div class="sec">
-          <h3>字型</h3>
-          <label class="field">標題<select id="fontHead"></select></label>
-          <label class="field">內文<select id="fontBody"></select></label>
-          <label class="field">經文（含經節出處的段落）<select id="fontScr"></select></label>
+          <label class="field">標題字型<select id="fontHead"></select></label>
+          <label class="field">內文字型<select id="fontBody"></select></label>
+          <label class="field legacy">經文<select id="fontScr"></select></label>
           <details class="more">
-            <summary>用電腦裡裝的字型（金萱、凝書體…）</summary>
-            <div class="hint" style="margin:8px 0">這類付費字型無法放進網站，但只要裝在這台電腦，就能在這裡加入。匯出的圖片已經含字型，ProPresenter 那台不用裝。</div>
-            <div class="row"><input id="localName" type="text" placeholder="字型完整名稱，例如：金萱那提九分糖"><button class="btn small" id="btnLocalAdd">加入</button></div>
-            <div class="row" style="margin-top:8px"><button class="btn small" id="btnLocalPick">從電腦的字型清單挑…</button></div>
-            <input id="localFilter" type="text" placeholder="搜尋字型名稱" hidden style="margin-top:8px">
+            <summary>想用電腦裡裝的字型（金萱、凝書體…）</summary>
+            <div class="hint" style="margin:8px 0">字型要先裝在這台電腦。加入後，上面兩個選單就會出現。</div>
+            <div class="row"><button class="btn small" id="btnLocalPick">從這台電腦挑字型…</button></div>
+            <input id="localFilter" type="text" placeholder="搜尋，例如：金萱" hidden style="margin-top:8px">
             <div class="row" id="localList" style="margin-top:8px"></div>
+            <div class="row" id="localNameRow" style="margin-top:8px"><input id="localName" type="text" placeholder="或直接打字型名稱，例如：金萱那提九分糖"><button class="btn small" id="btnLocalAdd">加入</button></div>
           </details>
           <label class="chk legacy"><input type="checkbox" id="optShadow"> 文字加陰影</label>
           <label class="chk legacy"><input type="checkbox" id="optBlocks"> 標題與經文用色塊區分</label>
-          <label class="chk"><input type="checkbox" id="optDash" checked> 經文出處寫成「—— 約11:25」</label>
+        </div>
+        <div class="sec">
+          <label class="chk" style="margin-top:0"><input type="checkbox" id="optDash" checked> 經文出處寫成「—— 約11:25」</label>
         </div>
       </div>
 
@@ -484,7 +485,7 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=56"></script>
+<script src="app.js?v=57"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
