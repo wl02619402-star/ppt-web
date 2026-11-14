@@ -1,0 +1,17 @@
+{
+  "id": "/ppt-web/",
+  "name": "簡報美編工坊",
+  "short_name": "簡報美編",
+  "description": "把講道文字檔排成現場版和線上版投影片",
+  "start_url": "/ppt-web/",
+  "scope": "/ppt-web/",
+  "display": "standalone",
+  "background_color": "#111214",
+  "theme_color": "#17181b",
+  "lang": "zh-Hant-TW",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
