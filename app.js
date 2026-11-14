@@ -207,6 +207,13 @@ function safeOf(T, v, idx = 0) {
   if (v === 'side') { if (idx % 2 === 0) l = Math.max(l, 470); else r = Math.max(r, 470); }
   return { t: Math.max(t, e.t || 0), b: Math.max(b, e.b || 0), l, r };
 }
+function picSafe(slide, sf) {
+  const ps = slide.pics; if (!ps || !ps.length) return sf;
+  const minX = Math.min(...ps.map(p => p.x)) * W, maxX = Math.max(...ps.map(p => p.x + p.w)) * W; if (maxX - minX > .7 * W) return sf;
+  const o = Object.assign({}, sf);
+  if ((minX + maxX) / 2 > W / 2) o.r = Math.max(sf.r, 1560 - (minX - 220)); else o.l = Math.max(sf.l, maxX + 60 - 160);
+  return o;
+}
 function stripLead(runs, n) {
   const out = []; let left = n;
   for (const r of runs) { if (left >= r.t.length) { left -= r.t.length; continue; } out.push({ t: r.t.slice(left), red: r.red }); left = 0; }
@@ -222,7 +229,7 @@ function deckSize() {
     const v = autoVariant(sd, i); if (v === 'title' || v === 'spark' || v === 'solid') return;
     let paras = sd.paras, shift = 0;
     if (v === 'num') { const m = ptext(paras[0]).match(NUM_RE); if (m) { shift = 150; paras = paras.map((p, k) => k ? p : stripLead(p, m[0].length)); } }
-    const sf = safeOf(slideTheme(curTheme(sd), v), v, i), o = liveOpts(false, v), maxW = (S.live.w ? S.live.w : 1560 - sf.r - sf.l) - shift, maxH = H - sf.t - sf.b;
+    const sf = picSafe(sd, safeOf(slideTheme(curTheme(sd), v), v, i)), o = liveOpts(false, v), maxW = (S.live.w ? S.live.w : 1560 - sf.r - sf.l) - shift, maxH = H - sf.t - sf.b;
     if (v === 'side' && paras.length > 1 && plain(paras[0]).length <= 28) paras = paras.slice(1), o.headRule = () => false;
     let size = 80; for (; size >= 30; size -= 2) if (blockH(layout(paras, size, maxW, o), o) <= maxH) break;
     fits.push(size);
@@ -237,7 +244,12 @@ function drawLive(cv, slide, idx, noText) {
   const isTitle = v === 'title', isSpark = v === 'spark' || v === 'solid';
   c.clearRect(0, 0, W, H);
   c.drawImage(getBg(v, idx, slide), 0, 0);
-  const o = liveOpts(isTitle, v), fs = slide.fs || 1, L = liveCfg(slide, isTitle, v), sf = safeOf(T, v, idx);
+  (slide.pics || []).forEach(p => {
+    const e = imgCache.get(p.src); if (!e) return; const im = e.im, cr = p.crop || { l: 0, t: 0, r: 0, b: 0 };
+    c.save(); c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = 26; c.shadowOffsetY = 8;
+    c.drawImage(im, im.width * cr.l, im.height * cr.t, im.width * (1 - cr.l - cr.r), im.height * (1 - cr.t - cr.b), p.x * W, p.y * H, p.w * W, p.h * H); c.restore();
+  });
+  const o = liveOpts(isTitle, v), fs = slide.fs || 1, L = liveCfg(slide, isTitle, v), sf = picSafe(slide, safeOf(T, v, idx));
   let paras = slide.paras, numeral = null, panel = null;
   if (v === 'side' && paras.length > 1 && plain(paras[0]).length <= 28) {
     const left = idx % 2 === 0, pw = 560, ho = { headRule: () => true, headScale: 1, lineGap: o.lineGap, paraGap: .3 };
@@ -286,6 +298,7 @@ function stripOpts() {
   return { headRule: (pi, ps) => pi === 0 && ps.length > 1, headScale: 1.2, lineGap: Math.max(1.2, (S.lineGap || 1.1 * LN) - .2), paraGap: .3 };
 }
 function stripPages(slide) {
+  if (!slide.paras.length) return { pages: [], o: stripOpts(), cardW: Math.round(W * S.stripW) };
   // 先把字條變寬（最寬到畫面的 96%）、再縮字，盡量讓一段內容放在同一條；真的放不下才分成多條
   const o = stripOpts(), sfs = slide.sfs || 1, pv = STRIP.padT + STRIP.padB;
   const base = Math.round(W * S.stripW), wide = Math.round(W * .96);
@@ -312,6 +325,7 @@ function drawStrip(cv, slide, page, noText) {
   const T = curTheme(), c = cv.getContext('2d');
   c.clearRect(0, 0, W, H);
   const { pages, o, cardW } = stripPages(slide);
+  if (!pages.length) { drawStrip.geo = { lines: [], x: 0, y: 0, o, w: 0, T }; return 0; }
   page = Math.min(page, pages.length - 1);
   const lines = pages[page], h = Math.round(blockH(lines, o) + STRIP.padT + STRIP.padB);
   const x0 = Math.max(0, Math.min(W - cardW, Math.round((W - cardW) / 2) + S.stripX)), y0 = Math.max(0, H - h - S.stripY);
@@ -324,6 +338,12 @@ function drawStrip(cv, slide, page, noText) {
 }
 
 // ---------- 解析 pptx ----------
+async function shrinkImg(src, mime) {
+  const e = await loadBgImg(src); if (!e) return src;
+  const im = e.im, m = Math.max(im.width, im.height); if (m <= 1600 && src.length < 900000) return src;
+  const sc = Math.min(1, 1600 / m), c = mk(Math.round(im.width * sc), Math.round(im.height * sc)); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+  return mime === 'image/png' ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', .85);
+}
 async function parsePptx(buf) {
   const zip = await JSZip.loadAsync(buf), dp = new DOMParser();
   const txt = async p => zip.file(p).async('string');
@@ -332,9 +352,25 @@ async function parsePptx(buf) {
   const map = {}; [...rels.getElementsByTagName('Relationship')].forEach(r => map[r.getAttribute('Id')] = r.getAttribute('Target'));
   const ids = [...pres.getElementsByTagName('p:sldId')].map(e => e.getAttribute('r:id'));
   const slides = [];
+  const sz = pres.getElementsByTagName('p:sldSz')[0], SW = sz ? +sz.getAttribute('cx') : 12192000, SH = sz ? +sz.getAttribute('cy') : 6858000;
+  const MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' };
   for (const id of ids) {
     let tgt = map[id]; tgt = tgt.replace(/^\/?(ppt\/)?/, 'ppt/');
     const doc = dp.parseFromString(await txt(tgt), 'text/xml');
+    // 圖片：連同位置、裁切一起帶進來
+    const pics = [], rf = zip.file('ppt/slides/_rels/' + tgt.split('/').pop() + '.rels'), rmap = {};
+    if (rf) [...dp.parseFromString(await rf.async('string'), 'text/xml').getElementsByTagName('Relationship')].forEach(r => rmap[r.getAttribute('Id')] = r.getAttribute('Target'));
+    for (const pic of [...doc.getElementsByTagName('p:pic')]) {
+      try {
+        const blip = pic.getElementsByTagName('a:blip')[0], rid = blip && blip.getAttribute('r:embed'), t = rid && rmap[rid]; if (!t) continue;
+        const ext = t.split('.').pop().toLowerCase(), mime = MIME[ext]; if (!mime) continue;
+        const f = zip.file('ppt/media/' + t.split('/').pop()); if (!f) continue;
+        const xf = pic.getElementsByTagName('a:xfrm')[0]; if (!xf) continue;
+        const o = xf.getElementsByTagName('a:off')[0], e = xf.getElementsByTagName('a:ext')[0], sr = pic.getElementsByTagName('a:srcRect')[0];
+        const g = k => sr ? (+(sr.getAttribute(k) || 0)) / 100000 : 0;
+        pics.push({ src: await shrinkImg(`data:${mime};base64,${await f.async('base64')}`, mime), x: +o.getAttribute('x') / SW, y: +o.getAttribute('y') / SH, w: +e.getAttribute('cx') / SW, h: +e.getAttribute('cy') / SH, crop: { l: g('l'), t: g('t'), r: g('r'), b: g('b') } });
+      } catch (err) { console.warn('圖片略過', err); }
+    }
     const items = [];
     [...doc.getElementsByTagName('p:sp')].forEach((sp, order) => {
       const tb = sp.getElementsByTagName('p:txBody')[0]; if (!tb) return;
@@ -360,7 +396,7 @@ async function parsePptx(buf) {
     items.sort((a, b) => (a.y - b.y) || (a.x - b.x) || (a.order - b.order));
     const paras = items.flatMap(i => i.paras);
     const hasPic = doc.getElementsByTagName('p:pic').length > 0;
-    if (paras.length) slides.push({ paras, fs: 1, sfs: 1, hasPic });
+    if (paras.length || pics.length) { const sd = { paras, fs: 1, sfs: 1, hasPic }; if (pics.length) sd.pics = pics; if (!paras.length) sd.bg = { t: 'color', c: '#F4EFE6' }; slides.push(sd); }
   }
   return slides;
 }
@@ -594,7 +630,10 @@ function save() {
     try { localStorage.setItem('ppt-web-style', JSON.stringify(styleObj())); } catch (e) { }
     const mk1 = sl => ({ slides: sl, themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, live: S.live, fileName: S.fileName, fonts: S.fonts, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
     try { localStorage.setItem('ppt-web-v1', JSON.stringify(mk1(S.slides))); }
-    catch (e) { try { localStorage.setItem('ppt-web-v1', JSON.stringify(mk1(S.slides.map(x => x.bg && x.bg.t === 'img' ? Object.assign({}, x, { bg: undefined }) : x)))); } catch (e2) { } }
+    catch (e) {
+      try { localStorage.setItem('ppt-web-v1', JSON.stringify(mk1(S.slides.map(x => x.bg && x.bg.t === 'img' ? Object.assign({}, x, { bg: undefined }) : x)))); }
+      catch (e2) { try { localStorage.setItem('ppt-web-v1', JSON.stringify(mk1(S.slides.map(x => Object.assign({}, x, { pics: undefined, bg: x.bg && x.bg.t === 'img' ? undefined : x.bg }))))); } catch (e3) { } }
+    }
   }, 300);
 }
 let redrawT;
@@ -605,7 +644,7 @@ function redrawSoon() { clearTimeout(redrawT); redrawT = setTimeout(renderMain, 
 async function start(slides, name, live) {
   S.slides = slides; S.live = live || {}; S.sel = 0; S.page = 0; S.fileName = name.replace(/\.pptx$/i, '');
   $('drop').hidden = true; $('editor').hidden = false; $('viewHint').textContent = VIEW_HINT[S.view]; $('sideEmpty').hidden = true; $('sideBody').hidden = false; $('btnExport').disabled = false; $('btnZip').disabled = false;
-  await Promise.all(slides.filter(x => x.bg && x.bg.t === 'img').map(x => loadBgImg(x.bg.src)));
+  await Promise.all(slides.flatMap(x => [].concat(x.bg && x.bg.t === 'img' ? [x.bg.src] : [], (x.pics || []).map(p => p.src))).map(loadBgImg));
   await ensureFonts(); bgCache.clear(); buildCats(); buildThemes(); buildList(); select(0); save();
 }
 async function loadFile(f) {

@@ -1,7 +1,7 @@
 // 版型：同一套背景，依每頁內容自動變化（簡單但不單調）
 const VARIANT_LABELS = {
   auto: '自動', title: '標題頁', plain: '一般', band: '一般・側邊色條', rule: '一般・底部分隔線',
-  brackets: '一般・框角', flip: '一般・左右翻轉', zoom: '一般・放大局部', side: '左右分欄（標題放色塊）', card: '卡片框',
+  brackets: '一般・框角', flip: '一般・左右翻轉', zoom: '一般・放大局部', side: '左右分欄（手動選用）', card: '卡片框',
   spark: '重點句・星芒', solid: '整頁色塊強調', num: '編號重點', spot: '深色強調',
 };
 const hexA = (hex, a) => hex + hex2(a);
@@ -23,12 +23,13 @@ function planVariants() {
     const ps = s.paras.map(ptext).map(x => x.trim()).filter(Boolean), chars = ps.join('').length;
     if (s.variant && s.variant !== 'auto') v = s.variant;
     else if (i === 0) v = 'title';
+    else if (s.pics && s.pics.length) v = 'plain';
     else if (ps.length && NUM_RE.test(ps[0]) && ps[0].length <= 44) v = 'num';
     else if (S.autoVary === false) v = (ps.length && ps.length <= 2 && chars <= 34) ? 'spark' : ['plain', 'band', 'rule', 'brackets', 'plain', 'rule'][i % 6];
     else {
       const short = ps.length && ps.length <= 2 && chars <= 34, headBody = ps.length > 1 && ps[0].length <= 28, scripture = ps.some(x => REF_RE.test(x));
       let cands = short ? ['spark', 'solid', 'card']
-        : headBody ? (chars <= 110 ? ['side', 'card', 'plain', 'flip', 'rule', 'band'] : ['plain', 'flip', 'card', 'rule', 'band'])
+        : headBody ? ['card', 'plain', 'flip', 'rule', 'band']
         : scripture ? ['card', 'plain', 'zoom', 'flip', 'brackets']
         : ['plain', 'flip', 'zoom', 'rule', 'band', 'brackets', 'card'];
       if (chars > 170) cands = cands.filter(c => c !== 'card' && c !== 'side');
