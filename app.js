@@ -3,7 +3,7 @@
 const S = {
   slides: [], sel: 0, page: 0, themeKey: 'torn_kraft', stripW: 0.81, stripY: 64, stripX: 0, view: 'live', autoExport: false, exportFmt: 'image', deckScale: 1, anchor: 'middle',
   custom: null, customMode: 'dark', customDim: null, fileName: '簡報',
-  fonts: { head: 'theme', body: 'theme', scr: 'same' }, shadow: false, blocks: false, localFonts: [], lineGap: null, live: {}, liveScope: 'all',
+  fonts: { head: 'theme', body: 'theme', scr: 'same' }, shadow: false, blocks: false, autoVary: true, bgAll: null, bgScope: 'all', localFonts: [], lineGap: null, live: {}, liveScope: 'all',
 };
 const $ = id => document.getElementById(id);
 const measureCtx = mk(10, 10).getContext('2d');
@@ -43,6 +43,7 @@ function slideBgTheme(bg) {
 const dimOf = () => S.customDim == null ? (S.customMode === 'light' ? .62 : .58) : S.customDim;
 function curTheme(slide) {
   if (slide && slide.bg) { const t = slideBgTheme(slide.bg); if (t) return t; }
+  if (S.bgAll) { const t = slideBgTheme(S.bgAll); if (t) return t; }
   if (S.custom) {
     const base = THEMES[S.customMode === 'dark' ? 'dusk' : 'paper'];
     const light = S.customMode === 'light';
@@ -58,11 +59,40 @@ function curTheme(slide) {
   return Object.assign({ key: S.themeKey }, THEMES[S.themeKey]);
 }
 const bgCache = new Map();
+function composeBg(c, T, v, p) {
+  const kind = T.ownVariants ? 'plain' : 'content';
+  const base = mk(W, H); T.bg.call(T, base.getContext('2d'), kind);
+  if (v === 'flip') { c.save(); c.translate(W, T.ownVariants ? H : 0); c.scale(-1, T.ownVariants ? -1 : 1); c.drawImage(base, 0, 0); c.restore(); return; }
+  if (v === 'zoom') {
+    const sc = 1.5, cw = W / sc, ch = H / sc, spots = [[0, 0], [W - cw, 0], [(W - cw) / 2, 0]], [sx, sy] = spots[p % 3];
+    c.drawImage(base, sx, sy, cw, ch, 0, 0, W, H); return;
+  }
+  if (v === 'solid') {
+    c.fillStyle = T.accent; c.fillRect(0, 0, W, H);
+    c.save(); c.globalAlpha = .2; c.drawImage(base, 0, 0); c.restore();
+    const g = c.createRadialGradient(W / 2, H / 2, H * .35, W / 2, H / 2, H * .95); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.28)'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+    star(c, W - 190, 170, 46, 'rgba(255,255,255,.16)'); star(c, W - 250, 110, 20, 'rgba(255,255,255,.12)'); star(c, 190, H - 150, 34, 'rgba(255,255,255,.12)');
+    grain(c, W, H, .06); return;
+  }
+  c.drawImage(base, 0, 0);
+  if (v === 'side') {
+    const pw = 560, left = p % 2 === 0, x0 = left ? 0 : W - pw;
+    c.save(); c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = 30; c.shadowOffsetX = left ? 8 : -8; c.fillStyle = T.accent; c.fillRect(x0, 0, pw, H); c.restore();
+    c.save(); c.beginPath(); c.rect(x0, 0, pw, H); c.clip(); grain(c, W, H, .1);
+    c.strokeStyle = 'rgba(255,255,255,.3)'; c.lineWidth = 2; c.strokeRect(x0 + 28, 28, pw - 56, H - 56);
+    star(c, x0 + pw / 2, H - 120, 26, 'rgba(255,255,255,.35)'); c.restore(); return;
+  }
+  if (v === 'card') {
+    const cw = 1720, ch = 840, card = drawCard(T, cw, ch, 1);
+    c.save(); c.shadowColor = 'rgba(0,0,0,.3)'; c.shadowBlur = 36; c.shadowOffsetY = 12; c.drawImage(card, (W - cw) / 2, (H - ch) / 2 - 6, cw, ch); c.restore();
+  }
+}
 function getBg(v, p = 0, slide) {
-  const t = curTheme(slide), key = [t.key, v, p % 2, S.customMode, S.custom ? S.custom.src.length : '', dimOf()].join('|');
+  const t = curTheme(slide), key = [t.key, v, p % 6, S.customMode, S.custom ? S.custom.src.length : '', dimOf()].join('|');
   if (!bgCache.has(key)) {
     const c = mk(W, H), x = c.getContext('2d');
-    if (v === 'spot' && !t.flat) drawSpot(x, t, p % 2);
+    if (COMP.has(v)) composeBg(x, slideTheme(t, v), v, p);
+    else if (v === 'spot' && !t.flat) drawSpot(x, t, p % 2);
     else { t.bg.call(t, x, t.ownVariants ? v : (v === 'title' ? 'title' : 'content')); if (!t.ownVariants && !t.flat) decorate(x, t, v, p); }
     bgCache.set(key, c);
   }
@@ -156,7 +186,7 @@ const plain = p => p.map(r => r.t).join('');
 // ---------- 現場版 ----------
 function liveOpts(isTitle, v) {
   return {
-    headRule: (pi, ps) => v === 'spark' ? false : isTitle ? pi === 0 : (pi === 0 && ps.length > 1 && plain(ps[0]).length <= 28),
+    headRule: (pi, ps) => (v === 'spark' || v === 'solid') ? false : isTitle ? pi === 0 : (pi === 0 && ps.length > 1 && plain(ps[0]).length <= 28),
     headScale: isTitle ? 1.9 : 1.16, lineGap: S.lineGap || 1.1 * LN, paraGap: .45, shadow: S.shadow,
   };
 }
@@ -165,12 +195,17 @@ function liveCfg(slide, isTitle, v) {
   return { dx: m.dx, dy: m.dy, w: m.w || (isTitle ? 1500 : v === 'spark' ? 1300 : 1560), userW: !!m.w, align: m.align || null };
 }
 // 每種版型、每套背景的「裝飾占用區」：文字自動避開
-function safeOf(T, v) {
+function safeOf(T, v, idx = 0) {
   const tp = T.ownVariants
-    ? { title: [230, 120], band: [140, 90], rule: [90, 170], brackets: [130, 130], spark: [110, 100], num: [90, 150], plain: [90, 170], spot: [110, 110] }
-    : { title: [110, 110], band: [100, 100], rule: [90, 170], brackets: [130, 130], spark: [110, 110], num: [90, 100], plain: [90, 90], spot: [110, 110] };
-  const [t, b] = tp[v] || [100, 100], e = T.safe || {};
-  return { t: Math.max(t, e.t || 0), b: Math.max(b, e.b || 0), r: e.r || 0 };
+    ? { title: [230, 120], band: [140, 90], rule: [90, 170], brackets: [130, 130], spark: [110, 100], num: [90, 150], plain: [90, 170], spot: [110, 110], flip: [170, 90] }
+    : { title: [110, 110], band: [100, 100], rule: [90, 170], brackets: [130, 130], spark: [110, 110], num: [90, 100], plain: [90, 90], spot: [110, 110], flip: [90, 90] };
+  Object.assign(tp, { zoom: [90, 90], solid: [90, 90], side: [90, 90], card: [190, 190] });
+  const [t, b] = tp[v] || [100, 100]; let e = T.safe || {};
+  if (v === 'flip') e = { t: e.t, b: e.b, l: e.r, r: e.l };
+  if (v === 'zoom' || v === 'solid' || v === 'card') e = {};
+  let l = e.l || 0, r = e.r || 0;
+  if (v === 'side') { if (idx % 2 === 0) l = Math.max(l, 470); else r = Math.max(r, 470); }
+  return { t: Math.max(t, e.t || 0), b: Math.max(b, e.b || 0), l, r };
 }
 function stripLead(runs, n) {
   const out = []; let left = n;
@@ -180,15 +215,15 @@ function stripLead(runs, n) {
 // 整份簡報的統一字級：每頁各自算出「放得下的最大字級」，取中位數，讓相鄰頁面字級一致；太長的頁面才個別縮小
 let _deck = { sig: '', val: 80 };
 function deckSize() {
-  const T0 = curTheme();
-  const sig = [S.themeKey, S.custom ? 1 : 0, S.lineGap, JSON.stringify(S.fonts), S.live.w || '', S.slides.map((s, i) => (s.variant || '') + '|' + (s.fs || 1) + '|' + s.paras.map(ptext).join('/')).join('#')].join('~');
+    const sig = [S.themeKey, S.autoVary, JSON.stringify(S.bgAll), S.custom ? 1 : 0, S.lineGap, JSON.stringify(S.fonts), S.live.w || '', S.slides.map((s, i) => (s.variant || '') + '|' + (s.fs || 1) + '|' + (s.bg ? s.bg.t : '') + '|' + s.paras.map(ptext).join('/')).join('#')].join('~');
   if (sig === _deck.sig) return _deck.val;
   const fits = [];
   S.slides.forEach((sd, i) => {
-    const v = autoVariant(sd, i); if (v === 'title' || v === 'spark') return;
+    const v = autoVariant(sd, i); if (v === 'title' || v === 'spark' || v === 'solid') return;
     let paras = sd.paras, shift = 0;
     if (v === 'num') { const m = ptext(paras[0]).match(NUM_RE); if (m) { shift = 150; paras = paras.map((p, k) => k ? p : stripLead(p, m[0].length)); } }
-    const sf = safeOf(slideTheme(T0, v), v), o = liveOpts(false, v), maxW = (S.live.w || 1560 - sf.r) - shift, maxH = H - sf.t - sf.b;
+    const sf = safeOf(slideTheme(curTheme(sd), v), v, i), o = liveOpts(false, v), maxW = (S.live.w ? S.live.w : 1560 - sf.r - sf.l) - shift, maxH = H - sf.t - sf.b;
+    if (v === 'side' && paras.length > 1 && plain(paras[0]).length <= 28) paras = paras.slice(1), o.headRule = () => false;
     let size = 80; for (; size >= 30; size -= 2) if (blockH(layout(paras, size, maxW, o), o) <= maxH) break;
     fits.push(size);
   });
@@ -199,16 +234,23 @@ function deckSize() {
 }
 function drawLive(cv, slide, idx, noText) {
   const v = autoVariant(slide, idx), T = slideTheme(curTheme(slide), v), c = cv.getContext('2d');
-  const isTitle = v === 'title', isSpark = v === 'spark';
+  const isTitle = v === 'title', isSpark = v === 'spark' || v === 'solid';
   c.clearRect(0, 0, W, H);
   c.drawImage(getBg(v, idx, slide), 0, 0);
-  const o = liveOpts(isTitle, v), fs = slide.fs || 1, L = liveCfg(slide, isTitle, v), sf = safeOf(T, v);
-  let paras = slide.paras, numeral = null;
+  const o = liveOpts(isTitle, v), fs = slide.fs || 1, L = liveCfg(slide, isTitle, v), sf = safeOf(T, v, idx);
+  let paras = slide.paras, numeral = null, panel = null;
+  if (v === 'side' && paras.length > 1 && plain(paras[0]).length <= 28) {
+    const left = idx % 2 === 0, pw = 560, ho = { headRule: () => true, headScale: 1, lineGap: o.lineGap, paraGap: .3 };
+    let hs = 76, hl; for (; hs >= 40; hs -= 2) { hl = layout([paras[0]], hs, pw - 130, ho); if (blockH(hl, ho) <= H - 380) break; }
+    const hh = blockH(hl, ho), lt = lumOf(T.accent) > .55;
+    panel = { lines: hl, x: (left ? 0 : W - pw) + 65, y: (H - hh) / 2, o: ho, w: pw - 130, T: Object.assign({}, T, { text: lt ? '#1E1914' : '#FBF6EC', red: lt ? '#B3261E' : '#FFD27A' }) };
+    paras = paras.slice(1); o.headRule = () => false;
+  }
   if (v === 'num') {
     const m = ptext(paras[0]).match(NUM_RE);
     if (m) { numeral = /[１-９]/.test(m[1]) ? String(m[1].charCodeAt(0) - 0xFF10) : m[1]; paras = paras.map((p, i) => i ? p : stripLead(p, m[0].length)); }
   }
-  const shift = numeral ? 150 : 0, maxW = (L.userW ? L.w : L.w - sf.r) - shift, maxH = H - sf.t - sf.b;
+  const shift = numeral ? 150 : 0, maxW = (L.userW ? L.w : L.w - sf.r - sf.l) - shift, maxH = H - sf.t - sf.b;
   const base = isTitle ? 56 : isSpark ? 100 : deckSize() * S.deckScale;
   let size = Math.round(base * fs), lines;
   for (; size >= 30; size -= 2) { lines = layout(paras, size, maxW, o); if (blockH(lines, o) <= maxH) break; }
@@ -216,7 +258,7 @@ function drawLive(cv, slide, idx, noText) {
   // 自動對齊：標題、重點句、只有一小段的頁面置中，其餘靠左
   const auto = (isTitle || isSpark || (paras.length <= 1 && lines.length <= 2)) ? 'center' : 'left', align = L.align || auto;
   slide._autoAlign = align;
-  const x = (align === 'left' && !isTitle && !isSpark ? 160 : (W - maxW - shift) / 2) + L.dx + shift;
+  const x = (align === 'left' && !isTitle && !isSpark ? 160 + sf.l : (W - maxW - shift) / 2 + (sf.l - sf.r) / 2) + L.dx + shift;
   const y = ((S.anchor === 'top' && !isTitle && !isSpark) ? sf.t + 24 : Math.max(sf.t, sf.t + (maxH - h) / 2 - 6)) + L.dy;
   const numSize = numeral ? Math.round(lines[0].size * 2.1) : 0, numX = x - shift + 6, numY = numeral ? y + lines[0].h / 2 + lines[0].size * .1 : 0;
   if (S.blocks && !isTitle && !isSpark) {
@@ -231,10 +273,11 @@ function drawLive(cv, slide, idx, noText) {
     o.headColor = anyHead ? (lumOf(T.accent) > .55 ? '#1E1914' : '#FBF6EC') : null;
   }
   if (!noText) {
+    if (panel) drawLines(c, panel.lines, panel.x, panel.y, panel.o, panel.T, 'left', panel.w);
     drawLines(c, lines, x, y, o, T, align, maxW);
     if (numeral) { c.font = `italic 700 ${numSize}px ${SERIF}`; c.fillStyle = T.accent; c.textBaseline = 'middle'; c.fillText(numeral, numX, numY); }
   }
-  return { shrunk: size < Math.round(base * fs) && size < 48, geo: { lines, x, y, o, align, maxW, T, numeral, numX, numY, numSize } };
+  return { shrunk: size < Math.round(base * fs) && size < 48, geo: { lines, x, y, o, align, maxW, T, numeral, numX, numY, numSize, extra: panel ? [panel] : [] } };
 }
 
 // ---------- 長條版 ----------
@@ -366,12 +409,13 @@ function renderThumb(i) {
   const c = cv.getContext('2d'); c.drawImage(full, 0, 0, cv.width, cv.height);
   const badge = cv.parentElement.querySelector('.badge'); const n = stripPages(S.slides[i]).pages.length;
   badge.textContent = `長條×${n}`; badge.hidden = n < 2;
+  const fl = cv.parentElement.querySelector('.flag'); if (fl) fl.hidden = !S.slides[i].bg;
 }
 function buildList() {
   const list = $('list'); list.innerHTML = ''; thumbCv.clear();
   S.slides.forEach((sl, i) => {
     const d = document.createElement('div'); d.className = 'thumb' + (i === S.sel ? ' sel' : '');
-    d.innerHTML = `<canvas width="400" height="225"></canvas><span class="n">${i + 1}</span><span class="badge" hidden></span>`;
+    d.innerHTML = `<canvas width="400" height="225"></canvas><span class="n">${i + 1}</span><span class="badge" hidden></span><span class="flag" hidden>單頁背景</span>`;
     d.onclick = () => select(i); list.appendChild(d); thumbCv.set(i, d.querySelector('canvas'));
   });
   let i = 0; const step = () => { if (i < S.slides.length) { renderThumb(i++); setTimeout(step, 0); } }; step();
@@ -448,13 +492,13 @@ function buildThemes() {
   const box = $('themes'); box.innerHTML = '';
   const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { io.unobserve(e.target); drawThumb(e.target.dataset.k, e.target); } }), { root: box, rootMargin: '200px' });
   Object.entries(THEMES).filter(([k, t]) => inCat(k, t)).forEach(([k, t]) => {
-    const b = document.createElement('button'); b.className = 'tcard' + (!S.custom && S.themeKey === k ? ' sel' : ''); b.title = t.name;
+    const b = document.createElement('button'); b.className = 'tcard' + (!S.custom && S.themeKey === k ? ' sel' : ''); b.title = t.name; b.dataset.k = k;
     const cv = mk(320, 180); cv.dataset.k = k; b.appendChild(cv);
     if (thumbCache.has(k)) drawThumb(k, cv); else io.observe(cv);
     const sp = document.createElement('span'); sp.textContent = t.name; b.appendChild(sp);
-    b.onclick = () => { S.themeKey = k; clearCustom(false); ensureFonts().then(() => { loadedChars.clear(); return ensureFonts(); }).then(afterThemeChange); }; box.appendChild(b);
+    b.onclick = () => applyTheme(k); box.appendChild(b);
   });
-  $('themeCount').textContent = box.children.length + ' / ' + Object.keys(THEMES).length;
+  $('themeCount').textContent = box.children.length + ' / ' + Object.keys(THEMES).length; if (typeof markBgSel === 'function') markBgSel();
 }
 function getBgFor(k) { const c = mk(W, H); THEMES[k].bg.call(THEMES[k], c.getContext('2d'), 'content'); return c; }
 function afterThemeChange() { bgCache.clear(); buildThemes(); buildList(); renderMain(); save(); }
@@ -462,8 +506,8 @@ function clearCustom(redraw = true) { S.custom = null; try { localStorage.remove
 function syncBgUi() {
   const has = !!S.custom;
   $('bgCtl').hidden = !has; $('bgThumb').hidden = !has; $('bgUp').classList.toggle('has', has);
-  $('btnBg').textContent = has ? '換一張背景圖…' : '用自己的背景圖…';
-  $('bgHint').textContent = has ? '已套用到每一頁，重新整理也會記住' : '會套用到每一頁，自動壓暗讓字清楚';
+  $('btnBg').textContent = has ? '換一張圖…' : '選一張圖…';
+  $('bgHint').textContent = has ? '已套用到每一頁，重新整理也會記住' : '每一頁都會用這張圖，自動壓暗讓字清楚';
   document.querySelectorAll('#bgMode .pill').forEach(x => x.classList.toggle('sel', x.dataset.m === S.customMode));
   $('bgDim').value = Math.round(dimOf() * 100); $('bgDimO').textContent = Math.round(dimOf() * 100) + '%';
   if (has) { const c = $('bgThumbCv').getContext('2d'), im = S.custom, sc = Math.max(320 / im.width, 180 / im.height); c.drawImage(im, (320 - im.width * sc) / 2, (180 - im.height * sc) / 2, im.width * sc, im.height * sc); c.fillStyle = S.customMode === 'light' ? `rgba(255,255,255,${dimOf()})` : `rgba(10,8,6,${dimOf()})`; c.fillRect(0, 0, 320, 180); }
@@ -530,10 +574,10 @@ function renderLocalList() {
 }
 
 // ---------- 記住上次的樣式 ----------
-const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, deckScale: S.deckScale, anchor: S.anchor, shadow: S.shadow, blocks: S.blocks, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
+const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, deckScale: S.deckScale, anchor: S.anchor, shadow: S.shadow, blocks: S.blocks, autoVary: S.autoVary, bgAll: S.bgAll, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
 async function applyStyle(v) {
   if (!v) return;
-  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: !!v.autoExport, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: v.anchor || 'middle', shadow: !!v.shadow, blocks: !!v.blocks });
+  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: !!v.autoExport, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: v.anchor || 'middle', shadow: !!v.shadow, blocks: !!v.blocks, autoVary: v.autoVary !== false, bgAll: v.bgAll || null });
   if (v.fonts) S.fonts = v.fonts;
   for (const f of (v.localFonts || [])) await registerLocal(f.name, f.fam);
   $('optShadow').checked = !!S.shadow; $('optBlocks').checked = !!S.blocks;
@@ -658,6 +702,7 @@ async function exportEditable() {
     const sd = S.slides[i], r = drawLive(cv, sd, i, true), g = r.geo;
     const sl = pL.addSlide(); sl.addImage({ data: await dataOf(await blobOf(cv, 'image/jpeg', .93)), x: 0, y: 0, w: 13.333, h: 7.5 });
     addTextGroups(sl, g.lines, g.y, g.o, g.x, g.maxW, g.align, g.T);
+    (g.extra || []).forEach(e => addTextGroups(sl, e.lines, e.y, e.o, e.x, e.w, 'left', e.T));
     if (g.numeral) { const hh = g.numSize * 1.3; sl.addText(g.numeral, { x: inch(g.numX - 6), y: inch(g.numY - hh / 2), w: 1.1, h: inch(hh), margin: 0, valign: 'middle', align: 'left', fontSize: ptOf(g.numSize), italic: true, bold: true, fontFace: 'Noto Serif TC', color: hexNo(g.T.accent) }); }
     const n = stripPages(sd).pages.length;
     for (let p = 0; p < n; p++) {
@@ -723,7 +768,7 @@ $('btnExport').onclick = () => exportByFormat().catch(e => { console.error(e); $
 $('btnBg').onclick = () => $('bgFile').click();
 $('bgFile').onchange = e => {
   const f = e.target.files[0]; if (!f) return; const im = new Image();
-  im.onload = () => { S.custom = im; syncBgUi(); afterThemeChange(); saveBg(); };
+  im.onload = () => { S.custom = im; S.bgAll = null; syncBgUi(); afterThemeChange(); saveBg(); };
   im.src = URL.createObjectURL(f); e.target.value = '';
 };
 $('btnBgClear').onclick = () => clearCustom();
@@ -733,34 +778,45 @@ document.querySelectorAll('#bgMode .pill').forEach(b => b.onclick = () => {
 $('bgDim').oninput = () => { S.customDim = $('bgDim').value / 100; syncBgUi(); bgCache.clear(); redrawSoon(); saveBg(); };
 syncBgUi();
 
-// ---------- 單頁背景 ----------
+// ---------- 背景分頁：整份簡報／只有這一頁 ----------
 const SW = ['#FFFFFF', '#F4EFE6', '#E6E8EB', '#2A2C30', '#111214'];
+function markBgSel() {
+  const sl = S.slides[S.sel], b = sl && sl.bg, slideMode = S.bgScope === 'slide', cur = slideMode ? b : S.bgAll;
+  document.querySelectorAll('#themes .tcard').forEach(x => x.classList.toggle('sel', slideMode ? !!(b && b.t === 'theme' && b.k === x.dataset.k) : (!S.custom && !S.bgAll && S.themeKey === x.dataset.k)));
+  document.querySelectorAll('#bgSwatches .sw').forEach(x => x.classList.toggle('sel', !!(cur && cur.t === 'color' && cur.c.toLowerCase() === x.dataset.c.toLowerCase())));
+}
 function syncSlideBgUI() {
-  const sl = S.slides[S.sel]; if (!sl || !$('slBgType')) return; const b = sl.bg;
-  $('slBgType').value = b ? b.t : '';
-  $('slBgColor').hidden = !(b && b.t === 'color'); $('slBgTheme').hidden = !(b && b.t === 'theme'); $('slBgImg').hidden = !(b && b.t === 'img');
-  if (b && b.t === 'color') document.querySelectorAll('#slBgColor .sw').forEach(x => x.classList.toggle('sel', x.dataset.c.toLowerCase() === b.c.toLowerCase()));
-  if (b && b.t === 'theme') $('slBgThemeSel').value = b.k;
+  const slideMode = S.bgScope === 'slide', sl = S.slides[S.sel]; if (!$('bgScope')) return;
+  document.querySelectorAll('#bgScope button').forEach(x => x.classList.toggle('on', x.dataset.s === S.bgScope));
+  $('scopeSlideBtn').textContent = sl ? `只有這一頁（第 ${S.sel + 1} 頁）` : '只有這一頁';
+  $('scopeHint').textContent = slideMode ? `下面的選擇只會改第 ${S.sel + 1} 頁，其他頁不變。` : '下面的選擇會套用到每一頁。想只改某一頁，先點左邊那一頁，再按「只有這一頁」。';
+  $('bgVaryRow').hidden = slideMode; $('bgLayoutRow').hidden = !slideMode; $('bgAllImg').hidden = slideMode; $('bgSlideImg').hidden = !slideMode;
+  $('bgResetRow').hidden = !(slideMode && sl && sl.bg);
+  $('optVary').checked = S.autoVary !== false;
+  const b = sl && sl.bg; $('slBgImg').hidden = !(b && b.t === 'img');
   if (b && b.t === 'img') { const d = Math.round((b.dim == null ? .45 : b.dim) * 100); $('slBgDim').value = d; $('slBgDimO').textContent = d + '%'; }
+  markBgSel();
 }
 function setSlideBg(b) {
   const sl = S.slides[S.sel]; if (!sl) return;
   if (b) sl.bg = b; else delete sl.bg;
   syncSlideBgUI(); renderMain(); renderThumb(S.sel); save();
 }
-(function buildSlideBgUI() {
-  const box = $('slBgColor');
-  SW.forEach(c => { const b = document.createElement('button'); b.className = 'sw'; b.dataset.c = c; b.style.background = c; b.title = c; b.onclick = () => setSlideBg({ t: 'color', c }); box.appendChild(b); });
-  const pick = document.createElement('input'); pick.type = 'color'; pick.value = '#F4EFE6'; pick.title = '自選顏色'; pick.oninput = () => setSlideBg({ t: 'color', c: pick.value }); box.appendChild(pick);
-  const sel = $('slBgThemeSel'); Object.entries(THEMES).forEach(([k, t]) => { const o = document.createElement('option'); o.value = k; o.textContent = t.name; sel.appendChild(o); });
-  sel.onchange = () => setSlideBg({ t: 'theme', k: sel.value });
-  $('slBgType').onchange = () => {
-    const sl = S.slides[S.sel], v = $('slBgType').value, cur = sl.bg;
-    if (!v) return setSlideBg(null);
-    if (v === 'color') return setSlideBg({ t: 'color', c: cur && cur.t === 'color' ? cur.c : '#F4EFE6' });
-    if (v === 'theme') return setSlideBg({ t: 'theme', k: cur && cur.t === 'theme' ? cur.k : S.themeKey });
-    if (v === 'img') { if (cur && cur.t === 'img') return; syncSlideBgUI(); $('slBgFile').click(); }
-  };
+function applyTheme(k) {
+  if (S.bgScope === 'slide') return setSlideBg({ t: 'theme', k });
+  S.themeKey = k; S.bgAll = null; clearCustom(false);
+  ensureFonts().then(() => { loadedChars.clear(); return ensureFonts(); }).then(afterThemeChange);
+}
+function applyColor(c) {
+  if (S.bgScope === 'slide') return setSlideBg({ t: 'color', c });
+  S.bgAll = { t: 'color', c }; clearCustom(false); afterThemeChange();
+}
+(function buildBgPanel() {
+  const box = $('bgSwatches');
+  SW.forEach(c => { const b = document.createElement('button'); b.className = 'sw'; b.dataset.c = c; b.style.background = c; b.title = c; b.onclick = () => applyColor(c); box.appendChild(b); });
+  const pick = document.createElement('input'); pick.type = 'color'; pick.value = '#F4EFE6'; pick.title = '自選顏色'; pick.onchange = () => applyColor(pick.value); box.appendChild(pick);
+  document.querySelectorAll('#bgScope button').forEach(b => b.onclick = () => { S.bgScope = b.dataset.s; syncSlideBgUI(); });
+  $('slBgReset').onclick = () => setSlideBg(null);
   $('slBgPick').onclick = () => $('slBgFile').click();
   $('slBgFile').onchange = e => {
     const f = e.target.files[0]; e.target.value = ''; if (!f) return;
@@ -773,9 +829,10 @@ function setSlideBg(b) {
     };
     im.src = URL.createObjectURL(f);
   };
-  $('slBgDim').oninput = () => { const sl = S.slides[S.sel]; if (sl.bg && sl.bg.t === 'img') { sl.bg.dim = $('slBgDim').value / 100; syncSlideBgUI(); redrawSoon(); } };
+  $('slBgDim').oninput = () => { const sl = S.slides[S.sel]; if (sl.bg && sl.bg.t === 'img') { sl.bg.dim = $('slBgDim').value / 100; $('slBgDimO').textContent = $('slBgDim').value + '%'; redrawSoon(); } };
   $('optShadow').onchange = () => { S.shadow = $('optShadow').checked; redrawSoon(); };
   $('optBlocks').onchange = () => { S.blocks = $('optBlocks').checked; redrawSoon(); };
+  $('optVary').onchange = () => { S.autoVary = $('optVary').checked; bgCache.clear(); redrawSoon(); buildList(); syncVariantUI(); save(); };
 })();
 
 // ---------- 啟動：還原上次內容 ----------

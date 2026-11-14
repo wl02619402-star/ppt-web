@@ -1,22 +1,54 @@
 // 版型：同一套背景，依每頁內容自動變化（簡單但不單調）
 const VARIANT_LABELS = {
   auto: '自動', title: '標題頁', plain: '一般', band: '一般・側邊色條', rule: '一般・底部分隔線',
-  brackets: '一般・框角', spark: '重點句・星芒', num: '編號重點', spot: '深色強調',
+  brackets: '一般・框角', flip: '一般・左右翻轉', zoom: '一般・放大局部', side: '左右分欄（標題放色塊）', card: '卡片框',
+  spark: '重點句・星芒', solid: '整頁色塊強調', num: '編號重點', spot: '深色強調',
 };
 const hexA = (hex, a) => hex + hex2(a);
 const ptext = p => p.map(r => r.t).join('');
 const NUM_RE = /^\s*([1-9１-９])\s*[\.、．]\s*/;
+const REF_RE = /[（(][^）)]{1,14}\d+\s*[:：]\s*\d/;
+const COMP = new Set(['flip', 'zoom', 'side', 'card', 'solid']);
 
+// 版面安排：同一套風格，每一頁依內容換不同編排，而且相鄰頁面不會長得一樣
+let _plan = { sig: '', v: [] };
+function planVariants() {
+  const sl = (typeof S !== 'undefined' && S.slides) || [];
+  const sig = (S.autoVary === false ? '0' : '1') + sl.map(s => (s.variant || '') + '|' + s.paras.map(ptext).join('/')).join('#');
+  if (sig === _plan.sig) return _plan.v;
+  const out = [], last = {}, cnt = {};
+  const GAP = { solid: 3, spark: 2, side: 2, card: 2, zoom: 2, flip: 2 };
+  sl.forEach((s, i) => {
+    let v;
+    const ps = s.paras.map(ptext).map(x => x.trim()).filter(Boolean), chars = ps.join('').length;
+    if (s.variant && s.variant !== 'auto') v = s.variant;
+    else if (i === 0) v = 'title';
+    else if (ps.length && NUM_RE.test(ps[0]) && ps[0].length <= 44) v = 'num';
+    else if (S.autoVary === false) v = (ps.length && ps.length <= 2 && chars <= 34) ? 'spark' : ['plain', 'band', 'rule', 'brackets', 'plain', 'rule'][i % 6];
+    else {
+      const short = ps.length && ps.length <= 2 && chars <= 34, headBody = ps.length > 1 && ps[0].length <= 28, scripture = ps.some(x => REF_RE.test(x));
+      let cands = short ? ['spark', 'solid', 'card']
+        : headBody ? (chars <= 110 ? ['side', 'card', 'plain', 'flip', 'rule', 'band'] : ['plain', 'flip', 'card', 'rule', 'band'])
+        : scripture ? ['card', 'plain', 'zoom', 'flip', 'brackets']
+        : ['plain', 'flip', 'zoom', 'rule', 'band', 'brackets', 'card'];
+      if (chars > 170) cands = cands.filter(c => c !== 'card' && c !== 'side');
+      const prev = out[i - 1];
+      const ok = cands.filter(c => c !== prev && (last[c] === undefined || i - last[c] >= (GAP[c] || 1)));
+      const pool = ok.length ? ok : cands.filter(c => c !== prev);
+      v = (pool.length ? pool : ['plain']).reduce((best, c) => ((cnt[c] || 0) < (cnt[best] || 0) ? c : best));
+    }
+    out.push(v); cnt[v] = (cnt[v] || 0) + 1; last[v] = i;
+  });
+  _plan = { sig, v: out }; return out;
+}
 function autoVariant(sl, idx) {
   if (sl.variant && sl.variant !== 'auto') return sl.variant;
-  if (idx === 0) return 'title';
-  const ps = sl.paras.map(ptext).map(s => s.trim()).filter(Boolean);
-  if (ps.length && NUM_RE.test(ps[0]) && ps[0].length <= 44) return 'num';
-  if (ps.length && ps.length <= 2 && ps.join('').length <= 34) return 'spark';
-  return ['plain', 'band', 'rule', 'brackets', 'plain', 'rule'][idx % 6];
+  return planVariants()[idx] || 'plain';
 }
 function slideTheme(T, v) {
-  return v === 'spot' && !T.flat ? Object.assign({}, T, { text: '#F7F0E6', red: '#FF9C86', dark: true }) : T;
+  if (v === 'spot' && !T.flat) return Object.assign({}, T, { text: '#F7F0E6', red: '#FF9C86', dark: true });
+  if (v === 'solid') { const lt = lumOf(T.accent) > .55; return Object.assign({}, T, { text: lt ? '#1E1914' : '#FBF6EC', red: lt ? '#B3261E' : '#FFD27A', dark: !lt }); }
+  return T;
 }
 
 // ---- 通用裝飾（疊在任何一套背景上）----

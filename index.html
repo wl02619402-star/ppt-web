@@ -147,6 +147,10 @@ input[type=range]{width:100%;accent-color:var(--ink2);margin:0}
 .bgup.has{border-style:solid;border-color:var(--accent)}
 .bgthumb{width:96px;flex:none}.bgthumb canvas{display:block;width:100%;aspect-ratio:16/9;outline:1px solid var(--line2)}
 .bgup-body{flex:1;min-width:0}
+.scope{display:flex;border:1px solid var(--line2);border-radius:4px;overflow:hidden}
+.scope button{flex:1;height:36px;border:0;background:none;color:var(--muted);font-weight:500}
+.scope button.on{background:var(--ink);color:var(--bg)}
+.thumb .flag{position:absolute;left:6px;bottom:6px;font-size:11px;background:var(--accent);color:#fff;padding:1px 6px;border-radius:3px}
 .chk{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13px}
 .sw{width:28px;height:28px;border-radius:4px;border:1px solid var(--line2);padding:0}
 .sw.sel{outline:2px solid var(--accent);outline-offset:1px}
@@ -230,7 +234,8 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
     <div id="sideBody" hidden>
       <div class="tabs" role="tablist">
         <button class="on" data-pane="pText" role="tab">文字</button>
-        <button data-pane="pLook" role="tab">外觀</button>
+        <button data-pane="pBg" role="tab">背景</button>
+        <button data-pane="pLook" role="tab">字型</button>
         <button data-pane="pPos" role="tab">位置</button>
       </div>
 
@@ -244,28 +249,6 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
           </div>
         </div>
         <div class="sec">
-          <h3>這一頁的版型</h3>
-          <select id="variantSel"></select>
-          <div class="hint">同一套背景會依內容自動換版型：標題頁、短句、編號重點、一般頁。想自己指定就在這裡選。</div>
-        </div>
-        <div class="sec">
-          <h3>這一頁的背景</h3>
-          <select id="slBgType">
-            <option value="">跟全部頁面一樣</option>
-            <option value="color">純色（只放圖片的頁面用）</option>
-            <option value="theme">換成別的背景</option>
-            <option value="img">用自己的圖</option>
-          </select>
-          <div id="slBgColor" class="row" style="margin-top:8px" hidden></div>
-          <div id="slBgTheme" style="margin-top:8px" hidden><select id="slBgThemeSel"></select></div>
-          <div id="slBgImg" style="margin-top:8px" hidden>
-            <div class="row"><button class="btn small" id="slBgPick">選擇圖片…</button></div>
-            <label class="slider">遮罩<input type="range" id="slBgDim" min="0" max="90" step="5"><output id="slBgDimO"></output></label>
-          </div>
-          <input type="file" id="slBgFile" accept="image/*" hidden>
-          <div class="hint">只有這一頁會換，其他頁不變。</div>
-        </div>
-        <div class="sec">
           <h3>頁面</h3>
           <div class="row">
             <button class="btn small" id="btnAdd">新增一頁</button>
@@ -275,31 +258,70 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
         </div>
       </div>
 
-      <div class="pane" id="pLook" hidden>
-        <div class="note">這裡的設定，現場版和線上版會一起套用</div>
+      <div class="pane" id="pBg" hidden>
+        <div class="scope" id="bgScope" role="tablist">
+          <button class="on" data-s="all">整份簡報</button>
+          <button data-s="slide" id="scopeSlideBtn">只有這一頁</button>
+        </div>
+        <div class="hint" id="scopeHint" style="margin:8px 0 16px"></div>
+
+        <div class="sec" id="bgVaryRow">
+          <label class="chk" style="margin-top:0"><input type="checkbox" id="optVary"> 每一頁自動換版面（同一種風格，不同編排）</label>
+          <div class="hint">關掉就是每一頁用一樣的版面。</div>
+        </div>
+        <div class="sec" id="bgLayoutRow" hidden>
+          <h3>這一頁的版面</h3>
+          <select id="variantSel"></select>
+          <div class="hint">同一種風格有多種編排：標題頁、左右分欄、卡片框、整頁色塊……</div>
+        </div>
+
         <div class="sec">
-          <h3>背景</h3>
-          <div class="bgup" id="bgUp">
-            <div class="bgthumb" id="bgThumb" hidden><canvas id="bgThumbCv" width="320" height="180"></canvas></div>
-            <div class="bgup-body">
-              <button class="btn small" id="btnBg">用自己的背景圖…</button>
-              <div class="hint" id="bgHint" style="margin-top:4px">會套用到每一頁，自動壓暗讓字清楚</div>
-            </div>
-          </div>
-          <div id="bgCtl" hidden>
-            <div class="row" id="bgMode" style="margin-top:8px">
-              <span class="hint" style="margin:0 4px 0 0">字色</span>
-              <button class="pill" data-m="dark">白字</button>
-              <button class="pill" data-m="light">深字</button>
-              <button class="btn small" id="btnBgClear" style="margin-left:auto">取消背景圖</button>
-            </div>
-            <label class="slider">遮罩<input type="range" id="bgDim" min="0" max="90" step="5"><output id="bgDimO"></output></label>
-          </div>
-          <input type="file" id="bgFile" accept="image/*" hidden>
-          <div class="themebar" style="margin-top:16px"><span id="themeCount"></span></div>
+          <h3>風格</h3>
+          <div class="themebar"><span id="themeCount"></span></div>
           <div class="cats" id="themeCats"></div>
           <div class="themes" id="themes"></div>
         </div>
+        <div class="sec">
+          <h3>純色</h3>
+          <div class="row" id="bgSwatches"></div>
+          <div class="hint">只放圖片的頁面，用純色最乾淨。</div>
+        </div>
+        <div class="sec">
+          <h3>自己的圖</h3>
+          <div id="bgAllImg">
+            <div class="bgup" id="bgUp">
+              <div class="bgthumb" id="bgThumb" hidden><canvas id="bgThumbCv" width="320" height="180"></canvas></div>
+              <div class="bgup-body">
+                <button class="btn small" id="btnBg">選一張圖…</button>
+                <div class="hint" id="bgHint" style="margin-top:4px">每一頁都會用這張圖，自動壓暗讓字清楚</div>
+              </div>
+            </div>
+            <div id="bgCtl" hidden>
+              <div class="row" id="bgMode" style="margin-top:8px">
+                <span class="hint" style="margin:0 4px 0 0">字色</span>
+                <button class="pill" data-m="dark">白字</button>
+                <button class="pill" data-m="light">深字</button>
+                <button class="btn small" id="btnBgClear" style="margin-left:auto">取消背景圖</button>
+              </div>
+              <label class="slider">遮罩<input type="range" id="bgDim" min="0" max="90" step="5"><output id="bgDimO"></output></label>
+            </div>
+            <input type="file" id="bgFile" accept="image/*" hidden>
+          </div>
+          <div id="bgSlideImg" hidden>
+            <div class="row"><button class="btn small" id="slBgPick">選一張圖…</button></div>
+            <div id="slBgImg" hidden>
+              <label class="slider">遮罩<input type="range" id="slBgDim" min="0" max="90" step="5"><output id="slBgDimO"></output></label>
+            </div>
+            <input type="file" id="slBgFile" accept="image/*" hidden>
+          </div>
+        </div>
+        <div class="sec" id="bgResetRow" hidden>
+          <button class="btn" id="slBgReset">這一頁還原成跟整份一樣</button>
+        </div>
+      </div>
+
+      <div class="pane" id="pLook" hidden>
+        <div class="note">字型、行距、文字效果：現場版和線上版會一起套用</div>
         <div class="sec">
           <h3>字型</h3>
           <label class="field">標題<select id="fontHead"></select></label>
@@ -384,8 +406,8 @@ input[type=color]{width:32px;height:28px;padding:0;border:1px solid var(--line2)
 <div id="prog"><div><div id="progT">處理中…</div><i><b id="progB"></b></i></div></div>
 <script src="themes.js?v=20"></script>
 <script src="themes2.js?v=20"></script>
-<script src="themes3.js?v=23"></script>
-<script src="app.js?v=23"></script>
+<script src="themes3.js?v=25"></script>
+<script src="app.js?v=25"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
