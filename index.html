@@ -350,6 +350,8 @@ input[type=range]{accent-color:var(--ink)}
   header{padding:0 12px;gap:6px}
   header h1{font-size:14px;gap:8px;margin-right:4px}
   header .btn{padding:0 10px}
+  header #btnOpen{font-size:0;gap:0;width:44px;padding:0}
+  header #btnOpen .ic{width:18px;height:18px}
   main{padding:12px}
   .banner{flex-direction:column;align-items:stretch;gap:12px}
   .banner .btn{width:100%}
@@ -386,6 +388,57 @@ input[type=range]{accent-color:var(--ink)}
   body:not(.empty) .pane{overflow:auto;-webkit-overflow-scrolling:touch}
   body:not(.empty) .ed{min-height:120px;max-height:none}
 }
+
+/* ---------- 質感精修：線條圖示、襯線標題、自訂滑桿與勾選框、安靜的捲軸 ---------- */
+.ic{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.btn,.tabs button{display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.btn.small .ic{width:14px;height:14px}
+.tabs button{white-space:nowrap;gap:6px;padding:0 4px;min-width:0}
+.tabs button .ic{opacity:.8;width:15px;height:15px}
+.tabs button.on .ic{opacity:1}
+header h1{font-family:"Noto Serif TC",serif;font-weight:700;font-size:16px;letter-spacing:.04em}
+#drop h2{font-family:"Noto Serif TC",serif;font-weight:700;font-size:38px;letter-spacing:.02em;line-height:1.3}
+header,#list,#side{box-shadow:inset 0 1px 0 rgba(255,255,255,.025)}
+.btn.primary{box-shadow:inset 0 1px 0 rgba(255,255,255,.7),0 1px 2px rgba(0,0,0,.4)}
+.btn{color:var(--ink)}
+.btn:not(.primary){background:rgba(255,255,255,.02)}
+/* 滑桿 */
+input[type=range]{-webkit-appearance:none;appearance:none;height:20px;background:transparent;cursor:pointer;--p:50%}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(var(--ink2),var(--ink2)) 0/var(--p) 100% no-repeat,var(--raise2)}
+input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:var(--raise2)}
+input[type=range]::-moz-range-progress{height:4px;border-radius:2px;background:var(--ink2)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;margin-top:-6px;border-radius:50%;background:var(--ink);border:0;box-shadow:0 0 0 4px rgba(255,255,255,.06),0 1px 3px rgba(0,0,0,.5);transition:box-shadow .15s var(--ease)}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--ink);border:0}
+input[type=range]:hover::-webkit-slider-thumb{box-shadow:0 0 0 6px rgba(255,255,255,.1),0 1px 3px rgba(0,0,0,.5)}
+input[type=range]:focus-visible{outline:0}
+input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 3px var(--accent)}
+/* 勾選框 */
+.chk input[type=checkbox],.check input[type=checkbox]{-webkit-appearance:none;appearance:none;width:18px;height:18px;border-radius:5px;border:1px solid rgba(255,255,255,.25);background:var(--bg);display:inline-grid;place-content:center;cursor:pointer;transition:background-color .15s var(--ease),border-color .15s var(--ease)}
+.chk input[type=checkbox]::after,.check input[type=checkbox]::after{content:'';width:10px;height:6px;border:2px solid #141518;border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px);opacity:0}
+.chk input[type=checkbox]:checked,.check input[type=checkbox]:checked{background:var(--ink);border-color:var(--ink)}
+.chk input[type=checkbox]:checked::after,.check input[type=checkbox]:checked::after{opacity:1}
+/* 下拉選單 */
+select{-webkit-appearance:none;appearance:none;padding-right:32px;background:var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23b8bac0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center;cursor:pointer}
+select:hover,input[type=text]:hover{border-color:rgba(255,255,255,.2)}
+select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)}
+/* 捲軸 */
+*{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.14) transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:10px;border:3px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background-color:rgba(255,255,255,.22)}
+::-webkit-scrollbar-track{background:transparent}
+/* 區塊標題、頁碼 */
+.sec h3{font-size:12px;font-weight:500;color:var(--muted);letter-spacing:.06em;margin-bottom:10px}
+.thumb .n{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px}
+.slider{grid-template-columns:52px 1fr 44px}
+.slider output{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px}
+/* 進場：只有一次，很輕 */
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+#drop .intro,#drop .sample{animation:rise .5s var(--ease) both}
+#drop .sample{animation-delay:.08s}
+.pane:not([hidden]){animation:fadein .18s var(--ease)}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+.view,.thumb canvas,.tp img{transition:border-color .15s var(--ease),outline-color .15s var(--ease),background-color .15s var(--ease)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 @media (max-width:1100px){
   #app{grid-template-columns:1fr;height:auto}
@@ -401,7 +454,7 @@ input[type=range]{accent-color:var(--ink)}
 <header>
   <h1><span class="mark" aria-hidden="true"><i></i><i></i></span>簡報美編工坊</h1>
   <span class="sp"></span>
-  <button class="btn" id="btnOpen">上傳文字檔</button>
+  <button class="btn" id="btnOpen" aria-label="上傳文字檔" title="上傳文字檔">上傳文字檔</button>
   <div class="expwrap">
     <button class="btn primary" id="btnExport" title="下載兩個 pptx：現場版、線上版，可以直接放進 ProPresenter">匯出 pptx</button>
     <div class="menu" id="expMenu" role="menu" hidden>
@@ -652,7 +705,7 @@ input[type=range]{accent-color:var(--ink)}
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=63"></script>
+<script src="app.js?v=64"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));

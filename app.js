@@ -691,7 +691,7 @@ function setLay(kind, v) {
   _deck.sig = ''; S.page = 0; syncLiveUI(); redrawSoon();
 }
 function syncOut() {
-  syncLiveUI();
+  syncLiveUI(); setTimeout(() => document.querySelectorAll('input[type=range]').forEach(paintRange), 0);
   $('stripXO').textContent = S.stripX; $('stripX').value = S.stripX; $('stripY').value = S.stripY; $('stripYO').textContent = S.stripY; syncStripW();
 }
 const HUE = {
@@ -1286,7 +1286,7 @@ function drawTplSlide(cv, slide, idx, noText) {
 async function loadTplImages() { tplImgs.length = 0; if (!S.tpl) return; await Promise.all(S.tpl.pages.map((p, i) => new Promise(r => { const im = new Image(); im.onload = () => { tplImgs[i] = im; r(); }; im.onerror = r; im.src = p.img; }))); }
 function renderTplUI() {
   const has = !!S.tpl; $('tplBox').hidden = !has; $('tplNow').textContent = has ? `已經有模板：${S.tpl.name}（會自動套用）` : ''; $('tplBanner').hidden = has;
-  $('btnPickTpl').textContent = has ? '換一個模板' : '上傳模板'; $('btnTpl').textContent = has ? '換一個模板…' : '上傳模板 pptx…';
+  $('btnPickTpl').textContent = has ? '換一個模板' : '上傳模板'; $('btnTpl').innerHTML = ic('image') + (has ? '換一個模板…' : '上傳模板 pptx…');
   $('tplHint').textContent = S.bgScope === 'slide' && S.slides[S.sel] ? `點縮圖，第 ${S.sel + 1} 頁就改用那一頁模板（橘框是目前用的）。` : '橘框的頁面會輪流當背景，點縮圖可以選用或不用。';
   if (!has) return;
   $('tplName').textContent = S.tpl.name; $('tplOn').checked = !!S.tpl.on;
@@ -1314,6 +1314,29 @@ $('tplFile').onchange = async e => {
 $('tplOn').onchange = () => { S.tpl.on = $('tplOn').checked; afterTplChange(); buildThemes(); };
 $('tplRemove').onclick = () => { S.tpl = null; tplImgs.length = 0; tplDB.del('tpl').catch(() => { }); afterTplChange(); };
 async function loadSavedTpl() { try { const t = await tplDB.get('tpl'); if (t && t.pages) { S.tpl = t; await loadTplImages(); } } catch (e) { } renderTplUI(); }
+
+
+// ---------- 線條圖示（同一套、同一粗細） ----------
+const ICON = {
+  upload: '<path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>',
+  download: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>',
+  text: '<path d="M4 7V5h16v2"/><path d="M12 5v14"/><path d="M9 19h6"/>',
+  layout: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/>',
+  type: '<path d="M3 19 8 5l5 14"/><path d="M4.8 14h6.4"/><path d="M15 19v-6.5a2.5 2.5 0 0 1 5 0V19"/><path d="M15 15.5h5"/>',
+  move: '<path d="M12 3v18"/><path d="M3 12h18"/><path d="m9 6 3-3 3 3"/><path d="m9 18 3 3 3-3"/><path d="m6 9-3 3 3 3"/><path d="m18 9 3 3-3 3"/>',
+  plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
+  copy: '<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M4 16V5a1 1 0 0 1 1-1h11"/>',
+  trash: '<path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M9 7V4h6v3"/>',
+  file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
+};
+const ic = n => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICON[n]}</svg>`;
+[['btnOpen', 'upload'], ['btnExport', 'download'], ['btnPick', 'upload'], ['btnSample', 'file'], ['btnBannerTpl', 'image'], ['btnTpl', 'image'], ['btnAdd', 'plus'], ['btnDup', 'copy'], ['btnDel', 'trash']].forEach(([id, n]) => { const b = $(id); if (b && !b.querySelector('.ic')) b.insertAdjacentHTML('afterbegin', ic(n)); });
+document.querySelectorAll('.tabs button').forEach(b => { const n = { pText: 'text', pBg: 'layout', pLook: 'type', pPos: 'move' }[b.dataset.pane]; if (n && !b.querySelector('.ic')) b.insertAdjacentHTML('afterbegin', ic(n)); });
+// 滑桿：已經拉到的那一段亮一點
+function paintRange(r) { const min = +r.min || 0, max = +r.max || 100, v = +r.value; r.style.setProperty('--p', ((v - min) / (max - min) * 100) + '%'); }
+document.querySelectorAll('input[type=range]').forEach(r => { paintRange(r); r.addEventListener('input', () => paintRange(r)); });
+new MutationObserver(() => document.querySelectorAll('input[type=range]').forEach(paintRange)).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
 
 // ---------- 啟動：還原上次內容 ----------
 $('fontHead').onchange = e => { S.fonts.head = e.target.value; afterFontChange(); };
