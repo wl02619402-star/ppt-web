@@ -324,6 +324,47 @@ input[type=range]{accent-color:var(--ink)}
 .sframe.strip{background:linear-gradient(45deg,#1d1e22 25%,transparent 25%,transparent 75%,#1d1e22 75%) 0 0/24px 24px,linear-gradient(45deg,#1d1e22 25%,#18191c 25%,#18191c 75%,#1d1e22 75%) 12px 12px/24px 24px}
 .sframe .tag{display:flex;align-items:center;left:12px;top:12px;font-size:12px;line-height:24px;padding:0 10px;background:rgba(10,10,12,.78);border-radius:6px;color:var(--ink)}
 @media (max-width:1100px){#drop{grid-template-columns:1fr;gap:32px;padding:24px 16px;min-height:0}#drop h2{font-size:26px}}
+
+/* ---------- 各種螢幕 ---------- */
+@media (min-width:1101px){
+  body:has(#tplBanner:not([hidden])) .stage{width:min(100%,calc((100vh - 320px) * 16 / 9))}
+  body:has(#tplBanner:not([hidden])) .views{max-width:min(100%,calc((100vh - 320px) * 16 / 9))}
+}
+@media (max-width:1100px),(pointer:coarse){
+  .btn{min-height:44px}
+  .btn.small{min-height:40px}
+  .pill{min-height:40px;min-width:48px}
+  .cbtn{min-height:40px}
+  .scope button{height:40px}
+  select,input[type=text]{height:44px}
+  .tabs button{height:48px}
+  .tp,.sw{min-height:40px}
+  .sw{width:40px;height:40px}
+}
+@media (max-width:1100px){
+  #side{min-height:0}
+  .pane{padding:16px}
+}
+@media (pointer:coarse){#drop .drag{display:none}}
+@media (max-width:640px){
+  header{padding:0 12px;gap:6px}
+  header h1{font-size:14px;gap:8px;margin-right:4px}
+  header .btn{padding:0 10px}
+  main{padding:12px}
+  .banner{flex-direction:column;align-items:stretch;gap:12px}
+  .banner .btn{width:100%}
+  .views{gap:8px}
+  .view{justify-content:center;padding:10px}
+  .view .mini,.view .vt span{display:none}
+  #viewHint{display:none}
+  .cap{gap:8px}
+  .stage{padding:12px 11px 0}
+  #drop{padding:24px 16px}
+  #drop h2{font-size:24px}
+  #drop .lead{font-size:14px}
+  #drop .actions .btn{flex:1}
+  .sframe{margin:10px 10px 18px}
+}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 @media (max-width:1100px){
   #app{grid-template-columns:1fr;height:auto}
@@ -369,7 +410,7 @@ input[type=range]{accent-color:var(--ink)}
         </ol>
         <p class="drag">也可以把 .pptx 直接拖進這個視窗</p>
         <label class="check legacy"><input type="checkbox" id="autoExport"> 上傳後直接匯出給 ProPresenter</label>
-        <div class="styleNote" id="styleNote" hidden><span id="styleNoteT"></span> <button class="link" id="styleClear">清除</button></div>
+        <div class="styleNote legacy" id="styleNote" hidden><span id="styleNoteT"></span> <button class="link" id="styleClear">清除</button></div>
         <p class="fine">檔案只在你的瀏覽器裡處理，不會傳到任何地方</p>
       </div>
       <div class="sample" aria-hidden="true">
