@@ -408,7 +408,7 @@ function drawLive(cv, slide, idx, noText) {
     c.drawImage(im, im.width * cr.l, im.height * cr.t, im.width * (1 - cr.l - cr.r), im.height * (1 - cr.t - cr.b), p.x * W, p.y * H, p.w * W, p.h * H); c.restore();
   });
   const o = liveOpts(isTitle, v, slide), fs = slide.fs || 1, L = liveCfg(slide, isTitle, v), sf = picSafe(slide, safeOf(T, v, idx));
-  let paras = slide.paras, numeral = null, panel = null;
+  let paras = S.dashRef !== false ? stripParas(slide, true).paras : slide.paras, numeral = null, panel = null;
   if (v === 'side' && paras.length > 1 && plain(paras[0]).length <= 28) {
     const left = idx % 2 === 0, pw = 560, ho = { headRule: () => true, headScale: 1, lineGap: o.lineGap, paraGap: .3 };
     let hs = 76, hl; for (; hs >= 40; hs -= 2) { hl = layout([paras[0]], hs, pw - 130, ho); if (blockH(hl, ho) <= H - 380) break; }
@@ -473,25 +473,26 @@ function stripOpts(slide, pt) {
 const VER_RE = /[\s\u3000]*[（(]?(?:CUNP|RCUV|CUV|CNV|CCB|CSB|NIV|ESV|KJV|NLT|新標點和合本|和合本修訂版|和合本|新譯本|當代譯本|現代中文譯本|呂振中譯本)[-－—–]?[^\s）)]{0,6}[）)]?\s*$/i;
 const REFLINE_RE = /^\s*(?:——|—|–|-)?\s*[（(]?\s*([\u4e00-\u9fff]{1,8})\s*(\d+\s*[:：]\s*\d+(?:\s*[-–~～]\s*\d+)?(?:\s*[,，、]\s*\d+(?:\s*[-–]\s*\d+)?)*)\s*[）)]?\s*$/;
 const _spCache = new WeakMap();
-function stripParas(slide) {
-  const key = JSON.stringify(slide.paras) + '|' + S.dashRef + JSON.stringify(S.sAuto), hit = _spCache.get(slide); if (hit && hit.key === key) return hit.v;
+// live＝現場版也用同一套整理（出處接句尾、不顯示版本代號），但不抽大數字、不拿掉「」
+function stripParas(slide, live) {
+  const key = JSON.stringify(slide.paras) + '|' + S.dashRef + JSON.stringify(S.sAuto), slot = live ? 'l' : 's', hit = (_spCache.get(slide) || {})[slot]; if (hit && hit.key === key) return hit.v;
   const src = slide.paras.map((p, i) => { const q = p.map(r => Object.assign({}, r)); q._i = i; return q; }), out = []; let num = '', merged = false;
   const cutStart = (p, n) => { const ps = p[0] && p[0].ps; while (n > 0 && p.length) { const k = Math.min(n, p[0].t.length); p[0].t = p[0].t.slice(k); n -= k; if (!p[0].t && p.length > 1) p.shift(); } if (ps && p[0]) p[0].ps = ps; };
   const cutEnd = (p, n) => { while (n > 0 && p.length) { const r = p[p.length - 1], k = Math.min(n, r.t.length); r.t = r.t.slice(0, r.t.length - k); n -= k; if (!r.t && p.length > 1) p.pop(); } };
-  if (src.length > 1 && S.sAuto.num) { const m = /^\s*(\d{1,2})\s*[.．、:：)）]\s*(?=\S)/.exec(plain(src[0])); if (m && plain(src[0]).length - m[0].length >= 2) { num = m[1]; cutStart(src[0], m[0].length); } }
+  if (!live && src.length > 1 && S.sAuto.num) { const m = /^\s*(\d{1,2})\s*[.．、:：)）]\s*(?=\S)/.exec(plain(src[0])); if (m && plain(src[0]).length - m[0].length >= 2) { num = m[1]; cutStart(src[0], m[0].length); } }
   src.forEach((p, i) => {
-    const full = plain(p), vm = S.sAuto.ref && VER_RE.exec(full); if (vm && vm.index > 0) cutEnd(p, full.length - vm.index);
+    const full = plain(p), vm = S.sAuto.ref && S.dashRef !== false && VER_RE.exec(full); if (vm && vm.index > 0) cutEnd(p, full.length - vm.index);
     const t = plain(p), prev = out[out.length - 1], rm = S.sAuto.ref && S.dashRef !== false && prev && t.length <= 30 && REFLINE_RE.exec(t);
     const pt = prev ? plain(prev) : '', prevIsBody = prev && !(prev[0] && prev[0].ps === 'h') && (out.length > 1 || pt.length > 14) && !REFLINE_RE.test(pt);
     if (rm && prevIsBody) {
-      if (/^\s*「/.test(pt) && /」\s*$/.test(pt) && (pt.match(/「/g) || []).length === 1 && !src.some(q => q !== prev && /「/.test(plain(q)))) { cutStart(prev, pt.indexOf('「') + 1); cutEnd(prev, plain(prev).length - plain(prev).lastIndexOf('」')); }
+      if (!live && /^\s*「/.test(pt) && /」\s*$/.test(pt) && (pt.match(/「/g) || []).length === 1 && !src.some(q => q !== prev && /「/.test(plain(q)))) { cutStart(prev, pt.indexOf('「') + 1); cutEnd(prev, plain(prev).length - plain(prev).lastIndexOf('」')); }
       prev.push({ t: ' —— ' + rm[1] + rm[2].replace(/\s+/g, ''), red: false }); merged = true; return;
     }
     if (t.trim()) out.push(p);
   });
   const bodyLen = out.slice(1).reduce((a, p) => a + plain(p).length, 0);
   const v = { paras: out, num, point: out.length > 1 && (!!num || merged || bodyLen > 18) };
-  _spCache.set(slide, { key, v }); return v;
+  _spCache.set(slide, Object.assign({}, _spCache.get(slide), { [slot]: { key, v } })); return v;
 }
 // 大數字佔的欄寬：數字本身＋跟文字之間的空隙
 const numSizeOf = hs => Math.round(hs * 2.3);
@@ -1455,7 +1456,7 @@ function drawTplSlide(cv, slide, idx, noText, dry) {
     for (const o of occ) { if (hits(r, o)) continue; const cand = { x: r.x, y: r.y, w, h }; if (!hits(cand, o)) continue; if (o.x >= r.x + r.w - 20) w = Math.min(w, o.x - 40 - r.x); else if (o.y >= r.y + r.h - 20) h = Math.min(h, o.y - 30 - r.y); }
     return { x: r.x, y: r.y, w: Math.max(r.w, w), h: Math.max(r.h, h), align: r.align, anchor: r.anchor, lum: r.lum };
   };
-  const paras = slide.paras, ps = paras.map(ptext);
+  const paras = S.dashRef !== false ? stripParas(slide, true).paras : slide.paras, ps = paras.map(ptext);
   let nh = 0; while (nh < paras.length - 1 && paras[nh][0] && paras[nh][0].ps === 'h') nh++;
   const hp = paras.slice(0, Math.max(1, nh)), rest = paras.slice(Math.max(1, nh));
   const headBody = paras.length > 1 && (nh > 0 || ps[0].trim().length <= 30);
