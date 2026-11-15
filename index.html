@@ -97,6 +97,12 @@ details.more summary:hover{color:var(--ink)}
 #paraBox{position:absolute;border:1.5px dashed var(--accent);border-radius:4px;pointer-events:none}
 #paraBar{position:absolute;display:flex;gap:4px;align-items:center;padding:4px;background:var(--raise2,#22242a);border:1px solid var(--line2);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.45);z-index:6;transform:translateY(-100%);white-space:nowrap}
 #paraBar.below{transform:none}
+#tbText{width:180px;height:28px;padding:0 8px;border:1px solid var(--line2);border-radius:6px;background:var(--bg);color:var(--ink);font-size:13px}
+#tbText[hidden],#tbDel[hidden],#paraReset[hidden]{display:none}
+.picbtns{position:absolute;left:0;top:100%;margin-top:8px;display:none;gap:6px;white-space:nowrap}
+.picsel.pinned .picbtns{display:flex}
+.picbtns button{position:static!important;display:block!important;margin:0!important}
+.picall[hidden]{display:none!important}
 #paraBar[hidden],#paraBox[hidden]{display:none}
 #paraBar output{min-width:44px;text-align:center;font-size:12px;color:var(--ink2);font-variant-numeric:tabular-nums}
 .pickpill{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
@@ -464,7 +470,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 .picsel i[data-h=ne]{right:-7px;top:-7px;cursor:nesw-resize}
 .picsel i[data-h=sw]{left:-7px;bottom:-7px;cursor:nesw-resize}
 .picsel i[data-h=se]{right:-7px;bottom:-7px;cursor:nwse-resize}
-.picdel{position:absolute;right:0;top:-38px;height:28px;padding:0 10px;border:1px solid var(--line2);border-radius:8px;background:var(--panel);color:var(--ink);font-size:12px;display:none}
+.picdel,.picall{position:absolute;right:0;top:-38px;height:28px;padding:0 10px;border:1px solid var(--line2);border-radius:8px;background:var(--panel);color:var(--ink);font-size:12px;display:none}
 .picsel.pinned .picdel{display:block}
 @media (pointer:coarse){.picsel i{width:20px;height:20px}.picsel i[data-h=nw],.picsel i[data-h=sw]{left:-11px}.picsel i[data-h=ne],.picsel i[data-h=se]{right:-11px}.picsel i[data-h=nw],.picsel i[data-h=ne]{top:-11px}.picsel i[data-h=sw],.picsel i[data-h=se]{bottom:-11px}}
 /* 動態：只用在說明「發生了什麼」的地方 */
@@ -562,7 +568,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
         <div class="cap"><span class="onair"><i class="tally" id="capTally"></i><b id="capName">現場版</b><span id="capPage"></span></span><span id="viewHint"></span><span id="capLive"></span><div class="svAlign capAlign" id="capAlign" hidden role="group" aria-label="字條對齊"><button class="pill" data-a="auto" title="標題靠左、內文往右退">錯開</button><button class="pill" data-a="left">靠左</button><button class="pill" data-a="center">置中</button></div><div class="pages" id="pages"></div></div>
         <div class="frame" id="frameLive"><canvas id="cvLive" width="1920" height="1080"></canvas>
           <div id="paraBox" hidden></div>
-          <div id="paraBar" hidden role="toolbar" aria-label="這一段文字"><button class="pill" id="paraMinus" title="這一段縮小" aria-label="這一段縮小">A−</button><output id="paraK">100%</output><button class="pill" id="paraPlus" title="這一段放大" aria-label="這一段放大">A＋</button><button class="pill" id="paraReset" title="這一段的位置和大小還原">還原</button></div>
+          <div id="paraBar" hidden role="toolbar" aria-label="這一段文字"><input id="tbText" hidden aria-label="文字框的內容" placeholder="輸入文字"><button class="pill" id="paraMinus" title="縮小" aria-label="縮小">A−</button><output id="paraK">100%</output><button class="pill" id="paraPlus" title="這一段放大" aria-label="這一段放大">A＋</button><button class="pill" id="paraReset" title="這一段的位置和大小還原">還原</button><button class="pill" id="tbDel" hidden>刪除</button></div>
         </div>
         <div class="frame video" id="frameStrip" hidden><canvas id="cvStrip" width="1920" height="1080"></canvas></div>
       </div>
@@ -592,6 +598,15 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
           </div>
           <div id="ed" class="ed" contenteditable="true" spellcheck="false"></div>
           <div class="hint">選取文字再點顏色就能改色。粗體大字的段落是標題；點一段再按「標題」或「內文」可以切換。標題裡按 Enter，下一行也是標題。</div>
+        </div>
+        <div class="sec">
+          <h3>加東西到這一頁</h3>
+          <div class="row">
+            <button class="btn small" id="btnAddTB">加文字框</button>
+            <button class="btn small" id="btnAddPic">加圖片／logo</button>
+            <input type="file" id="addPicFile" accept="image/*" hidden>
+          </div>
+          <div class="hint">會加到你正在看的版本（現場版或線上版）。加好後直接在畫面上拖動、縮放。</div>
         </div>
         <div class="sec">
           <h3>頁面</h3>
@@ -790,7 +805,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=85"></script>
+<script src="app.js?v=88"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));

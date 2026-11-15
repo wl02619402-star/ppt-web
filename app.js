@@ -17,6 +17,24 @@ function ppSet(slide, view, gid, patch) {
 function ppOpts(slide, view) { const m = slide && slide.pp && slide.pp[view]; return { pk: m ? g => (m[g] && m[g].k) || 1 : null, off: m && view === 'l' ? g => m[g] : null }; }
 // 清掉某一版的逐段調整；posOnly＝只清位移、保留大小
 function ppClear(slide, view, posOnly) { const m = slide.pp && slide.pp[view]; if (!m) return; if (!posOnly) { delete slide.pp[view]; return; } Object.keys(m).forEach(g => ppSet(slide, view, g, { x: 0, y: 0 })); }
+// 使用者自己加的圖片（logo、裝飾）：不加陰影、文字不會為它讓位。現場版放 slide.pics（free:true），線上版放 slide.spics
+function drawFreePics(c, list) {
+  (list || []).forEach(p => { const e = imgCache.get(p.src); if (!e) return; c.drawImage(e.im, p.x * W, p.y * H, p.w * W, p.h * H); });
+}
+// 使用者自己加的文字框：slide.tb = [{ id, v:'l'|'s', t, x, y, s }]，座標是畫面上的像素
+function drawTB(c, slide, view, T, noText, card) {
+  const out = [];
+  (slide.tb || []).forEach(b => {
+    if (b.v !== view) return;
+    const f = fnt(500, b.s, false, false, false), w = tw(f, b.t || ' '), h = b.s * 1.3;
+    // 字條外面是直播畫面：放在字條外的文字框用白字加陰影，才看得到
+    const cx = b.x + w / 2, cy = b.y + h / 2, outside = card && !(cx >= card.x && cx <= card.x + card.w && cy >= card.y && cy <= card.y + card.h), col = b.c || (outside ? '#FFFFFF' : T.text);
+    if (!noText) { c.save(); c.font = f; c.textBaseline = 'middle'; c.fillStyle = col; if (outside) { c.shadowColor = 'rgba(0,0,0,.65)'; c.shadowBlur = 10; c.shadowOffsetY = 2; } c.fillText(b.t, b.x, b.y + h / 2); c.restore(); }
+    out.push({ tb: b.id, x: b.x, y: b.y, w, h, t: b.t, s: b.s, color: col });
+  });
+  return out;
+}
+function addTBText(sl, boxes) { const f = faceOf(false, false); boxes.forEach(b => sl.addText(b.t, { x: inch(b.x), y: inch(b.y), w: inch(b.w * 1.15 + 20), h: inch(b.h), margin: 0, valign: 'middle', align: 'left', fontSize: ptOf(b.s), bold: f.bold, fontFace: f.face, color: hexNo(b.color), wrap: false })); }
 function tagParas(slide) { slide.paras.forEach((p, i) => { p._i = i; }); }
 const measureCtx = mk(10, 10).getContext('2d');
 const FONT = '"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif';
@@ -316,7 +334,7 @@ function safeOf(T, v, idx = 0) {
   return { t: Math.max(t, e.t || 0), b: Math.max(b, e.b || 0), l, r };
 }
 function picSafe(slide, sf) {
-  const ps = slide.pics; if (!ps || !ps.length) return sf;
+  const ps = (slide.pics || []).filter(p => !p.free); if (!ps.length) return sf;
   const minX = Math.min(...ps.map(p => p.x)) * W, maxX = Math.max(...ps.map(p => p.x + p.w)) * W; if (maxX - minX > .7 * W) return sf;
   const o = Object.assign({}, sf);
   if ((minX + maxX) / 2 > W / 2) o.r = Math.max(sf.r, 1560 - (minX - 220)); else o.l = Math.max(sf.l, maxX + 60 - 160);
@@ -386,7 +404,7 @@ function drawLive(cv, slide, idx, noText) {
   c.drawImage(getBg(v, idx, slide), 0, 0);
   (slide.pics || []).forEach(p => {
     const e = imgCache.get(p.src); if (!e) return; const im = e.im, cr = p.crop || { l: 0, t: 0, r: 0, b: 0 };
-    c.save(); c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = 26; c.shadowOffsetY = 8;
+    c.save(); if (!p.free) { c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = 26; c.shadowOffsetY = 8; }
     c.drawImage(im, im.width * cr.l, im.height * cr.t, im.width * (1 - cr.l - cr.r), im.height * (1 - cr.t - cr.b), p.x * W, p.y * H, p.w * W, p.h * H); c.restore();
   });
   const o = liveOpts(isTitle, v, slide), fs = slide.fs || 1, L = liveCfg(slide, isTitle, v), sf = picSafe(slide, safeOf(T, v, idx));
@@ -403,7 +421,7 @@ function drawLive(cv, slide, idx, noText) {
     const m = ptext(paras[0]).match(NUM_RE);
     if (m) { numeral = /[１-９]/.test(m[1]) ? String(m[1].charCodeAt(0) - 0xFF10) : m[1]; paras = paras.map((p, i) => i ? p : stripLead(p, m[0].length)); }
   }
-  const hasPic = !!(slide.pics && slide.pics.length), shift = numeral ? 150 : 0, maxW = (L.userW ? (hasPic ? Math.min(L.w, 1560 - sf.r - sf.l) : L.w) : L.w - sf.r - sf.l) - shift, maxH = H - sf.t - sf.b;
+  const hasPic = !!(slide.pics && slide.pics.some(p => !p.free)), shift = numeral ? 150 : 0, maxW = (L.userW ? (hasPic ? Math.min(L.w, 1560 - sf.r - sf.l) : L.w) : L.w - sf.r - sf.l) - shift, maxH = H - sf.t - sf.b;
   const base = isTitle ? 56 : isSpark ? 100 : deckSize() * S.deckScale;
   let size = Math.round(base * fs), lines;
   for (; size >= 30; size -= 2) { lines = layout(paras, size, maxW, o); if (blockH(lines, o) <= maxH) break; }
@@ -435,7 +453,8 @@ function drawLive(cv, slide, idx, noText) {
     drawLines(c, lines, x, y, o, T, align, maxW);
     if (numeral) { c.font = `italic 700 ${numSize}px ${SERIF}`; c.fillStyle = T.accent; c.textBaseline = 'middle'; c.fillText(numeral, numX, numY); }
   }
-  return { shrunk: size < Math.round(base * fs) && size < 48, capped: size < Math.round(base * fs), geo: { lines, x, y, o, align, maxW, T, numeral, numX, numY, numSize, extra: panel ? [panel] : [], rec: o.rec } };
+  const tb = drawTB(c, slide, 'l', T, noText);
+  return { shrunk: size < Math.round(base * fs) && size < 48, capped: size < Math.round(base * fs), geo: { lines, x, y, o, align, maxW, T, numeral, numX, numY, numSize, extra: panel ? [panel] : [], rec: o.rec, tb } };
 }
 
 // ---------- 長條版 ----------
@@ -571,7 +590,7 @@ function drawStrip(cv, slide, page, noText) {
   c.clearRect(0, 0, W, H);
   const sp = stripPages(slide), { pages, o, split } = sp; let cardW = sp.cardW; drawStrip.tall = !!sp.tall;
   drawStrip.capped = !!(pages[0] && pages[0][0] && pages[0][0].size < Math.round(STRIP.base * (o.baseK || 1) * .8 * (S.stripScale || 1) * (slide.sfs || 1) * (pages[0][0].head ? o.headScale : 1)) - 1);
-  if (!pages.length) { drawStrip.geo = { lines: [], x: 0, y: 0, o, w: 0, T }; return 0; }
+  if (!pages.length) { drawStrip.pos = []; drawFreePics(c, slide.spics); drawStrip.tb = drawTB(c, slide, 's', T, noText); drawStrip.geo = { lines: [], x: 0, y: 0, o, w: 0, T }; return 0; }
   page = Math.min(page, pages.length - 1);
   const lines = pages[page], lastL = lines[lines.length - 1];
   // 上下留白看起來一樣：扣掉第一行上方、最後一行下方的行距空白
@@ -597,6 +616,7 @@ function drawStrip(cv, slide, page, noText) {
   const card = stripCard(T0, cardW, h, v, idx, slide); drawStrip.card = { x: x0, y: y0, w: cardW, h };
   c.save(); c.globalAlpha = S.sLook.a == null ? 1 : S.sLook.a; c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 24; c.shadowOffsetY = 8;
   c.drawImage(card, x0, y0, cardW, h); c.restore();
+  drawFreePics(c, slide.spics); drawStrip.tb = drawTB(c, slide, 's', T, noText, drawStrip.card);
   if (split) {
     const lx = x0 + STRIP.padL, ty = y0 + STRIP.padT, bx = lx + split.leftW + split.gap, extra = [{ lines: split.head, x: lx, y: ty, o: split.ho, w: split.leftW, T }];
     if (split.ch) { const cy = ty + split.hh + 20; calloutBox(c, T, lx, cy, split.leftW, split.ch); extra.push({ lines: split.calls, x: lx + 36, y: cy + 14, o: split.co, w: split.leftW - 48, T }); }
@@ -744,7 +764,7 @@ function renderThumb(i) {
   const c = cv.getContext('2d');
   if (S.view === 'strip') {
     // 線上版：縮圖顯示這一頁的字條（放大到字條附近，才看得清楚排得好不好）
-    const keep = { geo: drawStrip.geo, pos: drawStrip.pos, card: drawStrip.card, capped: drawStrip.capped, tall: drawStrip.tall };
+    const keep = { geo: drawStrip.geo, pos: drawStrip.pos, tb: drawStrip.tb, card: drawStrip.card, capped: drawStrip.capped, tall: drawStrip.tall };
     const sc = mk(W, H); drawStrip(sc, S.slides[i], 0); const k = drawStrip.card; Object.assign(drawStrip, keep);
     c.fillStyle = '#17181c'; c.fillRect(0, 0, cv.width, cv.height);
     if (k) { const vw = Math.max(k.w + 120, (k.h + 80) * 16 / 9), vh = vw * 9 / 16, vx = k.x + k.w / 2 - vw / 2, vy = k.y + k.h / 2 - vh / 2; c.drawImage(sc, vx, vy, vw, vh, 0, 0, cv.width, cv.height); }
@@ -980,7 +1000,7 @@ function redrawSoon() { clearTimeout(redrawT); redrawT = setTimeout(renderMain, 
 async function start(slides, name, live) {
   S.slides = slides; S.live = live || {}; S.sel = 0; S.page = 0; S.fileName = name.replace(/\.(pptx|txt)$/i, '');
   $('drop').hidden = true; $('editor').hidden = false; $('viewHint').textContent = VIEW_HINT[S.view]; $('sideEmpty').hidden = true; $('sideBody').hidden = false; document.body.classList.remove('empty');
-  await Promise.all(slides.flatMap(x => [].concat(x.bg && x.bg.t === 'img' ? [x.bg.src] : [], (x.pics || []).map(p => p.src))).map(loadBgImg));
+  await Promise.all(slides.flatMap(x => [].concat(x.bg && x.bg.t === 'img' ? [x.bg.src] : [], (x.pics || []).concat(x.spics || []).map(p => p.src))).map(loadBgImg));
   await ensureFonts(); bgCache.clear(); buildCats(); buildThemes(); buildList(); select(0); save(); histReset();
   setTimeout(() => { const w = S.slides.map((s, i) => s._warn ? i + 1 : 0).filter(Boolean); if (w.length) toast(`排好了。第 ${w.slice(0, 5).join('、')}${w.length > 5 ? ' 等' : ''} 頁字比較多，縮圖上有標「看一下」`); }, 1500);
 }
@@ -1091,7 +1111,7 @@ async function exportEditable() {
     prog(`正在輸出可編輯版 第 ${i + 1} / ${total} 頁…`, i / total); await sleep(0);
     const sd = S.slides[i], r = drawLive(cv, sd, i, true), g = r.geo;
     const sl = pL.addSlide(); sl.addImage({ data: await dataOf(await blobOf(cv, 'image/jpeg', .93)), x: 0, y: 0, w: 13.333, h: 7.5 });
-    addTextGroups(sl, g.lines, g.y, g.o, g.x, g.maxW, g.align, g.T);
+    addTextGroups(sl, g.lines, g.y, g.o, g.x, g.maxW, g.align, g.T); addTBText(sl, g.tb || []);
     (g.extra || []).forEach(e => addTextGroups(sl, e.lines, e.y, e.o, e.x, e.w, 'left', e.T));
     if (g.numeral) { const hh = g.numSize * 1.3; sl.addText(g.numeral, { x: inch(g.numX - 6), y: inch(g.numY - hh / 2), w: 1.1, h: inch(hh), margin: 0, valign: 'middle', align: 'left', fontSize: ptOf(g.numSize), italic: true, bold: true, fontFace: 'Noto Serif TC', color: hexNo(g.T.accent) }); }
     const n = stripPages(sd).pages.length;
@@ -1100,6 +1120,7 @@ async function exportEditable() {
       const ss = pS.addSlide(); ss.addImage({ data: await dataOf(await blobOf(cv, 'image/png')), x: 0, y: 0, w: 13.333, h: 7.5 });
       addTextGroups(ss, sg.lines, sg.y, sg.o, sg.x, sg.w, sg.align || 'left', sg.T);
       (sg.extra || []).forEach(e => addTextGroups(ss, e.lines, e.y, e.o, e.x, e.w, 'left', e.T));
+      addTBText(ss, drawStrip.tb || []);
       if (sg.num) { const hh = sg.num.size * 1.3, f = faceOf(true, false); ss.addText(sg.num.t, { x: inch(sg.num.x), y: inch(sg.num.y - hh / 2), w: inch(sg.num.size * 1.5), h: inch(hh), margin: 0, valign: 'middle', align: 'left', fontSize: ptOf(sg.num.size), bold: true, fontFace: f.face, color: hexNo(sg.num.color) }); }
     }
   }
@@ -1423,7 +1444,7 @@ function drawTplSlide(cv, slide, idx, noText, dry) {
   tagParas(slide); const rec = [], ppo = ppOpts(slide, 'l');
   const c = cv.getContext('2d'), pi = tplPageIdx(idx), pg = S.tpl.pages[pi], L = liveCfg(slide, false, 'plain');
   c.clearRect(0, 0, W, H); c.drawImage(getBg('tpl', idx, slide), 0, 0);
-  (slide.pics || []).forEach(p => { const e = imgCache.get(p.src); if (!e) return; const im = e.im, cr = p.crop || { l: 0, t: 0, r: 0, b: 0 }; c.save(); c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = 26; c.shadowOffsetY = 8; c.drawImage(im, im.width * cr.l, im.height * cr.t, im.width * (1 - cr.l - cr.r), im.height * (1 - cr.t - cr.b), p.x * W, p.y * H, p.w * W, p.h * H); c.restore(); });
+  (slide.pics || []).forEach(p => { const e = imgCache.get(p.src); if (!e) return; const im = e.im, cr = p.crop || { l: 0, t: 0, r: 0, b: 0 }; c.save(); if (!p.free) { c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = 26; c.shadowOffsetY = 8; } c.drawImage(im, im.width * cr.l, im.height * cr.t, im.width * (1 - cr.l - cr.r), im.height * (1 - cr.t - cr.b), p.x * W, p.y * H, p.w * W, p.h * H); c.restore(); });
   const colorFor = r => { const dark = (r ? r.lum : pg.lum) < .5; return { text: dark ? '#FFFFFF' : '#1F1A17', red: dark ? '#FFB3A0' : '#C0392B', accent: pg.accent, dark }; };
   const pad = r => r && { x: r.x + 12 + L.dx, y: r.y + 8 + L.dy, w: Math.max(200, r.w - 24), h: Math.max(80, r.h - 16), align: r.align, anchor: r.anchor, lum: r.lum };
   // 文字放不下時把文字框往右、往下撐大，但不能蓋到模板上的圖片和圖形
@@ -1455,10 +1476,10 @@ function drawTplSlide(cv, slide, idx, noText, dry) {
   else if (idx === 0 && tR) { place(hp, tR, false, 110); if (rest.length) place(rest, bR || grow({ x: tR.x, y: tR.y + tR.h + 20, w: tR.w, h: 200, align: tR.align, anchor: 'top', lum: tR.lum }), false, 60); }
   else place(paras, bR || tR, true, (bR ? 80 : 96), idx !== 0);
   if (!noText) parts.forEach(p => drawLines(c, p.lines, p.x, p.y, p.o, p.T, p.align, p.w));
-  const main = parts[parts.length - 1];
+  const main = parts[parts.length - 1], tb = drawTB(c, slide, 'l', main.T, noText);
   slide._autoAlign = main.align;
   const bp = parts.find(p => p.body);
-  return { bodySize: bp ? bp.size : 0, shrunk: main.size < 44, capped: parts.some(p => p.capped), geo: { rec, lines: main.lines, x: main.x, y: main.y, o: main.o, align: main.align, maxW: main.w, T: main.T, extra: parts.slice(0, -1).map(p => ({ lines: p.lines, x: p.x, y: p.y, o: p.o, w: p.w, T: p.T, align: p.align })) } };
+  return { bodySize: bp ? bp.size : 0, shrunk: main.size < 44, capped: parts.some(p => p.capped), geo: { rec, tb, lines: main.lines, x: main.x, y: main.y, o: main.o, align: main.align, maxW: main.w, T: main.T, extra: parts.slice(0, -1).map(p => ({ lines: p.lines, x: p.x, y: p.y, o: p.o, w: p.w, T: p.T, align: p.align })) } };
 }
 async function loadTplImages() { tplImgs.length = 0; if (!S.tpl) return; await Promise.all(S.tpl.pages.map((p, i) => new Promise(r => { const im = new Image(); im.onload = () => { tplImgs[i] = im; r(); }; im.onerror = r; im.src = p.img; }))); }
 function renderTplUI() {
@@ -1497,25 +1518,30 @@ async function loadSavedTpl() { try { const t = await tplDB.get('tpl'); if (t &&
 
 // ---------- 圖片：直接在畫面上選取，拖曳移動、拉四個角縮放（像 PowerPoint） ----------
 const picSel = document.createElement('div'); picSel.className = 'picsel'; picSel.hidden = true;
-picSel.innerHTML = '<i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i><button class="picdel" type="button">移除圖片</button>';
+picSel.innerHTML = '<i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i><span class="picbtns"><button class="picall" type="button" title="把這張圖放到每一頁的同一個位置">每一頁都放</button><button class="picdel" type="button">移除圖片</button></span>';
 $('frameLive').appendChild(picSel);
 let selPic = -1, picPinned = false;
+const picKey = () => S.view === 'strip' ? 'spics' : 'pics', curPics = () => (S.slides[S.sel] || {})[picKey()] || [], curCv = () => $(S.view === 'strip' ? 'cvStrip' : 'cvLive');
 function placePicSel(i) {
-  const sl = S.slides[S.sel], p = sl && sl.pics && sl.pics[i];
-  if (!p || S.view !== 'live') { picSel.hidden = true; selPic = -1; picPinned = false; return; }
+  const p = curPics()[i], fr = $(S.view === 'strip' ? 'frameStrip' : 'frameLive');
+  if (!p) { picSel.hidden = true; selPic = -1; picPinned = false; return; }
+  if (picSel.parentElement !== fr) fr.appendChild(picSel);
+  picSel.querySelector('.picall').hidden = !p.free;
   selPic = i; Object.assign(picSel.style, { left: p.x * 100 + '%', top: p.y * 100 + '%', width: p.w * 100 + '%', height: p.h * 100 + '%' }); picSel.hidden = false;
 }
-function picAt(cx, cy) { const ps = (S.slides[S.sel] || {}).pics || []; for (let i = ps.length - 1; i >= 0; i--) { const p = ps[i]; if (cx >= p.x * W && cx <= (p.x + p.w) * W && cy >= p.y * H && cy <= (p.y + p.h) * H) return i; } return -1; }
-const cvL = $('cvLive'), toCvL = e => { const r = cvL.getBoundingClientRect(), k = W / r.width; return [(e.clientX - r.left) * k, (e.clientY - r.top) * k]; };
-cvL.addEventListener('pointermove', e => { if (picPinned || e.buttons) return; const i = picAt(...toCvL(e)); if (i >= 0) placePicSel(i); });
-cvL.addEventListener('pointerdown', () => { if (picPinned) { picPinned = false; picSel.hidden = true; picSel.classList.remove('pinned'); } });
+function picAt(cx, cy) { const ps = curPics(); for (let i = ps.length - 1; i >= 0; i--) { const p = ps[i]; if (cx >= p.x * W && cx <= (p.x + p.w) * W && cy >= p.y * H && cy <= (p.y + p.h) * H) return i; } return -1; }
+const cvL = $('cvLive'), toCvL = e => { const r = curCv().getBoundingClientRect(), k = W / r.width; return [(e.clientX - r.left) * k, (e.clientY - r.top) * k]; };
+[cvL, $('cvStrip')].forEach(cvx => {
+  cvx.addEventListener('pointermove', e => { if (picPinned || e.buttons) return; const i = picAt(...toCvL(e)); if (i >= 0) placePicSel(i); });
+  cvx.addEventListener('pointerdown', () => { if (picPinned) { picPinned = false; picSel.hidden = true; picSel.classList.remove('pinned'); } });
+});
 picSel.addEventListener('pointerleave', () => { if (!picPinned) picSel.hidden = true; });
 picSel.addEventListener('pointerdown', e => {
-  if (e.target.classList.contains('picdel')) return;
+  if (e.target.tagName === 'BUTTON') return;
   e.preventDefault(); e.stopPropagation();
-  const h = e.target.dataset.h || 'move', sl = S.slides[S.sel], p = sl && sl.pics && sl.pics[selPic]; if (!p) return;
+  const h = e.target.dataset.h || 'move', p = curPics()[selPic]; if (!p) return;
   picPinned = true; picSel.classList.add('pinned');
-  const o = Object.assign({}, p), k = W / cvL.getBoundingClientRect().width, sx = e.clientX, sy = e.clientY;
+  const o = Object.assign({}, p), k = W / curCv().getBoundingClientRect().width, sx = e.clientX, sy = e.clientY;
   try { picSel.setPointerCapture(e.pointerId); } catch (err) { }
   const mv = ev => {
     const dx = (ev.clientX - sx) * k / W, dy = (ev.clientY - sy) * k / H;
@@ -1530,11 +1556,34 @@ picSel.addEventListener('pointerdown', e => {
   picSel.addEventListener('pointermove', mv); picSel.addEventListener('pointerup', up);
 });
 picSel.querySelector('.picdel').onclick = () => {
-  const sl = S.slides[S.sel]; if (!sl || !sl.pics || selPic < 0) return;
-  sl.pics.splice(selPic, 1); if (!sl.pics.length) delete sl.pics; picPinned = false; picSel.hidden = true;
+  const sl = S.slides[S.sel], key = picKey(); if (!sl || !sl[key] || selPic < 0) return;
+  sl[key].splice(selPic, 1); if (!sl[key].length) delete sl[key]; picPinned = false; picSel.hidden = true;
   _deck.sig = ''; renderMain(); renderThumb(S.sel); save(); toast('已移除這張圖片');
 };
 
+picSel.querySelector('.picall').onclick = () => {
+  const key = picKey(), p = curPics()[selPic]; if (!p) return; let n = 0;
+  S.slides.forEach((x, i) => { if (i === S.sel) return; const list = x[key] = x[key] || []; if (!list.some(q => q.src === p.src && q.free)) { list.push(Object.assign({}, p)); n++; } else { const q = list.find(z => z.src === p.src && z.free); Object.assign(q, { x: p.x, y: p.y, w: p.w, h: p.h }); } });
+  bgCache.clear(); buildList(); renderMain(); save(); toast(n ? `已經放到其他 ${n} 頁` : '其他頁的位置和大小也更新了');
+};
+// 加圖片／logo、加文字框：加到正在看的那個版本
+async function addPicFile(f) {
+  const sl = S.slides[S.sel]; if (!sl || !f) return;
+  const raw = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(f); });
+  const src = await shrinkImg(raw, f.type), e = await loadBgImg(src); if (!e) { toast('讀不到這張圖片'); return; }
+  // 預設放在右上角（不蓋到文字），大小約畫面寬的 16%；太高的圖再縮小
+  let w = .16, h = w * (e.im.height / e.im.width) * 16 / 9; if (h > .3) { w *= .3 / h; h = .3; }
+  const key = picKey();
+  (sl[key] = sl[key] || []).push({ src, x: .94 - w, y: S.view === 'strip' ? .45 : .06, w, h, free: true });
+  _deck.sig = ''; renderMain(); renderThumb(S.sel); save(); placePicSel(sl[key].length - 1); picPinned = true; picSel.classList.add('pinned');
+  toast('圖片加好了：拖曳移動，拉四個角縮放');
+}
+function addTextBox() {
+  const sl = S.slides[S.sel]; if (!sl) return; const v = S.view === 'strip' ? 's' : 'l', id = Date.now().toString(36);
+  const card = drawStrip.card, s = v === 's' ? 40 : 56;
+  (sl.tb = sl.tb || []).push({ id, v, t: '文字', s, x: v === 's' && card ? card.x + 40 : W / 2 - s, y: v === 's' && card ? Math.max(20, card.y - s * 1.3 - 24) : H * .78 });
+  renderMain(); save(); selPara(v, null, id); setTimeout(() => { const i = $('tbText'); i.focus(); i.select(); }, 60);
+}
 // ---------- 復原／重做：每次修改（停下來 0.3 秒後）存一個版本，最多 60 步 ----------
 const HIST = { undo: [], redo: [], cur: null, sig: '', busy: false };
 function stateSnap() {
@@ -1632,8 +1681,12 @@ function pickStripEdge(cx, cy) {
 function paraBoxes(view) {
   return view === 'l' ? ((S.liveGeo && S.liveGeo.rec) || []) : (drawStrip.pos || []).map(p => ({ gid: p.l.gid, x: p.x, y: p.y, w: p.l.w, h: p.l.h, lx: p.lx, tw0: p.tw0 }));
 }
+function tbBoxes(view) { return (view === 'l' ? (S.liveGeo && S.liveGeo.tb) : drawStrip.tb) || []; }
 function pickPara(view, cx, cy) {
   const sl = S.slides[S.sel]; if (!sl || S.view !== (view === 'l' ? 'live' : 'strip')) return null;
+  const tbx = tbBoxes(view).find(q => cy >= q.y - 6 && cy <= q.y + q.h + 6 && cx >= q.x - 16 && cx <= q.x + q.w + 16);
+  if (tbx) { const b0 = sl.tb.find(z => z.id === tbx.tb), o0 = { x: b0.x, y: b0.y };
+    return { cursor: 'move', title: '拖曳移動這個文字框；點一下可以改字、調大小', move(dx, dy) { b0.x = Math.round(o0.x + dx); b0.y = Math.round(o0.y + dy); redrawSoon(); }, click() { selPara(view, null, tbx.tb); } }; }
   const boxes = paraBoxes(view), b = boxes.find(q => cy >= q.y && cy <= q.y + q.h && cx >= q.x - 24 && cx <= q.x + q.w + 24); if (!b) return null;
   const gid = b.gid, d0 = Object.assign({ x: 0, y: 0 }, ppOf(sl, view, gid)), targets = [];
   if (view === 's') { const card = drawStrip.card; targets.push(b.lx, b.lx + b.tw0 - b.w, card.x + (card.w - b.w) / 2); } else targets.push((W - b.w) / 2);
@@ -1647,21 +1700,24 @@ function pickPara(view, cx, cy) {
     click() { selPara(view, gid); } };
 }
 let paraSel = null;
-function selPara(view, gid) { paraSel = view ? { view, gid } : null; syncParaBar(); }
+function selPara(view, gid, tb) { paraSel = view ? { view, gid, tb } : null; syncParaBar(); }
 function syncParaBar() {
   const bar = $('paraBar'), box = $('paraBox'); if (!bar) return;
-  const sl = S.slides[S.sel], v = S.view === 'live' ? 'l' : 's', bs = paraSel && sl && paraSel.view === v ? paraBoxes(v).filter(q => q.gid === paraSel.gid) : [];
+  const sl = S.slides[S.sel], v = S.view === 'live' ? 'l' : 's', isTB = !!(paraSel && paraSel.tb), bs = paraSel && sl && paraSel.view === v ? (isTB ? tbBoxes(v).filter(q => q.tb === paraSel.tb) : paraBoxes(v).filter(q => q.gid === paraSel.gid)) : [];
   if (!bs.length) { bar.hidden = box.hidden = true; return; }
   const x0 = Math.min(...bs.map(q => q.x)) - 14, y0 = Math.min(...bs.map(q => q.y)) - 6, x1 = Math.max(...bs.map(q => q.x + q.w)) + 14, y1 = Math.max(...bs.map(q => q.y + q.h)) + 6;
   const frame = $(v === 'l' ? 'frameLive' : 'frameStrip'); if (box.parentElement !== frame) { frame.appendChild(box); frame.appendChild(bar); }
   Object.assign(box.style, { left: x0 / W * 100 + '%', top: y0 / H * 100 + '%', width: (x1 - x0) / W * 100 + '%', height: (y1 - y0) / H * 100 + '%' });
   const below = y0 < 170; bar.classList.toggle('below', below);
   Object.assign(bar.style, { left: Math.max(1, Math.min(70, x0 / W * 100)) + '%', top: (below ? y1 + 10 : y0 - 10) / H * 100 + '%' });
-  const d = ppOf(sl, v, paraSel.gid) || {}; $('paraK').textContent = Math.round((d.k || 1) * 100) + '%';
+  const d = ppOf(sl, v, paraSel.gid) || {}, tbo = isTB && sl.tb.find(z => z.id === paraSel.tb);
+  $('paraK').textContent = isTB ? tbo.s : Math.round((d.k || 1) * 100) + '%';
+  $('tbText').hidden = $('tbDel').hidden = !isTB; $('paraReset').hidden = isTB; if (isTB && document.activeElement !== $('tbText')) $('tbText').value = tbo.t;
   bar.hidden = box.hidden = false;
 }
 function paraScale(f) {
   const sl = S.slides[S.sel]; if (!paraSel || !sl) return;
+  if (paraSel.tb) { const b = (sl.tb || []).find(z => z.id === paraSel.tb); if (b && f) b.s = Math.max(16, Math.min(300, Math.round(b.s * f))); redrawSoon(); return; }
   const d = ppOf(sl, paraSel.view, paraSel.gid) || {};
   if (f === 0) ppSet(sl, paraSel.view, paraSel.gid, null); else ppSet(sl, paraSel.view, paraSel.gid, { k: Math.max(.4, Math.min(3, +((d.k || 1) * f).toFixed(3))) });
   _deck.sig = ''; redrawSoon();
@@ -1773,5 +1829,9 @@ function syncStripLook() {
   $('saRef').onchange = () => { S.sAuto.ref = $('saRef').checked; go(); };
   $('paraMinus').onclick = () => paraScale(1 / 1.08); $('paraPlus').onclick = () => paraScale(1.08); $('paraReset').onclick = () => paraScale(0);
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && paraSel) selPara(null); });
+  $('tbText').oninput = () => { const sl = S.slides[S.sel], b = paraSel && sl && (sl.tb || []).find(z => z.id === paraSel.tb); if (b) { b.t = $('tbText').value || ' '; redrawSoon(); } };
+  $('tbDel').onclick = () => { const sl = S.slides[S.sel]; if (!paraSel || !sl || !sl.tb) return; sl.tb = sl.tb.filter(z => z.id !== paraSel.tb); if (!sl.tb.length) delete sl.tb; selPara(null); redrawSoon(); };
+  $('btnAddTB').onclick = addTextBox; $('btnAddPic').onclick = () => $('addPicFile').click();
+  $('addPicFile').onchange = e => { const f = e.target.files[0]; e.target.value = ''; addPicFile(f).catch(er => { console.error(er); toast('讀不到這張圖片'); }); };
   syncStripLook();
 })();
