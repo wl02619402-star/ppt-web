@@ -730,7 +730,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
               <button class="pill" data-a="center">置中</button>
             </div>
             <div class="capnote" id="svCap" hidden></div>
-            <div class="hint">要移動字條，直接在畫面上拖曳；拖字條左右兩端可以調長度。字條的位置每一頁共用。</div>
+            <div class="hint">按住某一行文字左右拖，可以自己排位置（會自動對齊其他行）。拖字條空白處可以移動整條，拖左右兩端可以調長度。</div>
           </div>
           <button class="btn small" id="stripReset">還原</button>
         </div>
@@ -750,7 +750,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=79"></script>
+<script src="app.js?v=80"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
