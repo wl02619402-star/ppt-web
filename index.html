@@ -725,6 +725,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
             <label class="slider">長度<input type="range" id="stripW" min="30" max="98" step="1"><output id="stripWO"></output></label>
             <div class="row" id="svAlign" style="margin:8px 0 0">
               <span class="hint" style="margin:0 4px 0 0">對齊</span>
+              <button class="pill" data-a="auto" title="標題靠左、內文往右退">錯開</button>
               <button class="pill" data-a="left">靠左</button>
               <button class="pill" data-a="center">置中</button>
             </div>
@@ -749,7 +750,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=73"></script>
+<script src="app.js?v=79"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
