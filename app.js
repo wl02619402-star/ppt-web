@@ -968,7 +968,7 @@ function renderLocalList() {
 const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, deckScale: S.deckScale, anchor: S.anchor, stripFixed: S.stripFixed, stripGap: S.stripGap, stripScale: S.stripScale, sAlign: S.stripAlign, sLook: S.sLook, sAuto: S.sAuto, plain: S.plain || null, shadow: S.shadow, blocks: S.blocks, dashRef: S.dashRef, autoVary: S.autoVary, bgAll: S.bgAll, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
 async function applyStyle(v) {
   if (!v) return;
-  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: false, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: 'middle', stripFixed: !!v.stripFixed, stripGap: v.stripGap || null, stripScale: v.stripScale || 1, stripAlign: v.sAlign || 'auto', sLook: Object.assign({ bg: null, a: 1, r: null, pad: 46 }, v.sLook), sAuto: Object.assign({ num: true, ref: true }, v.sAuto), plain: v.plain || null, shadow: false, blocks: false, dashRef: v.dashRef !== false, autoVary: v.autoVary !== false, bgAll: v.bgAll || null });
+  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: false, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: 'middle', stripFixed: !!v.stripFixed, stripGap: v.stripGap || null, stripScale: v.stripScale || 1, stripAlign: v.sAlign || 'auto', sLook: Object.assign({ bg: null, r: null, pad: 46 }, v.sLook, { a: 1 }), sAuto: Object.assign({ num: true }, v.sAuto, { ref: true }), plain: v.plain || null, shadow: false, blocks: false, dashRef: v.dashRef !== false, autoVary: v.autoVary !== false, bgAll: v.bgAll || null });
   if (v.fonts) S.fonts = Object.assign({}, v.fonts, { scr: 'same' });
   for (const f of (v.localFonts || [])) await registerLocal(f.name, f.fam);
   $('optShadow').checked = !!S.shadow; $('optDash').checked = S.dashRef !== false; $('optBlocks').checked = !!S.blocks;
@@ -1810,23 +1810,20 @@ document.addEventListener('keydown', e => {
 
 // ---------- 逐段工具列、字條樣式 ----------
 function syncStripLook() {
-  if (!$('stA')) return; const k = S.sLook;
+  if (!$('stR')) return; const k = S.sLook;
   document.querySelectorAll('#stBg .pill[data-c]').forEach(b => b.classList.toggle('sel', (k.bg || '') === b.dataset.c));
-  $('stA').value = Math.round((k.a == null ? 1 : k.a) * 100); $('stAO').textContent = $('stA').value + '%';
   $('stR').value = k.r == null ? 10 : k.r; $('stRO').textContent = k.r == null ? '自動' : k.r;
   $('stPad').value = k.pad || 46; $('stPadO').textContent = k.pad || 46;
-  $('saNum').checked = !!S.sAuto.num; $('saRef').checked = !!S.sAuto.ref;
+  $('saNum').checked = !!S.sAuto.num;
 }
 (function wireCustom() {
-  if (!$('stA')) return;
+  if (!$('stR')) return;
   const go = () => { _scCache.clear(); syncStripLook(); redrawSoon(); };
   document.querySelectorAll('#stBg .pill[data-c]').forEach(b => b.onclick = () => { S.sLook.bg = b.dataset.c || null; go(); });
   $('stBgPick').oninput = () => { S.sLook.bg = $('stBgPick').value; go(); };
-  $('stA').oninput = () => { S.sLook.a = $('stA').value / 100; go(); };
   $('stR').oninput = () => { S.sLook.r = +$('stR').value; go(); };
   $('stPad').oninput = () => { S.sLook.pad = +$('stPad').value; go(); };
   $('saNum').onchange = () => { S.sAuto.num = $('saNum').checked; go(); };
-  $('saRef').onchange = () => { S.sAuto.ref = $('saRef').checked; go(); };
   $('paraMinus').onclick = () => paraScale(1 / 1.08); $('paraPlus').onclick = () => paraScale(1.08); $('paraReset').onclick = () => paraScale(0);
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && paraSel) selPara(null); });
   $('tbText').oninput = () => { const sl = S.slides[S.sel], b = paraSel && sl && (sl.tb || []).find(z => z.id === paraSel.tb); if (b) { b.t = $('tbText').value || ' '; redrawSoon(); } };

@@ -600,6 +600,19 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
           <div class="hint">選取文字再點顏色就能改色。粗體大字的段落是標題；點一段再按「標題」或「內文」可以切換。標題裡按 Enter，下一行也是標題。</div>
         </div>
         <div class="sec">
+          <h3>線上版字條樣式</h3>
+          <div class="row" id="stBg" style="margin:0 0 8px">
+            <span class="hint" style="margin:0 4px 0 0">底色</span>
+            <button class="pill" data-c="">跟模板</button>
+            <button class="pill" data-c="#FFFFFF">白</button>
+            <button class="pill" data-c="#111214">黑</button>
+            <label class="pill pickpill" title="自己挑顏色"><input type="color" id="stBgPick" value="#E9E3D6">自選</label>
+          </div>
+          <label class="slider">圓角<input type="range" id="stR" min="0" max="40" step="2"><output id="stRO"></output></label>
+          <label class="slider">上下留白<input type="range" id="stPad" min="20" max="90" step="2"><output id="stPadO"></output></label>
+          <label class="chk"><input type="checkbox" id="saNum"> 「1.」開頭的標題，數字放大放左邊</label>
+        </div>
+        <div class="sec">
           <h3>加東西到這一頁</h3>
           <div class="row">
             <button class="btn small" id="btnAddTB">加文字框</button>
@@ -772,21 +785,6 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
             <div class="capnote" id="svCap" hidden></div>
             <div class="hint">按住某一行文字左右拖，可以自己排位置（會自動對齊其他行）。拖字條空白處可以移動整條，拖左右兩端可以調長度。</div>
           </div>
-          <div class="sec">
-            <h3>字條樣式</h3>
-            <div class="row" id="stBg" style="margin:0 0 8px">
-              <span class="hint" style="margin:0 4px 0 0">底色</span>
-              <button class="pill" data-c="">跟模板</button>
-              <button class="pill" data-c="#FFFFFF">白</button>
-              <button class="pill" data-c="#111214">黑</button>
-              <label class="pill pickpill" title="自己挑顏色"><input type="color" id="stBgPick" value="#E9E3D6">自選</label>
-            </div>
-            <label class="slider">不透明<input type="range" id="stA" min="20" max="100" step="5"><output id="stAO"></output></label>
-            <label class="slider">圓角<input type="range" id="stR" min="0" max="40" step="2"><output id="stRO"></output></label>
-            <label class="slider">上下留白<input type="range" id="stPad" min="20" max="90" step="2"><output id="stPadO"></output></label>
-            <label class="chk"><input type="checkbox" id="saNum"> 「1.」開頭的標題，數字放大放左邊</label>
-            <label class="chk"><input type="checkbox" id="saRef"> 經文出處接在句尾，不顯示版本代號</label>
-          </div>
           <button class="btn small" id="stripReset">還原</button>
         </div>
         <div class="legacy">
@@ -805,7 +803,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=88"></script>
+<script src="app.js?v=89"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
