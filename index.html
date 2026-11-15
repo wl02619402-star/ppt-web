@@ -93,6 +93,11 @@ details.more summary:hover{color:var(--ink)}
 .link{border:0;background:none;color:var(--ink);padding:0 2px;font-size:12px;text-decoration:underline}
 .cap{display:flex;align-items:center;gap:12px;min-height:32px;font-size:13px;color:var(--muted)}
 .cap #viewHint{flex:1}
+.capAlign{display:flex;gap:4px}
+.capAlign[hidden]{display:none}
+.tplsteps{margin:0 0 12px;padding-left:20px;font-size:13px;line-height:1.9;color:var(--ink2)}
+.tplsteps a{color:var(--accent)}
+.tplsteps[hidden]{display:none}
 .cap b{color:var(--ink);font-weight:500;margin-right:8px}
 .frame{position:relative;aspect-ratio:16/9;background:#000;outline:1px solid var(--line2)}
 .frame::after{content:'';position:absolute;inset:-8px;pointer-events:none;background-repeat:no-repeat;
@@ -533,7 +538,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
     </div>
     <div id="editor" hidden>
       <div class="banner" id="tplBanner" hidden>
-        <div><b>下一步：選一個模板</b><span>目前是白底。到 <a href="https://slidesgo.com/" target="_blank" rel="noopener">Slidesgo</a> 下載 PowerPoint 格式的模板，上傳後每一頁都會套上</span></div>
+        <div><b>下一步：選一個模板</b><span>到 <a href="https://slidesgo.com/" target="_blank" rel="noopener">Slidesgo</a> 下載 PowerPoint 格式的模板，上傳後每一頁都會套上。還沒有模板，可以先在右邊「模板」選素色底</span></div>
         <button class="btn primary" id="btnBannerTpl">上傳模板</button>
       </div>
       <div class="views" role="tablist" aria-label="要看哪一種版本">
@@ -547,7 +552,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
         </button>
       </div>
       <div class="stage">
-        <div class="cap"><span class="onair"><i class="tally" id="capTally"></i><b id="capName">現場版</b><span id="capPage"></span></span><span id="viewHint"></span><span id="capLive"></span><div class="pages" id="pages"></div></div>
+        <div class="cap"><span class="onair"><i class="tally" id="capTally"></i><b id="capName">現場版</b><span id="capPage"></span></span><span id="viewHint"></span><span id="capLive"></span><div class="svAlign capAlign" id="capAlign" hidden role="group" aria-label="字條對齊"><button class="pill" data-a="auto" title="標題靠左、內文往右退">錯開</button><button class="pill" data-a="left">靠左</button><button class="pill" data-a="center">置中</button></div><div class="pages" id="pages"></div></div>
         <div class="frame" id="frameLive"><canvas id="cvLive" width="1920" height="1080"></canvas></div>
         <div class="frame video" id="frameStrip" hidden><canvas id="cvStrip" width="1920" height="1080"></canvas></div>
       </div>
@@ -597,6 +602,11 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 
         <div class="sec">
           <h3>模板</h3>
+          <ol class="tplsteps" id="tplSteps">
+            <li>到 <a href="https://slidesgo.com/" target="_blank" rel="noopener">Slidesgo</a> 挑一個喜歡的模板</li>
+            <li>按 Download，選 PowerPoint 格式</li>
+            <li>回到這裡，按下面的「上傳模板」選那個檔案</li>
+          </ol>
           <div class="row"><button class="btn small" id="btnTpl">上傳模板 pptx…</button></div>
           <input type="file" id="tplFile" accept=".pptx" hidden>
           <div class="hint">到 <a href="https://slidesgo.com/" target="_blank" rel="noopener" style="color:var(--accent)">Slidesgo</a> 下載 PowerPoint 格式的模板直接上傳。範例文字會自動拿掉，講道文字會放進原本的文字框。</div>
@@ -605,6 +615,11 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
             <div class="hint" id="tplHint">橘框的頁面會輪流當背景，點縮圖可以選用或不用。</div>
             <div class="tplgrid" id="tplGrid"></div>
           </div>
+        </div>
+        <div class="sec" id="plainRow">
+          <h3>還沒有模板？先用素色底</h3>
+          <div class="row" id="plainSw"></div>
+          <div class="hint">每一頁都會換成這個底色，字的顏色會自動配。上傳模板後就改用模板。</div>
         </div>
         <div class="sec legacy" id="bgVaryRow">
           <label class="chk" style="margin-top:0"><input type="checkbox" id="optVary"> 每一頁自動換版面（同一種風格，不同編排）</label>
@@ -723,7 +738,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
             <label class="slider">字級<input type="range" id="svSize" min="60" max="140" step="5"><output id="svSizeO"></output></label>
             <label class="slider">行距<input type="range" id="svGap" min="0.8" max="1.5" step="0.05"><output id="svGapO"></output></label>
             <label class="slider">長度<input type="range" id="stripW" min="30" max="98" step="1"><output id="stripWO"></output></label>
-            <div class="row" id="svAlign" style="margin:8px 0 0">
+            <div class="row svAlign" id="svAlign" style="margin:8px 0 0">
               <span class="hint" style="margin:0 4px 0 0">對齊</span>
               <button class="pill" data-a="auto" title="標題靠左、內文往右退">錯開</button>
               <button class="pill" data-a="left">靠左</button>
@@ -750,7 +765,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=81"></script>
+<script src="app.js?v=84"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
