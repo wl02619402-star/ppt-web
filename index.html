@@ -599,8 +599,8 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
           <div id="ed" class="ed" contenteditable="true" spellcheck="false"></div>
           <div class="hint">選取文字再點顏色就能改色。粗體大字的段落是標題；點一段再按「標題」或「內文」可以切換。標題裡按 Enter，下一行也是標題。</div>
         </div>
-        <div class="sec">
-          <h3>線上版字條樣式</h3>
+        <div class="sec" id="stripLookSec" hidden>
+          <h3>字條樣式</h3>
           <div class="row" id="stBg" style="margin:0 0 8px">
             <span class="hint" style="margin:0 4px 0 0">底色</span>
             <button class="pill" data-c="">跟模板</button>
@@ -816,7 +816,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=91"></script>
+<script src="app.js?v=92"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));

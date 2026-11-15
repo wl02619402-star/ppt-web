@@ -819,7 +819,7 @@ function setView(v) {
   document.querySelectorAll('.view').forEach(b => b.classList.toggle('on', b.dataset.v === v));
   $('frameLive').hidden = v !== 'live'; $('frameStrip').hidden = v !== 'strip';
   $('posLive').hidden = v !== 'live'; $('posStrip').hidden = v !== 'strip';
-  $('viewHint').textContent = VIEW_HINT[v]; $('capAlign').hidden = v !== 'strip'; renderMain();
+  $('viewHint').textContent = VIEW_HINT[v]; $('capAlign').hidden = v !== 'strip'; $('stripLookSec').hidden = v !== 'strip';   // 字條的設定只在看線上版時出現 renderMain();
   if (S.slides.length) setTimeout(() => S.slides.forEach((_, i) => renderThumb(i)), 60);   // 縮圖跟著換成現場版／字條
 }
 // ---------- 大小位置：同一個「整份／這一頁」開關，現場版、線上版各自一組 ----------
