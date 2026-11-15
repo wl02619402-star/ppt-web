@@ -5,7 +5,19 @@ const S = {
   custom: null, customMode: 'dark', customDim: null, fileName: '簡報',
   fonts: { head: 'theme', body: 'theme', scr: 'same' }, shadow: false, blocks: false, dashRef: true, photos: [], tpl: null, autoVary: true, bgAll: null, bgScope: 'all', localFonts: [], lineGap: null, stripGap: null, stripScale: 1, layScope: 'all', live: {}, liveScope: 'all',
 };
+S.sLook = { bg: null, a: 1, r: null, pad: 46 };   // 字條樣式：底色、不透明度、圓角、上下留白
+S.sAuto = { num: true, ref: true };               // 字條自動整理：大數字、出處接句尾
 const $ = id => document.getElementById(id);
+// 每一段自己的調整：位移（x、y）和大小倍率（k）；現場版 'l'、線上版 's' 各一組，用原文的段落序號當鑰匙
+function ppOf(slide, view, gid) { return (slide && slide.pp && slide.pp[view] && slide.pp[view][gid]) || null; }
+function ppSet(slide, view, gid, patch) {
+  slide.pp = Object.assign({}, slide.pp); const m = slide.pp[view] = Object.assign({}, slide.pp[view]);
+  if (!patch) delete m[gid]; else { m[gid] = Object.assign({ x: 0, y: 0, k: 1 }, m[gid], patch); if (!m[gid].x && !m[gid].y && m[gid].k === 1) delete m[gid]; }
+}
+function ppOpts(slide, view) { const m = slide && slide.pp && slide.pp[view]; return { pk: m ? g => (m[g] && m[g].k) || 1 : null, off: m && view === 'l' ? g => m[g] : null }; }
+// 清掉某一版的逐段調整；posOnly＝只清位移、保留大小
+function ppClear(slide, view, posOnly) { const m = slide.pp && slide.pp[view]; if (!m) return; if (!posOnly) { delete slide.pp[view]; return; } Object.keys(m).forEach(g => ppSet(slide, view, g, { x: 0, y: 0 })); }
+function tagParas(slide) { slide.paras.forEach((p, i) => { p._i = i; }); }
 const measureCtx = mk(10, 10).getContext('2d');
 const FONT = '"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif';
 const NO_START = new Set('，。、；：！？」』）》〉,.;:!?)”’…'.split(''));
@@ -189,7 +201,8 @@ function layout(paras, size, maxW, o) {
   const lines = [];
   paras.forEach((runs, pi) => {
     const ex = runs[0] && runs[0].ps, head = ex ? ex === 'h' : o.headRule(pi, paras);   // 使用者指定的「標題／內文」優先
-    const fs = head ? Math.round(size * o.headScale) : size;
+    const gid = runs._i != null ? runs._i : pi, pk = o.pk ? o.pk(gid) : 1;
+    const fs = Math.round((head ? size * o.headScale : size) * pk);
     const wt = head ? 700 : 500;
     const scr = !head && isScripture(runs);
     const base = fnt(wt, fs, head, false, scr), redf = fnt(700, fs, head, true, scr), trk = (o.track || 0) * fs;
@@ -228,7 +241,7 @@ function layout(paras, size, maxW, o) {
       }
       if (cur.length) out.push({ pi, segs: cur, size: fs, head, scr, w: cw });
       out.forEach(l => {
-        l.trk = trk; l.w = Math.max(0, l.w - trk);   // 最後一個字後面不算字距
+        l.gid = gid; l.trk = trk; l.w = Math.max(0, l.w - trk);   // 最後一個字後面不算字距
         // 行尾的「，。」字形只佔左半邊：對齊時讓它稍微凸出去，視覺上邊緣才整齊
         const ls = l.segs[l.segs.length - 1]; if (o.hang && ls && /[，。、；：]$/.test(ls.t)) l.w = Math.max(0, l.w - fs * .45);
       });
@@ -261,8 +274,10 @@ function drawLines(c, lines, x, y, o, T, align = 'left', boxW = 0) {
   const shadowOn = !!o.shadow && lumOf(T.text) > .6;
   lines.forEach((l, i) => {
     const wt = l.head ? 700 : 500, base = fnt(wt, l.size, l.head, false, l.scr), redf = fnt(700, l.size, l.head, true, l.scr);
-    let px = align === 'center' ? x + (boxW - l.w) / 2 : align === 'right' ? x + boxW - l.w : x;
-    const cy = y + l.h / 2;
+    const d = o.off ? o.off(l.gid) : null;
+    let px = (align === 'center' ? x + (boxW - l.w) / 2 : align === 'right' ? x + boxW - l.w : x) + (d ? d.x || 0 : 0);
+    const cy = y + l.h / 2 + (d ? d.y || 0 : 0);
+    if (o.rec) o.rec.push({ gid: l.gid, x: px, y: cy - l.h / 2, w: l.w, h: l.h });
     l.segs.forEach(s => {
       c.font = s.red ? redf : base; c.fillStyle = (l.head && o.headColor) ? o.headColor : runColor(s, T);
       if (shadowOn) { c.shadowColor = 'rgba(0,0,0,.6)'; c.shadowBlur = 12; c.shadowOffsetY = 3; }
@@ -280,7 +295,7 @@ const gapOf = slide => (slide && slide.lg) || S.lineGap || 1.1 * LN;
 function liveOpts(isTitle, v, slide) {
   return {
     headRule: (pi, ps) => (v === 'spark' || v === 'solid' || (v === 'spot' && slide && isShort(slide))) ? false : isTitle ? pi === 0 : (pi === 0 && ps.length > 1 && plain(ps[0]).length <= 28),
-    headScale: isTitle ? 1.9 : 1.16, lineGap: gapOf(slide), paraGap: .45, shadow: S.shadow || v === 'spot',
+    headScale: isTitle ? 1.9 : 1.16, lineGap: gapOf(slide), paraGap: .45, shadow: S.shadow || v === 'spot', rec: [], ...ppOpts(slide, 'l'),
   };
 }
 function liveCfg(slide, isTitle, v) {
@@ -363,6 +378,7 @@ function liveSplit(c, slide, T, o, sf, L, sp, noText) {
   return { shrunk: size < Math.round(base) && size < 48, geo: { lines: body, x: x2, y: top, o: bo, align: 'left', maxW: rw, T, extra } };
 }
 function drawLive(cv, slide, idx, noText) {
+  tagParas(slide);
   if (tplOn() && !slide.bg) return drawTplSlide(cv, slide, idx, noText);
   const v = autoVariant(slide, idx), T = slideTheme(curTheme(slide), v), c = cv.getContext('2d');
   const isTitle = v === 'title', isSpark = v === 'spark' || v === 'solid' || (v === 'spot' && isShort(slide));
@@ -419,17 +435,17 @@ function drawLive(cv, slide, idx, noText) {
     drawLines(c, lines, x, y, o, T, align, maxW);
     if (numeral) { c.font = `italic 700 ${numSize}px ${SERIF}`; c.fillStyle = T.accent; c.textBaseline = 'middle'; c.fillText(numeral, numX, numY); }
   }
-  return { shrunk: size < Math.round(base * fs) && size < 48, capped: size < Math.round(base * fs), geo: { lines, x, y, o, align, maxW, T, numeral, numX, numY, numSize, extra: panel ? [panel] : [] } };
+  return { shrunk: size < Math.round(base * fs) && size < 48, capped: size < Math.round(base * fs), geo: { lines, x, y, o, align, maxW, T, numeral, numX, numY, numSize, extra: panel ? [panel] : [], rec: o.rec } };
 }
 
 // ---------- 長條版 ----------
 // 字條：左右留白一樣、字放大（字幕帶的比例：寬扁、字撐滿），標題靠字級分層，字距稍微拉開
-const STRIP = { padL: 120, padR: 120, padT: 46, padB: 46, maxH: 340, base: 60 };
+const STRIP = { padL: 120, padR: 120, get padT() { return S.sLook.pad || 46; }, get padB() { return S.sLook.pad || 46; }, maxH: 340, base: 60 };
 const stripAlignOf = slide => (slide && slide.sal) || S.stripAlign || 'auto';
 const sgapOf = slide => (slide && slide.slg) || S.stripGap || 0.96 * LN;
 // 字條依內容類型排：「重點＋經文」這種頁，標題大、內文小（約六成）；短句維持接近的大小
 function stripOpts(slide, pt) {
-  return { headRule: (pi, ps) => pi === 0 && ps.length > 1, headScale: pt ? 1.6 : 1.32, baseK: pt ? .8 : 1, lineGap: sgapOf(slide), paraGap: pt ? .3 : .36, track: .1, hang: true };
+  return { headRule: (pi, ps) => pi === 0 && ps.length > 1, headScale: pt ? 1.6 : 1.32, baseK: pt ? .8 : 1, lineGap: sgapOf(slide), paraGap: pt ? .3 : .36, track: .1, hang: true, pk: ppOpts(slide, 's').pk };
 }
 // 字條專用的文字整理（只改顯示，不改原文）：
 // 1. 標題開頭的「1.」「2、」抽出來，畫成左邊的大數字
@@ -439,14 +455,14 @@ const VER_RE = /[\s\u3000]*[（(]?(?:CUNP|RCUV|CUV|CNV|CCB|CSB|NIV|ESV|KJV|NLT|�
 const REFLINE_RE = /^\s*(?:——|—|–|-)?\s*[（(]?\s*([\u4e00-\u9fff]{1,8})\s*(\d+\s*[:：]\s*\d+(?:\s*[-–~～]\s*\d+)?(?:\s*[,，、]\s*\d+(?:\s*[-–]\s*\d+)?)*)\s*[）)]?\s*$/;
 const _spCache = new WeakMap();
 function stripParas(slide) {
-  const key = JSON.stringify(slide.paras) + '|' + S.dashRef, hit = _spCache.get(slide); if (hit && hit.key === key) return hit.v;
-  const src = slide.paras.map(p => p.map(r => Object.assign({}, r))), out = []; let num = '', merged = false;
+  const key = JSON.stringify(slide.paras) + '|' + S.dashRef + JSON.stringify(S.sAuto), hit = _spCache.get(slide); if (hit && hit.key === key) return hit.v;
+  const src = slide.paras.map((p, i) => { const q = p.map(r => Object.assign({}, r)); q._i = i; return q; }), out = []; let num = '', merged = false;
   const cutStart = (p, n) => { const ps = p[0] && p[0].ps; while (n > 0 && p.length) { const k = Math.min(n, p[0].t.length); p[0].t = p[0].t.slice(k); n -= k; if (!p[0].t && p.length > 1) p.shift(); } if (ps && p[0]) p[0].ps = ps; };
   const cutEnd = (p, n) => { while (n > 0 && p.length) { const r = p[p.length - 1], k = Math.min(n, r.t.length); r.t = r.t.slice(0, r.t.length - k); n -= k; if (!r.t && p.length > 1) p.pop(); } };
-  if (src.length > 1) { const m = /^\s*(\d{1,2})\s*[.．、:：)）]\s*(?=\S)/.exec(plain(src[0])); if (m && plain(src[0]).length - m[0].length >= 2) { num = m[1]; cutStart(src[0], m[0].length); } }
+  if (src.length > 1 && S.sAuto.num) { const m = /^\s*(\d{1,2})\s*[.．、:：)）]\s*(?=\S)/.exec(plain(src[0])); if (m && plain(src[0]).length - m[0].length >= 2) { num = m[1]; cutStart(src[0], m[0].length); } }
   src.forEach((p, i) => {
-    const full = plain(p), vm = VER_RE.exec(full); if (vm && vm.index > 0) cutEnd(p, full.length - vm.index);
-    const t = plain(p), prev = out[out.length - 1], rm = S.dashRef !== false && prev && t.length <= 30 && REFLINE_RE.exec(t);
+    const full = plain(p), vm = S.sAuto.ref && VER_RE.exec(full); if (vm && vm.index > 0) cutEnd(p, full.length - vm.index);
+    const t = plain(p), prev = out[out.length - 1], rm = S.sAuto.ref && S.dashRef !== false && prev && t.length <= 30 && REFLINE_RE.exec(t);
     const pt = prev ? plain(prev) : '', prevIsBody = prev && !(prev[0] && prev[0].ps === 'h') && (out.length > 1 || pt.length > 14) && !REFLINE_RE.test(pt);
     if (rm && prevIsBody) {
       if (/^\s*「/.test(pt) && /」\s*$/.test(pt) && (pt.match(/「/g) || []).length === 1 && !src.some(q => q !== prev && /「/.test(plain(q)))) { cutStart(prev, pt.indexOf('「') + 1); cutEnd(prev, plain(prev).length - plain(prev).lastIndexOf('」')); }
@@ -511,11 +527,12 @@ const _scCache = new Map();
 const STRIP_LOOK = { title: 'frame', card: 'paper', plain: 'block', flip: 'ribbon', band: 'ribbon', zoom: 'rule', rule: 'rule', brackets: 'block', num: 'block', side: 'block', spark: 'solid', solid: 'solid', spot: 'solid' };
 const stripLook = v => 'paper';   // 字條沿用模板本身的樣子，不加內建裝飾
 function stripCard(T, cw, h, v = 'plain', idx = 0, slide) {
-  const key = [T.key, cw, h, v, idx % 6, S.custom ? S.custom.src.length : '', dimOf(), S.bgAll ? S.bgAll.c : '', S.plain || '', slide && slide.bg ? JSON.stringify(slide.bg).length : ''].join('|');
+  const key = [T.key, cw, h, v, idx % 6, S.custom ? S.custom.src.length : '', dimOf(), S.bgAll ? S.bgAll.c : '', S.plain || '', JSON.stringify(S.sLook), slide && slide.bg ? JSON.stringify(slide.bg).length : ''].join('|');
   if (_scCache.has(key)) return _scCache.get(key);
   const sc = 2, c = mk(cw * sc, h * sc), x = c.getContext('2d'); x.scale(sc, sc);
-  const A = T.accent, look = stripLook(v);
-  x.save(); rrect(x, 0, 0, cw, h, T.P ? 4 : T.card.radius); x.clip();
+  const A = T.accent, look = stripLook(v), rad = S.sLook.r != null ? S.sLook.r : (T.P ? 4 : T.card.radius);
+  if (S.sLook.bg) { x.fillStyle = S.sLook.bg; rrect(x, 0, 0, cw, h, rad); x.fill(); if (_scCache.size > 60) _scCache.clear(); _scCache.set(key, c); return c; }   // 自選底色：乾淨的色塊
+  x.save(); rrect(x, 0, 0, cw, h, rad); x.clip();
   if (T.P) {
     // 撕邊紙：同一張紙，每一頁的撕邊位置不同（上下、只有上、只有下）
     const tmp = mk(W, H), tx = tmp.getContext('2d'), seed = T.P.k.length * 131 + T.P.n.length * 17 + idx * 7, edge = v === 'title' ? 0 : idx % 3;
@@ -549,7 +566,8 @@ function stripCard(T, cw, h, v = 'plain', idx = 0, slide) {
   if (_scCache.size > 60) _scCache.clear(); _scCache.set(key, c); return c;
 }
 function drawStrip(cv, slide, page, noText) {
-  const idx = Math.max(0, S.slides.indexOf(slide)), v = autoVariant(slide, idx), T0 = curTheme(slide), T = slideTheme(T0, stripLook(v) === 'solid' ? (v === 'spot' ? 'spot' : 'solid') : 'plain'), c = cv.getContext('2d');
+  const idx = Math.max(0, S.slides.indexOf(slide)), v = autoVariant(slide, idx), T0 = curTheme(slide), T1 = slideTheme(T0, stripLook(v) === 'solid' ? (v === 'spot' ? 'spot' : 'solid') : 'plain'), c = cv.getContext('2d');
+  const T = S.sLook.bg ? Object.assign({}, T1, lumOf(S.sLook.bg) < .5 ? { text: '#F4F1EA', red: '#FF8E7E', dark: true } : { text: '#1F1A17', red: '#C0392B', dark: false }) : T1;
   c.clearRect(0, 0, W, H);
   const sp = stripPages(slide), { pages, o, split } = sp; let cardW = sp.cardW; drawStrip.tall = !!sp.tall;
   drawStrip.capped = !!(pages[0] && pages[0][0] && pages[0][0].size < Math.round(STRIP.base * (o.baseK || 1) * .8 * (S.stripScale || 1) * (slide.sfs || 1) * (pages[0][0].head ? o.headScale : 1)) - 1);
@@ -577,7 +595,7 @@ function drawStrip(cv, slide, page, noText) {
   }
   const x0 = Math.max(0, Math.min(W - cardW, Math.round((W - cardW) / 2) + S.stripX)), y0 = Math.max(0, H - h - S.stripY);
   const card = stripCard(T0, cardW, h, v, idx, slide); drawStrip.card = { x: x0, y: y0, w: cardW, h };
-  c.save(); c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 24; c.shadowOffsetY = 8;
+  c.save(); c.globalAlpha = S.sLook.a == null ? 1 : S.sLook.a; c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 24; c.shadowOffsetY = 8;
   c.drawImage(card, x0, y0, cardW, h); c.restore();
   if (split) {
     const lx = x0 + STRIP.padL, ty = y0 + STRIP.padT, bx = lx + split.leftW + split.gap, extra = [{ lines: split.head, x: lx, y: ty, o: split.ho, w: split.leftW, T }];
@@ -595,13 +613,13 @@ function drawStrip(cv, slide, page, noText) {
   }
   // 每一行的位置：錯開（標題靠左、內文整塊靠右、出處靠右）／置中／靠左，再加上使用者自己拖的位移
   const isRef = l => { const t = plain(l.segs); return t.length <= 28 && /^——|^\s*[（(]?[^\s，。「」]{0,8}\s?\d+\s*[:：]\s*\d/.test(t); };
-  const sdx = slide.sdx || {}, pos = []; let yy = ty;
+  const pos = []; let yy = ty;
   lines.forEach((l, i) => {
     let x = lx;
     if (stag && i > 0) { const bx = lx + tw0 - stag.bw; x = isRef(l) ? bx + stag.bw - l.w : bx; }
     else if (!stag && al === 'center') x = lx + (tw0 - l.w) / 2;
-    const base = x; x = Math.max(x0 + 24, Math.min(x0 + cardW - 24 - l.w, x + (sdx[l.pi] || 0)));
-    pos.push({ l, x, y: yy, base, lx, tw0 });
+    const d = ppOf(slide, 's', l.gid) || {}, base = x; x = Math.max(x0 + 24, Math.min(x0 + cardW - 24 - l.w, x + (d.x || 0)));
+    pos.push({ l, x, y: yy + (d.y || 0), base, lx, tw0 });
     yy += l.h; if (lines[i + 1] && lines[i + 1].pi !== l.pi) yy += pgap(l, lines[i + 1], o);
   });
   if (!noText) pos.forEach(p => drawLines(c, [p.l], p.x, p.y, o, T));
@@ -712,7 +730,7 @@ function renderMain() {
   $('miniLive').getContext('2d').drawImage($('cvLive'), 0, 0, 320, 180); const mc = $('miniStrip').getContext('2d'); mc.clearRect(0, 0, 320, 180); mc.drawImage($('cvStrip'), 0, 0, 320, 180);
   const pg = $('pages'); pg.innerHTML = '';
   if (S.view === 'strip' && n > 1) for (let i = 0; i < n; i++) { const b = document.createElement('button'); b.className = 'pill' + (i === S.page ? ' sel' : ''); b.textContent = `第${i + 1}張`; b.onclick = () => { S.page = i; renderMain(); }; pg.appendChild(b); }
-  renderThumb(S.sel); syncVariantUI();
+  renderThumb(S.sel); syncVariantUI(); syncParaBar();
 }
 function syncVariantUI() {
   const sl = S.slides[S.sel], sel = $('variantSel'); if (!sl || !sel) return;
@@ -750,7 +768,7 @@ function buildList() {
   let i = 0; const step = () => { if (i < S.slides.length) { renderThumb(i++); setTimeout(step, 0); } }; step();
 }
 function select(i) {
-  S.sel = i; S.page = 0; if (typeof picSel !== 'undefined') { picSel.hidden = true; picPinned = false; }
+  S.sel = i; S.page = 0; paraSel = null; if (typeof picSel !== 'undefined') { picSel.hidden = true; picPinned = false; }
   document.querySelectorAll('.thumb').forEach((d, k) => d.classList.toggle('sel', k === i));
   const sl = S.slides[i];
   edRender();
@@ -758,11 +776,11 @@ function select(i) {
   const th = document.querySelectorAll('.thumb')[i]; if (th) th.scrollIntoView({ block: 'nearest' });
 }
 const VIEW_HINT = {
-  live: '拖曳文字可以移動位置；點圖片可以移動，拉四個角可以縮放',
-  strip: '按住一行可以左右拖；拖空白處移動字條，拖兩端調長度',
+  live: '按住一段文字可以單獨拖動，點一下可以調大小；拖空白處移動全部文字',
+  strip: '按住一段文字可以拖動，點一下可以調大小；拖空白處移動字條',
 };
 function setView(v) {
-  S.view = v; if (typeof picSel !== 'undefined') { picSel.hidden = true; picPinned = false; }
+  S.view = v; paraSel = null; if (typeof picSel !== 'undefined') { picSel.hidden = true; picPinned = false; }
   document.querySelectorAll('.view').forEach(b => b.classList.toggle('on', b.dataset.v === v));
   $('frameLive').hidden = v !== 'live'; $('frameStrip').hidden = v !== 'strip';
   $('posLive').hidden = v !== 'live'; $('posStrip').hidden = v !== 'strip';
@@ -809,7 +827,7 @@ function setLay(kind, v) {
   _deck.sig = ''; S.page = 0; syncLiveUI(); redrawSoon();
 }
 function syncOut() {
-  syncLiveUI(); setTimeout(() => document.querySelectorAll('input[type=range]').forEach(paintRange), 0);
+  syncLiveUI(); syncStripLook(); setTimeout(() => document.querySelectorAll('input[type=range]').forEach(paintRange), 0);
   $('stripXO').textContent = S.stripX; $('stripX').value = S.stripX; $('stripY').value = S.stripY; $('stripYO').textContent = S.stripY; syncStripW();
 }
 const HUE = {
@@ -927,10 +945,10 @@ function renderLocalList() {
 }
 
 // ---------- 記住上次的樣式 ----------
-const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, deckScale: S.deckScale, anchor: S.anchor, stripFixed: S.stripFixed, stripGap: S.stripGap, stripScale: S.stripScale, sAlign: S.stripAlign, plain: S.plain || null, shadow: S.shadow, blocks: S.blocks, dashRef: S.dashRef, autoVary: S.autoVary, bgAll: S.bgAll, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
+const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, deckScale: S.deckScale, anchor: S.anchor, stripFixed: S.stripFixed, stripGap: S.stripGap, stripScale: S.stripScale, sAlign: S.stripAlign, sLook: S.sLook, sAuto: S.sAuto, plain: S.plain || null, shadow: S.shadow, blocks: S.blocks, dashRef: S.dashRef, autoVary: S.autoVary, bgAll: S.bgAll, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
 async function applyStyle(v) {
   if (!v) return;
-  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: false, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: 'middle', stripFixed: !!v.stripFixed, stripGap: v.stripGap || null, stripScale: v.stripScale || 1, stripAlign: v.sAlign || 'auto', plain: v.plain || null, shadow: false, blocks: false, dashRef: v.dashRef !== false, autoVary: v.autoVary !== false, bgAll: v.bgAll || null });
+  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: false, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: 'middle', stripFixed: !!v.stripFixed, stripGap: v.stripGap || null, stripScale: v.stripScale || 1, stripAlign: v.sAlign || 'auto', sLook: Object.assign({ bg: null, a: 1, r: null, pad: 46 }, v.sLook), sAuto: Object.assign({ num: true, ref: true }, v.sAuto), plain: v.plain || null, shadow: false, blocks: false, dashRef: v.dashRef !== false, autoVary: v.autoVary !== false, bgAll: v.bgAll || null });
   if (v.fonts) S.fonts = Object.assign({}, v.fonts, { scr: 'same' });
   for (const f of (v.localFonts || [])) await registerLocal(f.name, f.fam);
   $('optShadow').checked = !!S.shadow; $('optDash').checked = S.dashRef !== false; $('optBlocks').checked = !!S.blocks;
@@ -1037,7 +1055,7 @@ const PX_IN = 144, inch = px => +(px / PX_IN).toFixed(4), ptOf = px => +(px * .5
 function textGroups(lines, y, o) {
   const gs = []; let cur = null;
   lines.forEach((l, i) => {
-    if (!cur || cur.pi !== l.pi) { cur = { pi: l.pi, y, size: l.size, head: l.head, scr: l.scr, lines: [], h: 0 }; gs.push(cur); }
+    if (!cur || cur.pi !== l.pi) { cur = { pi: l.pi, gid: l.gid, y, size: l.size, head: l.head, scr: l.scr, lines: [], h: 0 }; gs.push(cur); }
     cur.lines.push(l); cur.h += l.h; y += l.h;
     if (lines[i + 1] && lines[i + 1].pi !== l.pi) y += pgap(l, lines[i + 1], o);
   });
@@ -1061,8 +1079,8 @@ function addTextGroups(sl, lines, y, o, x, w, align, T) {
         const run = { text: s.t, options: opt }; runs.push(run); last = { key, run };
       });
     });
-    const slack = w * .14, bx = align === 'center' ? x - slack / 2 : align === 'right' ? x - slack : x;
-    sl.addText(runs, { x: inch(bx), y: inch(g.y), w: inch(w + slack), h: inch(g.h), margin: 0, valign: 'top', align, fontSize: ptOf(g.size), lineSpacingMultiple: +(g.lines[0].h / (g.size * LN)).toFixed(2), ...(o.track ? { charSpacing: +(o.track * ptOf(g.size)).toFixed(1) } : {}), wrap: true, fit: 'none', ...(sh ? { shadow: { type: 'outer', color: '000000', opacity: .6, blur: 6, offset: 2, angle: 90 } } : {}) });
+    const d = (o.off && o.off(g.gid)) || {}, slack = w * .14, bx = (align === 'center' ? x - slack / 2 : align === 'right' ? x - slack : x) + (d.x || 0);
+    sl.addText(runs, { x: inch(bx), y: inch(g.y + (d.y || 0)), w: inch(w + slack), h: inch(g.h), margin: 0, valign: 'top', align, fontSize: ptOf(g.size), lineSpacingMultiple: +(g.lines[0].h / (g.size * LN)).toFixed(2), ...(o.track ? { charSpacing: +(o.track * ptOf(g.size)).toFixed(1) } : {}), wrap: true, fit: 'none', ...(sh ? { shadow: { type: 'outer', color: '000000', opacity: .6, blur: 6, offset: 2, angle: 90 } } : {}) });
   });
 }
 async function exportEditable() {
@@ -1175,7 +1193,7 @@ function colorText(c) {
     const runs = []; ch.forEach(k => { const l = runs[runs.length - 1]; if (l && l.red === k.red && l.c === k.c) l.t += k.x; else runs.push(k.c ? { t: k.x, red: k.red, c: k.c } : { t: k.x, red: k.red }); });
     if (runs.length) { if (p[0] && p[0].ps) runs[0].ps = p[0].ps; out.push(runs); }
   });
-  const sl = S.slides[S.sel]; sl.paras = out.length ? out : [[{ t: ' ', red: false }]];
+  const sl = S.slides[S.sel], n0 = sl.paras.length; sl.paras = out.length ? out : [[{ t: ' ', red: false }]]; if (sl.paras.length !== n0) delete sl.pp;
   edRender(); edSelect(sel); redrawSoon();
 }
 function edSelect(sel) {
@@ -1190,7 +1208,7 @@ function edSelect(sel) {
 }
 ed.addEventListener('input', async () => {
   const sl = S.slides[S.sel]; if (!sl) return;
-  sl.paras = edParse(); if (!sl.paras.length) sl.paras = [[{ t: ' ', red: false }]];
+  const n0 = sl.paras.length; sl.paras = edParse(); if (!sl.paras.length) sl.paras = [[{ t: ' ', red: false }]]; if (sl.paras.length !== n0) delete sl.pp;
   if (await ensureFonts()) buildList();
   redrawSoon();
 });
@@ -1402,6 +1420,7 @@ function tplDeckSize() {
   _tplDeck.v = sizes.length ? sizes[Math.floor(sizes.length / 2)] : 0; return _tplDeck.v;
 }
 function drawTplSlide(cv, slide, idx, noText, dry) {
+  tagParas(slide); const rec = [], ppo = ppOpts(slide, 'l');
   const c = cv.getContext('2d'), pi = tplPageIdx(idx), pg = S.tpl.pages[pi], L = liveCfg(slide, false, 'plain');
   c.clearRect(0, 0, W, H); c.drawImage(getBg('tpl', idx, slide), 0, 0);
   (slide.pics || []).forEach(p => { const e = imgCache.get(p.src); if (!e) return; const im = e.im, cr = p.crop || { l: 0, t: 0, r: 0, b: 0 }; c.save(); c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = 26; c.shadowOffsetY = 8; c.drawImage(im, im.width * cr.l, im.height * cr.t, im.width * (1 - cr.l - cr.r), im.height * (1 - cr.t - cr.b), p.x * W, p.y * H, p.w * W, p.h * H); c.restore(); });
@@ -1425,7 +1444,7 @@ function drawTplSlide(cv, slide, idx, noText, dry) {
   const cap = dry ? 0 : tplDeckSize();
   const place = (pp, r, head, maxS, body) => {
     if (body && cap) maxS = Math.min(maxS, Math.round(cap * 1.12 / scale));
-    const o = { headRule: head ? (pi2, all) => pi2 === 0 && all.length > 1 : () => false, headScale: 1.2, lineGap: gap, paraGap: .45, shadow: S.shadow };
+    const o = { headRule: head ? (pi2, all) => pi2 === 0 && all.length > 1 : () => false, headScale: 1.2, lineGap: gap, paraGap: .45, shadow: S.shadow, rec, ...ppo };
     let f = fitRegion(pp, r, o, Math.round(maxS * scale), 40);
     if (!f.fit) { const g = grow(r), f2 = fitRegion(pp, g, o, Math.round(maxS * scale), 32); if (f2.size > f.size || f2.fit) { f = f2; r = g; } }
     const h = blockH(f.lines, o), y = r.anchor === 'middle' ? r.y + (r.h - h) / 2 : r.anchor === 'bottom' ? r.y + r.h - h : r.y;
@@ -1439,7 +1458,7 @@ function drawTplSlide(cv, slide, idx, noText, dry) {
   const main = parts[parts.length - 1];
   slide._autoAlign = main.align;
   const bp = parts.find(p => p.body);
-  return { bodySize: bp ? bp.size : 0, shrunk: main.size < 44, capped: parts.some(p => p.capped), geo: { lines: main.lines, x: main.x, y: main.y, o: main.o, align: main.align, maxW: main.w, T: main.T, extra: parts.slice(0, -1).map(p => ({ lines: p.lines, x: p.x, y: p.y, o: p.o, w: p.w, T: p.T, align: p.align })) } };
+  return { bodySize: bp ? bp.size : 0, shrunk: main.size < 44, capped: parts.some(p => p.capped), geo: { rec, lines: main.lines, x: main.x, y: main.y, o: main.o, align: main.align, maxW: main.w, T: main.T, extra: parts.slice(0, -1).map(p => ({ lines: p.lines, x: p.x, y: p.y, o: p.o, w: p.w, T: p.T, align: p.align })) } };
 }
 async function loadTplImages() { tplImgs.length = 0; if (!S.tpl) return; await Promise.all(S.tpl.pages.map((p, i) => new Promise(r => { const im = new Image(); im.onload = () => { tplImgs[i] = im; r(); }; im.onerror = r; im.src = p.img; }))); }
 function renderTplUI() {
@@ -1587,10 +1606,10 @@ $('lvX').oninput = () => editLive('dx', +$('lvX').value);
 $('lvY').oninput = () => editLive('dy', +$('lvY').value);
 $('lvW').oninput = () => editLive('w', +$('lvW').value);
 document.querySelectorAll('#lvAlign .pill').forEach(b => b.onclick = () => editLive('align', b.dataset.a));
-document.querySelectorAll('.svAlign .pill').forEach(b => b.onclick = () => { const sl = S.slides[S.sel]; if (S.layScope === 'slide' && sl) { sl.sal = b.dataset.a; delete sl.sdx; } else { S.stripAlign = b.dataset.a; S.slides.forEach(x => { delete x.sal; delete x.sdx; }); } syncLiveUI(); redrawSoon(); });
+document.querySelectorAll('.svAlign .pill').forEach(b => b.onclick = () => { const sl = S.slides[S.sel]; if (S.layScope === 'slide' && sl) { sl.sal = b.dataset.a; ppClear(sl, 's', true); } else { S.stripAlign = b.dataset.a; S.slides.forEach(x => { delete x.sal; ppClear(x, 's', true); }); } syncLiveUI(); redrawSoon(); });
 $('lvReset').onclick = () => {
   const sl = S.slides[S.sel];
-  if (S.layScope === 'slide' && sl) { delete sl.lv; delete sl.fs; delete sl.lg; } else { S.live = {}; S.deckScale = 1; S.lineGap = null; S.anchor = 'middle'; }
+  if (S.layScope === 'slide' && sl) { delete sl.lv; delete sl.fs; delete sl.lg; ppClear(sl, 'l'); } else { S.slides.forEach(x => ppClear(x, 'l')); S.live = {}; S.deckScale = 1; S.lineGap = null; S.anchor = 'middle'; }
   _deck.sig = ''; syncLiveUI(); redrawSoon();
 };
 function setStripW(v) {
@@ -1609,17 +1628,43 @@ function pickStripEdge(cx, cy) {
   const w0 = r.w;
   return { cursor: 'ew-resize', title: '拖曳可以調整字條長度', move(dx) { setStripW((w0 + (right ? dx : -dx) * 2) / W); } };
 }
-// 線上版：按住某一行左右拖，自己排錯開的位置；靠近其他行的左右緣、字條中線會自動吸附
-function pickStripLine(cx, cy) {
-  const ps = drawStrip.pos, sl = S.slides[S.sel]; if (!ps || !sl || S.view !== 'strip') return null;
-  const p = ps.find(q => cy >= q.y && cy <= q.y + q.l.h && cx >= q.x - 24 && cx <= q.x + q.l.w + 24); if (!p) return null;
-  const pi = p.l.pi, d0 = (sl.sdx && sl.sdx[pi]) || 0, x0 = p.x, others = ps.filter(q => q.l.pi !== pi), card = drawStrip.card;
-  const targets = [p.lx, p.lx + p.tw0 - p.l.w, card.x + (card.w - p.l.w) / 2];
-  others.forEach(q => targets.push(q.x, q.x + q.l.w - p.l.w));
-  return { cursor: 'ew-resize', title: '左右拖曳可以移動這一行', move(dx) {
-    let x = x0 + dx; for (const t of targets) if (Math.abs(x - t) < 14) { x = t; break; }
-    sl.sdx = Object.assign({}, sl.sdx, { [pi]: Math.round(x - p.base) }); redrawSoon();
-  } };
+// 兩種版本都一樣：按住一段文字可以單獨拖動（靠近其他段的邊緣、中線會吸附），點一下選取後可以調大小
+function paraBoxes(view) {
+  return view === 'l' ? ((S.liveGeo && S.liveGeo.rec) || []) : (drawStrip.pos || []).map(p => ({ gid: p.l.gid, x: p.x, y: p.y, w: p.l.w, h: p.l.h, lx: p.lx, tw0: p.tw0 }));
+}
+function pickPara(view, cx, cy) {
+  const sl = S.slides[S.sel]; if (!sl || S.view !== (view === 'l' ? 'live' : 'strip')) return null;
+  const boxes = paraBoxes(view), b = boxes.find(q => cy >= q.y && cy <= q.y + q.h && cx >= q.x - 24 && cx <= q.x + q.w + 24); if (!b) return null;
+  const gid = b.gid, d0 = Object.assign({ x: 0, y: 0 }, ppOf(sl, view, gid)), targets = [];
+  if (view === 's') { const card = drawStrip.card; targets.push(b.lx, b.lx + b.tw0 - b.w, card.x + (card.w - b.w) / 2); } else targets.push((W - b.w) / 2);
+  boxes.forEach(q => { if (q.gid !== gid) targets.push(q.x, q.x + q.w - b.w); });
+  return { cursor: 'move', title: '拖曳可以移動這一段；點一下可以調大小',
+    move(dx, dy) {
+      let x = b.x + dx; for (const t of targets) if (Math.abs(x - t) < 14) { x = t; break; }
+      let ny = d0.y + dy; if (Math.abs(ny) < 12) ny = 0;   // 靠近原本的高度就吸回去，方便只做左右移動
+      ppSet(sl, view, gid, { x: Math.round(d0.x + x - b.x), y: Math.round(ny) }); redrawSoon();
+    },
+    click() { selPara(view, gid); } };
+}
+let paraSel = null;
+function selPara(view, gid) { paraSel = view ? { view, gid } : null; syncParaBar(); }
+function syncParaBar() {
+  const bar = $('paraBar'), box = $('paraBox'); if (!bar) return;
+  const sl = S.slides[S.sel], v = S.view === 'live' ? 'l' : 's', bs = paraSel && sl && paraSel.view === v ? paraBoxes(v).filter(q => q.gid === paraSel.gid) : [];
+  if (!bs.length) { bar.hidden = box.hidden = true; return; }
+  const x0 = Math.min(...bs.map(q => q.x)) - 14, y0 = Math.min(...bs.map(q => q.y)) - 6, x1 = Math.max(...bs.map(q => q.x + q.w)) + 14, y1 = Math.max(...bs.map(q => q.y + q.h)) + 6;
+  const frame = $(v === 'l' ? 'frameLive' : 'frameStrip'); if (box.parentElement !== frame) { frame.appendChild(box); frame.appendChild(bar); }
+  Object.assign(box.style, { left: x0 / W * 100 + '%', top: y0 / H * 100 + '%', width: (x1 - x0) / W * 100 + '%', height: (y1 - y0) / H * 100 + '%' });
+  const below = y0 < 170; bar.classList.toggle('below', below);
+  Object.assign(bar.style, { left: Math.max(1, Math.min(70, x0 / W * 100)) + '%', top: (below ? y1 + 10 : y0 - 10) / H * 100 + '%' });
+  const d = ppOf(sl, v, paraSel.gid) || {}; $('paraK').textContent = Math.round((d.k || 1) * 100) + '%';
+  bar.hidden = box.hidden = false;
+}
+function paraScale(f) {
+  const sl = S.slides[S.sel]; if (!paraSel || !sl) return;
+  const d = ppOf(sl, paraSel.view, paraSel.gid) || {};
+  if (f === 0) ppSet(sl, paraSel.view, paraSel.gid, null); else ppSet(sl, paraSel.view, paraSel.gid, { k: Math.max(.4, Math.min(3, +((d.k || 1) * f).toFixed(3))) });
+  _deck.sig = ''; redrawSoon();
 }
 const snap4 = v => Math.round(v / 4) * 4, clampN = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 // 投影片上的圖片：拖曳移動，拉右下角縮放；文字會自動讓開
@@ -1656,18 +1701,19 @@ function attachDrag(cv, get, set, hit, pick) {
   cv.addEventListener('pointerleave', () => { if (!drag) hideGuide(); });
   const end = e => {
     if (drag && !drag.moved && Date.now() - drag.t < 600 && hit && e.type === 'pointerup') { const h = hit(...toCv(e)); if (h) toggleBreak(h.pi, h.off); }
+    if (drag && !drag.moved && e.type === 'pointerup') { if (drag.obj && drag.obj.click) drag.obj.click(); else selPara(null); }
     const was = drag && drag.moved; drag = null; cv.style.cursor = 'grab'; HIST.hold = false; if (was) save();
   };
   cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
 }
 attachDrag($('cvLive'), () => { const vv = autoVariant(S.slides[S.sel], S.sel), L = liveCfg(S.slides[S.sel], vv === 'title', vv); return { dx: L.dx, dy: L.dy }; },
-  (s, mx, my) => { editLive('dx', clampN(snap4(s.dx + mx), -900, 900)); editLive('dy', clampN(snap4(s.dy + my), -600, 600)); }, null, null);
+  (s, mx, my) => { editLive('dx', clampN(snap4(s.dx + mx), -900, 900)); editLive('dy', clampN(snap4(s.dy + my), -600, 600)); }, null, (cx, cy) => pickPara('l', cx, cy));
 attachDrag($('cvStrip'), () => ({ x: S.stripX, y: S.stripY }),
-  (s, mx, my) => { S.stripX = clampN(snap4(s.x + mx), -700, 700); S.stripY = clampN(snap4(s.y - my), 0, 700); syncOut(); redrawSoon(); }, null, (cx, cy) => pickStripEdge(cx, cy) || pickStripLine(cx, cy));
+  (s, mx, my) => { S.stripX = clampN(snap4(s.x + mx), -700, 700); S.stripY = clampN(snap4(s.y - my), 0, 700); syncOut(); redrawSoon(); }, null, (cx, cy) => pickStripEdge(cx, cy) || pickPara('s', cx, cy));
 $('stripX').oninput = () => { S.stripX = +$('stripX').value; syncOut(); redrawSoon(); };
 $('stripReset').onclick = () => {
   const sl = S.slides[S.sel];
-  if (S.layScope === 'slide' && sl) { delete sl.sfs; delete sl.slg; delete sl.sw; delete sl.sal; delete sl.sdx; } else { S.slides.forEach(x => delete x.sdx); S.stripAlign = 'auto'; S.stripX = 0; S.stripY = 64; S.stripW = .81; S.stripFixed = false; S.stripScale = 1; S.stripGap = null; $('stripY').value = 64; }
+  if (S.layScope === 'slide' && sl) { delete sl.sfs; delete sl.slg; delete sl.sw; delete sl.sal; ppClear(sl, 's'); } else { S.slides.forEach(x => ppClear(x, 's')); S.sLook = { bg: null, a: 1, r: null, pad: 46 }; S.sAuto = { num: true, ref: true }; _scCache.clear(); S.stripAlign = 'auto'; S.stripX = 0; S.stripY = 64; S.stripW = .81; S.stripFixed = false; S.stripScale = 1; S.stripGap = null; $('stripY').value = 64; }
   S.page = 0; syncOut(); redrawSoon();
 };
 document.querySelectorAll('.view').forEach(b => b.onclick = () => setView(b.dataset.v));
@@ -1704,4 +1750,28 @@ document.addEventListener('keydown', e => {
       b.onclick = () => start(v.slides, v.fileName, v.live); $('btnSample').after(b);
     }
   } catch (e) { }
+})();
+
+// ---------- 逐段工具列、字條樣式 ----------
+function syncStripLook() {
+  if (!$('stA')) return; const k = S.sLook;
+  document.querySelectorAll('#stBg .pill[data-c]').forEach(b => b.classList.toggle('sel', (k.bg || '') === b.dataset.c));
+  $('stA').value = Math.round((k.a == null ? 1 : k.a) * 100); $('stAO').textContent = $('stA').value + '%';
+  $('stR').value = k.r == null ? 10 : k.r; $('stRO').textContent = k.r == null ? '自動' : k.r;
+  $('stPad').value = k.pad || 46; $('stPadO').textContent = k.pad || 46;
+  $('saNum').checked = !!S.sAuto.num; $('saRef').checked = !!S.sAuto.ref;
+}
+(function wireCustom() {
+  if (!$('stA')) return;
+  const go = () => { _scCache.clear(); syncStripLook(); redrawSoon(); };
+  document.querySelectorAll('#stBg .pill[data-c]').forEach(b => b.onclick = () => { S.sLook.bg = b.dataset.c || null; go(); });
+  $('stBgPick').oninput = () => { S.sLook.bg = $('stBgPick').value; go(); };
+  $('stA').oninput = () => { S.sLook.a = $('stA').value / 100; go(); };
+  $('stR').oninput = () => { S.sLook.r = +$('stR').value; go(); };
+  $('stPad').oninput = () => { S.sLook.pad = +$('stPad').value; go(); };
+  $('saNum').onchange = () => { S.sAuto.num = $('saNum').checked; go(); };
+  $('saRef').onchange = () => { S.sAuto.ref = $('saRef').checked; go(); };
+  $('paraMinus').onclick = () => paraScale(1 / 1.08); $('paraPlus').onclick = () => paraScale(1.08); $('paraReset').onclick = () => paraScale(0);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && paraSel) selPara(null); });
+  syncStripLook();
 })();

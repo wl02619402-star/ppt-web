@@ -94,6 +94,13 @@ details.more summary:hover{color:var(--ink)}
 .cap{display:flex;align-items:center;gap:12px;min-height:32px;font-size:13px;color:var(--muted)}
 .cap #viewHint{flex:1}
 .capAlign{display:flex;gap:4px}
+#paraBox{position:absolute;border:1.5px dashed var(--accent);border-radius:4px;pointer-events:none}
+#paraBar{position:absolute;display:flex;gap:4px;align-items:center;padding:4px;background:var(--raise2,#22242a);border:1px solid var(--line2);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.45);z-index:6;transform:translateY(-100%);white-space:nowrap}
+#paraBar.below{transform:none}
+#paraBar[hidden],#paraBox[hidden]{display:none}
+#paraBar output{min-width:44px;text-align:center;font-size:12px;color:var(--ink2);font-variant-numeric:tabular-nums}
+.pickpill{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.pickpill input{width:18px;height:18px;padding:0;border:0;background:none}
 .capAlign[hidden]{display:none}
 .tplsteps{margin:0 0 12px;padding-left:20px;font-size:13px;line-height:1.9;color:var(--ink2)}
 .tplsteps a{color:var(--accent)}
@@ -553,7 +560,10 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
       </div>
       <div class="stage">
         <div class="cap"><span class="onair"><i class="tally" id="capTally"></i><b id="capName">現場版</b><span id="capPage"></span></span><span id="viewHint"></span><span id="capLive"></span><div class="svAlign capAlign" id="capAlign" hidden role="group" aria-label="字條對齊"><button class="pill" data-a="auto" title="標題靠左、內文往右退">錯開</button><button class="pill" data-a="left">靠左</button><button class="pill" data-a="center">置中</button></div><div class="pages" id="pages"></div></div>
-        <div class="frame" id="frameLive"><canvas id="cvLive" width="1920" height="1080"></canvas></div>
+        <div class="frame" id="frameLive"><canvas id="cvLive" width="1920" height="1080"></canvas>
+          <div id="paraBox" hidden></div>
+          <div id="paraBar" hidden role="toolbar" aria-label="這一段文字"><button class="pill" id="paraMinus" title="這一段縮小" aria-label="這一段縮小">A−</button><output id="paraK">100%</output><button class="pill" id="paraPlus" title="這一段放大" aria-label="這一段放大">A＋</button><button class="pill" id="paraReset" title="這一段的位置和大小還原">還原</button></div>
+        </div>
         <div class="frame video" id="frameStrip" hidden><canvas id="cvStrip" width="1920" height="1080"></canvas></div>
       </div>
     </div>
@@ -747,6 +757,21 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
             <div class="capnote" id="svCap" hidden></div>
             <div class="hint">按住某一行文字左右拖，可以自己排位置（會自動對齊其他行）。拖字條空白處可以移動整條，拖左右兩端可以調長度。</div>
           </div>
+          <div class="sec">
+            <h3>字條樣式</h3>
+            <div class="row" id="stBg" style="margin:0 0 8px">
+              <span class="hint" style="margin:0 4px 0 0">底色</span>
+              <button class="pill" data-c="">跟模板</button>
+              <button class="pill" data-c="#FFFFFF">白</button>
+              <button class="pill" data-c="#111214">黑</button>
+              <label class="pill pickpill" title="自己挑顏色"><input type="color" id="stBgPick" value="#E9E3D6">自選</label>
+            </div>
+            <label class="slider">不透明<input type="range" id="stA" min="20" max="100" step="5"><output id="stAO"></output></label>
+            <label class="slider">圓角<input type="range" id="stR" min="0" max="40" step="2"><output id="stRO"></output></label>
+            <label class="slider">上下留白<input type="range" id="stPad" min="20" max="90" step="2"><output id="stPadO"></output></label>
+            <label class="chk"><input type="checkbox" id="saNum"> 「1.」開頭的標題，數字放大放左邊</label>
+            <label class="chk"><input type="checkbox" id="saRef"> 經文出處接在句尾，不顯示版本代號</label>
+          </div>
           <button class="btn small" id="stripReset">還原</button>
         </div>
         <div class="legacy">
@@ -765,7 +790,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=84"></script>
+<script src="app.js?v=85"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
