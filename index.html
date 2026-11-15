@@ -689,6 +689,18 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
           <div class="hint">先在左邊點選要換的那一頁，再按「只用在這一頁」，其他頁不受影響。</div>
           <div id="slBgImg" class="subbox" hidden>
             <div class="row"><b id="slBgTitle" style="font-size:13px;font-weight:500">這一頁用自己的圖</b><button class="btn small" id="slBgRemove" style="margin-left:auto">移除這一頁的圖</button></div>
+            <div class="row" id="slBgArea" style="margin:8px 0">
+              <span class="hint" style="margin:0 4px 0 0">範圍</span>
+              <button class="pill" data-a="full">整頁</button>
+              <button class="pill" data-a="l3">左 1/3</button>
+              <button class="pill" data-a="l2">左半</button>
+              <button class="pill" data-a="r2">右半</button>
+              <button class="pill" data-a="r3">右 1/3</button>
+            </div>
+            <div class="hint" style="margin:0 0 8px">選「左 1/3」這類，圖片只佔那一塊，其餘是原本的背景，文字會自動讓開。</div>
+            <label class="slider">放大<input type="range" id="slBgZ" min="100" max="300" step="5"><output id="slBgZO"></output></label>
+            <label class="slider">左右<input type="range" id="slBgX" min="0" max="100" step="1"><output id="slBgXO"></output></label>
+            <label class="slider">上下<input type="range" id="slBgY" min="0" max="100" step="1"><output id="slBgYO"></output></label>
             <label class="slider">遮罩<input type="range" id="slBgDim" min="0" max="90" step="5"><output id="slBgDimO"></output></label>
           </div>
           <input type="file" id="slBgFile" accept="image/*" hidden>
@@ -804,7 +816,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=90"></script>
+<script src="app.js?v=91"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));

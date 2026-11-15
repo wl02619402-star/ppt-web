@@ -35,6 +35,19 @@ function drawTB(c, slide, view, T, noText, card) {
   return out;
 }
 function addTBText(sl, boxes) { const f = faceOf(false, false); boxes.forEach(b => sl.addText(b.t, { x: inch(b.x), y: inch(b.y), w: inch(b.w * 1.15 + 20), h: inch(b.h), margin: 0, valign: 'middle', align: 'left', fontSize: ptOf(b.s), bold: f.bold, fontFace: f.face, color: hexNo(b.color), wrap: false })); }
+// 這一頁自己的圖：可以取景（放大、左右、上下），也可以只佔畫面的一部分（其餘用原本的背景）
+const BAND = { l3: [0, 1 / 3], l2: [0, .5], r2: [.5, .5], r3: [2 / 3, 1 / 3] };
+function coverDraw(c, im, dx, dy, dw, dh, b) {
+  const z = (b && b.z) || 1, px = b && b.px != null ? b.px : .5, py = b && b.py != null ? b.py : .5;
+  const sc = Math.max(dw / im.width, dh / im.height) * z, sw = dw / sc, sh = dh / sc;
+  c.drawImage(im, (im.width - sw) * px, (im.height - sh) * py, sw, sh, dx, dy, dw, dh);
+}
+function bandOf(slide) { const b = slide && slide.bg; return b && b.t === 'img' && BAND[b.area] ? { b, x: BAND[b.area][0] * W, w: BAND[b.area][1] * W, left: BAND[b.area][0] === 0 } : null; }
+function drawBand(c, slide) {
+  const k = bandOf(slide); if (!k) return; const e = imgCache.get(k.b.src); if (!e) return;
+  coverDraw(c, e.im, k.x, 0, k.w, H, k.b);
+  const dim = k.b.dim == null ? 0 : k.b.dim; if (dim > 0) { c.fillStyle = `rgba(10,8,6,${dim})`; c.fillRect(k.x, 0, k.w, H); }
+}
 function tagParas(slide) { slide.paras.forEach((p, i) => { p._i = i; }); }
 const measureCtx = mk(10, 10).getContext('2d');
 const FONT = '"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif';
@@ -61,9 +74,9 @@ function slideBgTheme(bg) {
   }
   if (bg.t === 'img') {
     const e = imgCache.get(bg.src), dark = e ? e.lum < .55 : true, base = THEMES[dark ? 'dusk' : 'paper'], dim = bg.dim == null ? .45 : bg.dim;
-    return Object.assign({}, base, { name: '圖片', key: 'img:' + bg.src.length + ':' + dim + (e ? 1 : 0), flat: true, dark, ownVariants: false,
+    return Object.assign({}, base, { name: '圖片', key: 'img:' + bg.src.length + ':' + dim + (e ? 1 : 0) + ':' + [bg.z || 1, bg.px, bg.py].join(','), flat: true, dark, ownVariants: false,
       bg(c) {
-        if (e) { const im = e.im, sc = Math.max(W / im.width, H / im.height), w = im.width * sc, h = im.height * sc; c.drawImage(im, (W - w) / 2, (H - h) / 2, w, h); }
+        if (e) coverDraw(c, e.im, 0, 0, W, H, bg);
         else { c.fillStyle = '#222'; c.fillRect(0, 0, W, H); }
         c.fillStyle = dark ? `rgba(10,8,6,${dim})` : `rgba(255,255,255,${dim})`; c.fillRect(0, 0, W, H);
       } });
@@ -73,7 +86,7 @@ function slideBgTheme(bg) {
 const BLANK = { key: 'blank', name: '白底', text: '#1F1A17', red: '#C0392B', accent: '#8A8F98', dark: false, flat: true, card: { fill: '#FFFFFF', alpha: .96, radius: 10, grain: false, deco: 'none' }, bg(c) { c.fillStyle = '#FFFFFF'; c.fillRect(0, 0, W, H); } };
 const dimOf = () => S.customDim == null ? (S.customMode === 'light' ? .62 : .58) : S.customDim;
 function curTheme(slide) {
-  if (slide && slide.bg) { const t = slideBgTheme(slide.bg); if (t) return t; }
+  if (slide && slide.bg && !bandOf(slide)) { const t = slideBgTheme(slide.bg); if (t) return t; }
   if (tplOn()) return tplTheme();
   if (S._demo && THEMES[S._demo]) return Object.assign({ key: S._demo }, THEMES[S._demo]);   // 首頁範例用
   if (S.plain) {   // 還沒有模板時的素色底：乾淨的底色，不加任何裝飾
@@ -334,6 +347,7 @@ function safeOf(T, v, idx = 0) {
   return { t: Math.max(t, e.t || 0), b: Math.max(b, e.b || 0), l, r };
 }
 function picSafe(slide, sf) {
+  const bd = bandOf(slide); if (bd) { sf = Object.assign({}, sf); if (bd.left) sf.l = Math.max(sf.l, bd.w - 70); else sf.r = Math.max(sf.r, bd.w - 110); }
   const ps = (slide.pics || []).filter(p => !p.free); if (!ps.length) return sf;
   const minX = Math.min(...ps.map(p => p.x)) * W, maxX = Math.max(...ps.map(p => p.x + p.w)) * W; if (maxX - minX > .7 * W) return sf;
   const o = Object.assign({}, sf);
@@ -397,11 +411,11 @@ function liveSplit(c, slide, T, o, sf, L, sp, noText) {
 }
 function drawLive(cv, slide, idx, noText) {
   tagParas(slide);
-  if (tplOn() && !slide.bg) return drawTplSlide(cv, slide, idx, noText);
+  if (tplOn() && (!slide.bg || bandOf(slide))) return drawTplSlide(cv, slide, idx, noText);
   const v = autoVariant(slide, idx), T = slideTheme(curTheme(slide), v), c = cv.getContext('2d');
   const isTitle = v === 'title', isSpark = v === 'spark' || v === 'solid' || (v === 'spot' && isShort(slide));
   c.clearRect(0, 0, W, H);
-  c.drawImage(getBg(v, idx, slide), 0, 0);
+  c.drawImage(getBg(v, idx, slide), 0, 0); drawBand(c, slide);
   (slide.pics || []).forEach(p => {
     const e = imgCache.get(p.src); if (!e) return; const im = e.im, cr = p.crop || { l: 0, t: 0, r: 0, b: 0 };
     c.save(); if (!p.free) { c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = 26; c.shadowOffsetY = 8; }
@@ -1305,7 +1319,13 @@ function syncSlideBgUI() {
   $('bgResetRow').hidden = !(slideMode && sl && (sl.bg || sl.tplPage != null));
   $('optVary').checked = S.autoVary !== false;
   const b = sl && sl.bg; $('slBgImg').hidden = !(b && b.t === 'img'); if (typeof renderPhotos === 'function' && $('photoList')) renderPhotos();
-  if (b && b.t === 'img') { const d = Math.round((b.dim == null ? .45 : b.dim) * 100); $('slBgDim').value = d; $('slBgDimO').textContent = d + '%'; }
+  if (b && b.t === 'img') {
+    const part = !!BAND[b.area], d = Math.round((b.dim == null ? (part ? 0 : .45) : b.dim) * 100); $('slBgDim').value = d; $('slBgDimO').textContent = d + '%';
+    document.querySelectorAll('#slBgArea .pill').forEach(x => x.classList.toggle('sel', (b.area || 'full') === x.dataset.a));
+    const z = Math.round((b.z || 1) * 100), px = Math.round((b.px == null ? .5 : b.px) * 100), py = Math.round((b.py == null ? .5 : b.py) * 100);
+    $('slBgZ').value = z; $('slBgZO').textContent = z + '%'; $('slBgX').value = px; $('slBgXO').textContent = px; $('slBgY').value = py; $('slBgYO').textContent = py;
+    setTimeout(() => document.querySelectorAll('#slBgImg input[type=range]').forEach(paintRange), 0);
+  }
   markBgSel();
 }
 function setSlideBg(b) {
@@ -1341,13 +1361,20 @@ function applyColor(c) {
     const f = e.target.files[0]; e.target.value = ''; if (!f) return;
     const im = new Image();
     im.onload = async () => {
-      const c = mk(1280, 720), x = c.getContext('2d'), sc = Math.max(1280 / im.width, 720 / im.height);
-      x.drawImage(im, (1280 - im.width * sc) / 2, (720 - im.height * sc) / 2, im.width * sc, im.height * sc);
-      const src = c.toDataURL('image/jpeg', .78); await loadBgImg(src);
-      const cur = S.slides[S.sel].bg; setSlideBg({ t: 'img', src, dim: cur && cur.t === 'img' && cur.dim != null ? cur.dim : .45 });
+      // 保留整張圖（只縮小、不裁切），之後才能自己選要取哪一塊
+      const sc = Math.min(1, 1600 / Math.max(im.width, im.height)), c = mk(Math.round(im.width * sc), Math.round(im.height * sc)), x = c.getContext('2d');
+      x.drawImage(im, 0, 0, c.width, c.height);
+      const src = c.toDataURL('image/jpeg', .8); await loadBgImg(src);
+      const cur = S.slides[S.sel].bg, keep = cur && cur.t === 'img' ? cur : {};
+      setSlideBg({ t: 'img', src, dim: keep.dim != null ? keep.dim : .45, area: keep.area || 'full', z: 1, px: .5, py: .5 });
     };
     im.src = URL.createObjectURL(f);
   };
+  const bgEdit = fn => { const sl = S.slides[S.sel]; if (!sl || !sl.bg || sl.bg.t !== 'img') return; fn(sl.bg); bgCache.clear(); _scCache.clear(); _deck.sig = ''; syncSlideBgUI(); redrawSoon(); };
+  document.querySelectorAll('#slBgArea .pill').forEach(x => x.onclick = () => bgEdit(b => { const was = !!BAND[b.area]; b.area = x.dataset.a; const now = !!BAND[b.area]; if (was !== now) b.dim = now ? 0 : .45; }));
+  $('slBgZ').oninput = () => bgEdit(b => { b.z = $('slBgZ').value / 100; });
+  $('slBgX').oninput = () => bgEdit(b => { b.px = $('slBgX').value / 100; });
+  $('slBgY').oninput = () => bgEdit(b => { b.py = $('slBgY').value / 100; });
   $('slBgDim').oninput = () => { const sl = S.slides[S.sel]; if (sl.bg && sl.bg.t === 'img') { sl.bg.dim = $('slBgDim').value / 100; $('slBgDimO').textContent = $('slBgDim').value + '%'; redrawSoon(); } };
   $('optShadow').onchange = () => { S.shadow = $('optShadow').checked; redrawSoon(); };
   $('optBlocks').onchange = () => { S.blocks = $('optBlocks').checked; redrawSoon(); };
@@ -1444,7 +1471,9 @@ function tplDeckSize() {
 function drawTplSlide(cv, slide, idx, noText, dry) {
   tagParas(slide); const rec = [], ppo = ppOpts(slide, 'l');
   const c = cv.getContext('2d'), pi = tplPageIdx(idx), pg = S.tpl.pages[pi], L = liveCfg(slide, false, 'plain');
-  c.clearRect(0, 0, W, H); c.drawImage(getBg('tpl', idx, slide), 0, 0);
+  c.clearRect(0, 0, W, H); c.drawImage(getBg('tpl', idx, slide), 0, 0); drawBand(c, slide);
+  const bd = bandOf(slide), fx0 = bd && bd.left ? bd.w + 80 : 0, fx1 = bd && !bd.left ? bd.x - 80 : W;   // 圖片佔掉的那一側，文字不放
+  const clipR = r => { if (!r || !bd) return r; const a = Math.max(r.x, fx0), b2 = Math.min(r.x + r.w, fx1); return Object.assign({}, r, { x: a, w: Math.max(240, b2 - a) }); };
   (slide.pics || []).forEach(p => { const e = imgCache.get(p.src); if (!e) return; const im = e.im, cr = p.crop || { l: 0, t: 0, r: 0, b: 0 }; c.save(); if (!p.free) { c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = 26; c.shadowOffsetY = 8; } c.drawImage(im, im.width * cr.l, im.height * cr.t, im.width * (1 - cr.l - cr.r), im.height * (1 - cr.t - cr.b), p.x * W, p.y * H, p.w * W, p.h * H); c.restore(); });
   const colorFor = r => { const dark = (r ? r.lum : pg.lum) < .5; return { text: dark ? '#FFFFFF' : '#1F1A17', red: dark ? '#FFB3A0' : '#C0392B', accent: pg.accent, dark }; };
   const pad = r => r && { x: r.x + 12 + L.dx, y: r.y + 8 + L.dy, w: Math.max(200, r.w - 24), h: Math.max(80, r.h - 16), align: r.align, anchor: r.anchor, lum: r.lum };
@@ -1454,14 +1483,14 @@ function drawTplSlide(cv, slide, idx, noText, dry) {
   const grow = r => {
     let w = Math.max(r.w, W - r.x - 110), h = Math.max(r.h, H - r.y - 90);
     for (const o of occ) { if (hits(r, o)) continue; const cand = { x: r.x, y: r.y, w, h }; if (!hits(cand, o)) continue; if (o.x >= r.x + r.w - 20) w = Math.min(w, o.x - 40 - r.x); else if (o.y >= r.y + r.h - 20) h = Math.min(h, o.y - 30 - r.y); }
-    return { x: r.x, y: r.y, w: Math.max(r.w, w), h: Math.max(r.h, h), align: r.align, anchor: r.anchor, lum: r.lum };
+    return clipR({ x: r.x, y: r.y, w: Math.max(r.w, w), h: Math.max(r.h, h), align: r.align, anchor: r.anchor, lum: r.lum });
   };
   const paras = S.dashRef !== false ? stripParas(slide, true).paras : slide.paras, ps = paras.map(ptext);
   let nh = 0; while (nh < paras.length - 1 && paras[nh][0] && paras[nh][0].ps === 'h') nh++;
   const hp = paras.slice(0, Math.max(1, nh)), rest = paras.slice(Math.max(1, nh));
   const headBody = paras.length > 1 && (nh > 0 || ps[0].trim().length <= 30);
-  let tR = pad(pg.title), bR = pad(pg.body);
-  if (!tR && !bR) tR = { x: 160, y: 140, w: W - 320, h: H - 280, align: 'center', anchor: 'middle', lum: pg.lum };
+  let tR = clipR(pad(pg.title)), bR = clipR(pad(pg.body));
+  if (!tR && !bR) tR = clipR({ x: 160, y: 140, w: W - 320, h: H - 280, align: 'center', anchor: 'middle', lum: pg.lum });
   const scale = S.deckScale * (slide.fs || 1), gap = gapOf(slide), parts = [];
   const cap = dry ? 0 : tplDeckSize();
   const place = (pp, r, head, maxS, body) => {
