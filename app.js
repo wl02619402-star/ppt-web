@@ -429,7 +429,7 @@ function stripSplitLayout(slide, sp) {
 }
 function stripPages(slide) {
   if (!slide.paras.length) return { pages: [], o: stripOpts(slide), cardW: Math.round(W * S.stripW) };
-  // 先把字條變寬（最寬到畫面的 96%）、再縮字，盡量讓一段內容放在同一條；真的放不下才分成多條
+  // 先把字條變寬（最寬到畫面的 96%）、再縮字，一頁永遠只有一條字條
   const idx = S.slides.indexOf(slide), v = idx >= 0 ? autoVariant(slide, idx) : 'plain';
   if (v === 'split') { const sp = splitParts(slide.paras), r = sp && stripSplitLayout(slide, sp); if (r) return r; }
   const o = stripOpts(slide), sfs = slide.sfs || 1, pv = STRIP.padT + STRIP.padB;
@@ -444,14 +444,9 @@ function stripPages(slide) {
     return null;
   };
   for (const w of widths) { const r = attempt(w, 40); if (r) return r; }
-  const r2 = attempt(wide, 30); if (r2) return r2;
-  const tw2 = wide - STRIP.padL - STRIP.padR, lines = layout(slide.paras, 30, tw2, o), pages = []; let cur = [];
-  for (const ln of lines) {
-    if (cur.length && blockH(cur.concat([ln]), o) + pv > STRIP.maxH) { pages.push(cur); cur = []; }
-    cur.push(ln);
-  }
-  if (cur.length) pages.push(cur);
-  return { pages, o, cardW: wide };
+  // 線上版一頁只能有一張字條：再縮字也放不下，就讓字條長高，不拆成兩張
+  const r2 = attempt(wide, 24); if (r2) return r2;
+  return { pages: [layout(slide.paras, 24, wide - STRIP.padL - STRIP.padR, o)], o, cardW: wide, tall: true };
 }
 // 線上版字條：跟現場版同一套設計（同樣的紙紋／底圖、配色、裝飾），不再是另一種風格的白卡片
 const _scCache = new Map();
@@ -498,7 +493,7 @@ function stripCard(T, cw, h, v = 'plain', idx = 0, slide) {
 function drawStrip(cv, slide, page, noText) {
   const idx = Math.max(0, S.slides.indexOf(slide)), v = autoVariant(slide, idx), T0 = curTheme(slide), T = slideTheme(T0, stripLook(v) === 'solid' ? (v === 'spot' ? 'spot' : 'solid') : 'plain'), c = cv.getContext('2d');
   c.clearRect(0, 0, W, H);
-  const sp = stripPages(slide), { pages, o, split } = sp; let cardW = sp.cardW;
+  const sp = stripPages(slide), { pages, o, split } = sp; let cardW = sp.cardW; drawStrip.tall = !!sp.tall;
   drawStrip.capped = !!(pages[0] && pages[0][0] && pages[0][0].size < Math.round(46 * (S.stripScale || 1) * (slide.sfs || 1) * (pages[0][0].head ? 1.2 : 1)) - 1);
   if (!pages.length) { drawStrip.geo = { lines: [], x: 0, y: 0, o, w: 0, T }; return 0; }
   page = Math.min(page, pages.length - 1);
@@ -621,7 +616,7 @@ function renderMain() {
   $('capName').textContent = S.view === 'live' ? '現場版' : '線上版'; $('capTally').className = 'tally ' + (S.view === 'live' ? 'live' : 'rec'); $('capPage').textContent = `第 ${S.sel + 1} 頁／共 ${S.slides.length} 頁`;
   $('lvCap').hidden = !r.capped; $('lvCap').textContent = '這一頁字比較多，已經是放得下的最大字級；字級往大調不會再變大，往小調才有變化。';
   const n = drawStrip($('cvStrip'), sl, S.page);
-  $('svCap').hidden = !drawStrip.capped; $('svCap').textContent = '這一頁字比較多，字條已經是放得下的最大字級；可以拉長字條讓字變大。';
+  $('svCap').hidden = !drawStrip.capped; $('svCap').textContent = drawStrip.tall ? '這一頁字太多，字條變高、字也變小了；建議在「文字」分頁把這頁拆成兩頁。' : '這一頁字比較多，字條已經是放得下的最大字級；可以拉長字條讓字變大。';
   $('miniLive').getContext('2d').drawImage($('cvLive'), 0, 0, 320, 180); const mc = $('miniStrip').getContext('2d'); mc.clearRect(0, 0, 320, 180); mc.drawImage($('cvStrip'), 0, 0, 320, 180);
   const pg = $('pages'); pg.innerHTML = '';
   if (S.view === 'strip' && n > 1) for (let i = 0; i < n; i++) { const b = document.createElement('button'); b.className = 'pill' + (i === S.page ? ' sel' : ''); b.textContent = `第${i + 1}張`; b.onclick = () => { S.page = i; renderMain(); }; pg.appendChild(b); }
