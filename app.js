@@ -408,6 +408,7 @@ function drawLive(cv, slide, idx, noText) {
 
 // ---------- 長條版 ----------
 const STRIP = { padL: 100, padR: 140, padT: 46, padB: 46, maxH: 340 };
+const stripAlignOf = slide => (slide && slide.sal) || S.stripAlign || 'left';
 const sgapOf = slide => (slide && slide.slg) || S.stripGap || 0.96 * LN;
 function stripOpts(slide) {
   return { headRule: (pi, ps) => pi === 0 && ps.length > 1, headScale: 1.2, lineGap: sgapOf(slide), paraGap: .3 };
@@ -515,8 +516,10 @@ function drawStrip(cv, slide, page, noText) {
     drawStrip.geo = { lines, x: bx, y: ty, o, w: split.rw, T, extra };
     return 1;
   }
-  if (!noText) drawLines(c, lines, x0 + STRIP.padL, y0 + STRIP.padT, o, T);
-  drawStrip.geo = { lines, x: x0 + STRIP.padL, y: y0 + STRIP.padT, o, w: cardW - STRIP.padL - STRIP.padR, T };
+  // 對齊：靠左照原本的留白；置中就左右留白一樣，文字放在字條正中間
+  const al = stripAlignOf(slide), pl = al === 'center' ? (STRIP.padL + STRIP.padR) / 2 : STRIP.padL, tw0 = al === 'center' ? cardW - 2 * pl : cardW - STRIP.padL - STRIP.padR;
+  if (!noText) drawLines(c, lines, x0 + pl, y0 + STRIP.padT, o, T, al, tw0);
+  drawStrip.geo = { lines, x: x0 + pl, y: y0 + STRIP.padT, o, w: tw0, T, align: al };
   return pages.length;
 }
 
@@ -689,6 +692,7 @@ function syncLiveUI() {
   const ss = one ? (sl.sfs || 1) : (S.stripScale || 1), sg = one ? sgapOf(sl) : (S.stripGap || 0.96 * LN);
   $('svSize').value = Math.round(ss * 100); $('svSizeO').textContent = pct(ss);
   $('svGap').value = mul(sg); $('svGapO').textContent = mul(sg);
+  const sa = one ? stripAlignOf(sl) : (S.stripAlign || 'left'); document.querySelectorAll('#svAlign .pill').forEach(b => b.classList.toggle('sel', b.dataset.a === sa));
   $('lvReset').textContent = one ? `第 ${S.sel + 1} 頁還原成跟整份一樣` : '還原整份的預設';
   $('stripReset').textContent = one ? `第 ${S.sel + 1} 頁還原成跟整份一樣` : '還原整份的預設';
   if (!sl) return;
@@ -828,10 +832,10 @@ function renderLocalList() {
 }
 
 // ---------- 記住上次的樣式 ----------
-const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, deckScale: S.deckScale, anchor: S.anchor, stripFixed: S.stripFixed, stripGap: S.stripGap, stripScale: S.stripScale, shadow: S.shadow, blocks: S.blocks, dashRef: S.dashRef, autoVary: S.autoVary, bgAll: S.bgAll, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
+const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, deckScale: S.deckScale, anchor: S.anchor, stripFixed: S.stripFixed, stripGap: S.stripGap, stripScale: S.stripScale, stripAlign: S.stripAlign, shadow: S.shadow, blocks: S.blocks, dashRef: S.dashRef, autoVary: S.autoVary, bgAll: S.bgAll, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
 async function applyStyle(v) {
   if (!v) return;
-  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: false, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: 'middle', stripFixed: !!v.stripFixed, stripGap: v.stripGap || null, stripScale: v.stripScale || 1, shadow: false, blocks: false, dashRef: v.dashRef !== false, autoVary: v.autoVary !== false, bgAll: v.bgAll || null });
+  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: false, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: 'middle', stripFixed: !!v.stripFixed, stripGap: v.stripGap || null, stripScale: v.stripScale || 1, stripAlign: v.stripAlign || 'left', shadow: false, blocks: false, dashRef: v.dashRef !== false, autoVary: v.autoVary !== false, bgAll: v.bgAll || null });
   if (v.fonts) S.fonts = Object.assign({}, v.fonts, { scr: 'same' });
   for (const f of (v.localFonts || [])) await registerLocal(f.name, f.fam);
   $('optShadow').checked = !!S.shadow; $('optDash').checked = S.dashRef !== false; $('optBlocks').checked = !!S.blocks;
@@ -981,7 +985,7 @@ async function exportEditable() {
     for (let p = 0; p < n; p++) {
       drawStrip(cv, sd, p, true); const sg = drawStrip.geo;
       const ss = pS.addSlide(); ss.addImage({ data: await dataOf(await blobOf(cv, 'image/png')), x: 0, y: 0, w: 13.333, h: 7.5 });
-      addTextGroups(ss, sg.lines, sg.y, sg.o, sg.x, sg.w, 'left', sg.T);
+      addTextGroups(ss, sg.lines, sg.y, sg.o, sg.x, sg.w, sg.align || 'left', sg.T);
       (sg.extra || []).forEach(e => addTextGroups(ss, e.lines, e.y, e.o, e.x, e.w, 'left', e.T));
     }
   }
@@ -1410,7 +1414,7 @@ picSel.querySelector('.picdel').onclick = () => {
 // ---------- 復原／重做：每次修改（停下來 0.3 秒後）存一個版本，最多 60 步 ----------
 const HIST = { undo: [], redo: [], cur: null, sig: '', busy: false };
 function stateSnap() {
-  return { slides: structuredClone(S.slides), live: structuredClone(S.live), deckScale: S.deckScale, lineGap: S.lineGap, stripScale: S.stripScale, stripGap: S.stripGap, stripW: S.stripW, stripFixed: S.stripFixed, stripX: S.stripX, stripY: S.stripY, fonts: structuredClone(S.fonts), dashRef: S.dashRef, tplUse: S.tpl ? S.tpl.pages.map(p => p.use) : null };
+  return { slides: structuredClone(S.slides), live: structuredClone(S.live), deckScale: S.deckScale, lineGap: S.lineGap, stripScale: S.stripScale, stripGap: S.stripGap, stripW: S.stripW, stripFixed: S.stripFixed, stripX: S.stripX, stripY: S.stripY, stripAlign: S.stripAlign, fonts: structuredClone(S.fonts), dashRef: S.dashRef, tplUse: S.tpl ? S.tpl.pages.map(p => p.use) : null };
 }
 const snapSig = st => JSON.stringify(st, (k, v) => k.startsWith('_') ? undefined : k === 'src' && typeof v === 'string' ? v.length : v);   // _開頭是畫面暫存，不算修改
 function histReset() { HIST.undo = []; HIST.redo = []; HIST.cur = stateSnap(); HIST.sig = snapSig(HIST.cur); syncUndoUI(); }
@@ -1423,7 +1427,7 @@ function histCommit() {
 function histApply(st) {
   HIST.busy = true;
   S.slides = structuredClone(st.slides); S.live = structuredClone(st.live); S.fonts = structuredClone(st.fonts);
-  ['deckScale', 'lineGap', 'stripScale', 'stripGap', 'stripW', 'stripFixed', 'stripX', 'stripY', 'dashRef'].forEach(k => S[k] = st[k]);
+  ['deckScale', 'lineGap', 'stripScale', 'stripGap', 'stripW', 'stripFixed', 'stripX', 'stripY', 'stripAlign', 'dashRef'].forEach(k => S[k] = st[k]);
   if (S.tpl && st.tplUse && st.tplUse.length === S.tpl.pages.length) S.tpl.pages.forEach((p, i) => p.use = st.tplUse[i]);
   HIST.cur = st; HIST.sig = snapSig(st);
   bgCache.clear(); _scCache.clear(); _deck.sig = ''; if (typeof _tplPlan !== 'undefined') _tplPlan.sig = ''; wcache.clear();
@@ -1478,6 +1482,7 @@ $('lvX').oninput = () => editLive('dx', +$('lvX').value);
 $('lvY').oninput = () => editLive('dy', +$('lvY').value);
 $('lvW').oninput = () => editLive('w', +$('lvW').value);
 document.querySelectorAll('#lvAlign .pill').forEach(b => b.onclick = () => editLive('align', b.dataset.a));
+document.querySelectorAll('#svAlign .pill').forEach(b => b.onclick = () => { const sl = S.slides[S.sel]; if (S.layScope === 'slide' && sl) sl.sal = b.dataset.a; else S.stripAlign = b.dataset.a; syncLiveUI(); redrawSoon(); });
 $('lvReset').onclick = () => {
   const sl = S.slides[S.sel];
   if (S.layScope === 'slide' && sl) { delete sl.lv; delete sl.fs; delete sl.lg; } else { S.live = {}; S.deckScale = 1; S.lineGap = null; S.anchor = 'middle'; }
@@ -1545,7 +1550,7 @@ attachDrag($('cvStrip'), () => ({ x: S.stripX, y: S.stripY }),
 $('stripX').oninput = () => { S.stripX = +$('stripX').value; syncOut(); redrawSoon(); };
 $('stripReset').onclick = () => {
   const sl = S.slides[S.sel];
-  if (S.layScope === 'slide' && sl) { delete sl.sfs; delete sl.slg; delete sl.sw; } else { S.stripX = 0; S.stripY = 64; S.stripW = .81; S.stripFixed = false; S.stripScale = 1; S.stripGap = null; $('stripY').value = 64; }
+  if (S.layScope === 'slide' && sl) { delete sl.sfs; delete sl.slg; delete sl.sw; delete sl.sal; } else { S.stripAlign = 'left'; S.stripX = 0; S.stripY = 64; S.stripW = .81; S.stripFixed = false; S.stripScale = 1; S.stripGap = null; $('stripY').value = 64; }
   S.page = 0; syncOut(); redrawSoon();
 };
 document.querySelectorAll('.view').forEach(b => b.onclick = () => setView(b.dataset.v));

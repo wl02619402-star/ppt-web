@@ -723,6 +723,11 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
             <label class="slider">字級<input type="range" id="svSize" min="60" max="140" step="5"><output id="svSizeO"></output></label>
             <label class="slider">行距<input type="range" id="svGap" min="0.8" max="1.5" step="0.05"><output id="svGapO"></output></label>
             <label class="slider">長度<input type="range" id="stripW" min="30" max="98" step="1"><output id="stripWO"></output></label>
+            <div class="row" id="svAlign" style="margin:8px 0 0">
+              <span class="hint" style="margin:0 4px 0 0">對齊</span>
+              <button class="pill" data-a="left">靠左</button>
+              <button class="pill" data-a="center">置中</button>
+            </div>
             <div class="capnote" id="svCap" hidden></div>
             <div class="hint">要移動字條，直接在畫面上拖曳；拖字條左右兩端可以調長度。字條的位置每一頁共用。</div>
           </div>
@@ -744,7 +749,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=71"></script>
+<script src="app.js?v=72"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
