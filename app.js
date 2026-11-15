@@ -441,8 +441,8 @@ function stripSplitLayout(slide, sp) {
   return null;
 }
 // 字條高度：扣掉第一行上方、最後一行下方的行距空白，上下留白看起來才一樣
-const stripTrim = lines => lines.length ? [(lines[0].h - lines[0].size) / 2, (lines[lines.length - 1].h - lines[lines.length - 1].size) / 2] : [0, 0];
-const stripH = (lines, o) => { const [a, b] = stripTrim(lines); return blockH(lines, o) - a - b + STRIP.padT + STRIP.padB; };
+const stripTrim = (lines, slide) => lines.length && !(slide && curTheme(slide).P) ? [(lines[0].h - lines[0].size) / 2, (lines[lines.length - 1].h - lines[lines.length - 1].size) / 2] : [0, 0];
+const stripH = (lines, o, slide) => { const [a, b] = stripTrim(lines, slide); return blockH(lines, o) - a - b + STRIP.padT + STRIP.padB; };
 function stripPages(slide) {
   if (!slide.paras.length) return { pages: [], o: stripOpts(slide), cardW: Math.round(W * S.stripW) };
   // 先把字條變寬（最寬到畫面的 96%）、再縮字，一頁永遠只有一條字條
@@ -455,7 +455,7 @@ function stripPages(slide) {
     const tw_ = cardW - STRIP.padL - STRIP.padR;
     for (let size = Math.round(STRIP.base * (S.stripScale || 1) * sfs); size >= minSize; size -= 2) {
       const lines = layout(slide.paras, size, tw_, o);
-      if (stripH(lines, o) <= STRIP.maxH) return { pages: [lines], o, cardW };
+      if (stripH(lines, o, slide) <= STRIP.maxH) return { pages: [lines], o, cardW };
     }
     return null;
   };
@@ -516,7 +516,7 @@ function drawStrip(cv, slide, page, noText) {
   page = Math.min(page, pages.length - 1);
   const lines = pages[page], lastL = lines[lines.length - 1];
   // 上下留白看起來一樣：扣掉第一行上方、最後一行下方的行距空白
-  const [trimT, trimB] = split ? [0, 0] : stripTrim(lines);
+  const [trimT, trimB] = split ? [0, 0] : stripTrim(lines, slide);
   const h = Math.round((split ? Math.max(split.bh, split.lh) : blockH(lines, o)) - trimT - trimB + STRIP.padT + STRIP.padB);
   // 字條寬度貼合內容：短的字條就短，不再每條都一樣長
   // 錯開：一行標題＋一兩行內文時，標題靠左、內文往右退，兩行斜斜錯開，像在說話的停頓
@@ -545,7 +545,7 @@ function drawStrip(cv, slide, page, noText) {
   }
   const lx = x0 + STRIP.padL, ty = y0 + STRIP.padT - trimT, tw0 = cardW - STRIP.padL - STRIP.padR;
   // 每一行的位置：錯開（標題靠左、內文整塊靠右、出處靠右）／置中／靠左，再加上使用者自己拖的位移
-  const isRef = l => { const t = plain(l.segs); return t.length <= 24 && /^——|^\s*[（(]?[^\s，。]{0,8}\d+\s*[:：]\s*\d/.test(t); };
+  const isRef = l => { const t = plain(l.segs); return t.length <= 28 && /^——|^\s*[（(]?[^\s，。「」]{0,8}\s?\d+\s*[:：]\s*\d/.test(t); };
   const sdx = slide.sdx || {}, pos = []; let yy = ty;
   lines.forEach((l, i) => {
     let x = lx;

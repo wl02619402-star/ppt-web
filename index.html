@@ -521,7 +521,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
           <li><b>選模板</b><span>到 <a href="https://slidesgo.com/" target="_blank" rel="noopener">Slidesgo</a> 下載 PowerPoint 格式的模板，進去後上傳</span><span id="tplNow"></span><button class="btn" id="btnPickTpl" hidden>上傳模板</button></li>
           <li><b>匯出</b><span>按右上角「匯出 pptx」，下載現場版、線上版兩個檔案</span></li>
         </ol>
-        <p class="drag">也可以把 .pptx 直接拖進這個視窗</p>
+        <p class="drag">也可以把 pptx 或 txt 直接拖進這個視窗</p>
         <label class="check legacy"><input type="checkbox" id="autoExport"> 上傳後直接匯出給 ProPresenter</label>
         <div class="styleNote legacy" id="styleNote" hidden><span id="styleNoteT"></span> <button class="link" id="styleClear">清除</button></div>
         <p class="fine">檔案只在你的瀏覽器裡處理，不會傳到任何地方</p>
@@ -750,7 +750,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=80"></script>
+<script src="app.js?v=81"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
