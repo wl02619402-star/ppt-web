@@ -670,6 +670,143 @@ async function shrinkImg(src, mime) {
   const sc = Math.min(1, 1600 / m), c = mk(Math.round(im.width * sc), Math.round(im.height * sc)); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
   return mime === 'image/png' ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', .85);
 }
+// 把一頁上的文字框（位置＋段落）排成閱讀順序的段落；pptx 和 Keynote 共用
+function arrangeItems(items) {
+  // 閱讀順序：同一列（上下範圍重疊）的框由左到右，不同列由上到下
+  items.sort((a, b) => (a.y - b.y) || (a.x - b.x) || (a.order - b.order));
+  const rows = [];
+  items.forEach(it => { const r = rows.find(rw => Math.min(rw.y1, it.y + it.h) - Math.max(rw.y0, it.y) >= Math.min(rw.y1 - rw.y0, Math.max(1, it.h)) * .5); if (r) { r.its.push(it); r.y1 = Math.max(r.y1, it.y + it.h); } else rows.push({ y0: it.y, y1: it.y + Math.max(1, it.h), its: [it] }); });
+  const NUMP = /^[0-9０-９]{1,2}\s*[.．、:：)）]?$/, ptx = p => p.map(r => r.t).join(''), isNumBox = it => it.paras.every(p => NUMP.test(ptx(p).trim()));
+  // 同一列裡，只有編號的框排在最前面（編號框常常和標題框疊在一起、起點一樣）
+  items.length = 0; rows.forEach((r, ri) => { r.its.forEach(it => it.row = ri); items.push(...r.its.sort((a, b) => (isNumBox(b) - isNumBox(a)) || (a.x - b.x))); });
+  for (let k = 0; k < items.length - 1; k++) {
+    const a = items[k]; if (!isNumBox(a) || items[k + 1].row !== a.row) continue;
+    const nx = items[k + 1], nums = a.paras.map(p => ptx(p).trim());
+    if (nums.length === 1) { nx.paras[0] = [{ t: nums[0] + ' ', red: false }].concat(nx.paras[0]); items.splice(k, 1); k--; continue; }   // 「2.」接到右邊標題前面：「2. 真理：…」
+    // 一欄「1. 2. 3.」：右邊剛好有同樣多行時，一行配一個編號
+    // 開頭空兩格以上的段落是上一行的延續（手動縮排），不算新的一行
+    const cont = p => /^[ \u3000]{2,}/.test(ptx(p)), lines = nx.paras.reduce((n, p) => n + (cont(p) ? 0 : 1) + (ptx(p).replace(/↵+$/, '').match(/↵/g) || []).length, 0);
+    if (lines !== nums.length) continue;
+    let i = 0;
+    nx.paras = nx.paras.map(p => { const out = p.map(r => Object.assign({}, r)); if (cont(p)) { out[0].t = out[0].t.replace(/^[ \u3000]+/, ''); return out; } out[0].t = nums[i++] + ' ' + out[0].t; const tot = ptx(p).replace(/↵+$/, '').length; let pos = 0; out.forEach(r => { r.t = [...r.t].map(ch => { pos += ch.length; return ch === '↵' && pos < tot ? '↵' + (nums[i++] || '') + ' ' : ch; }).join(''); }); return out; });
+    items.splice(k, 1); k--;
+  }
+  // 一句話被拆到下一個框（上一句以「，、：」結尾、緊接在下面、不是新的條列）：接回同一段，保留換行
+  for (let k = 1; k < items.length; k++) {
+    const a = items[k - 1], b = items[k], lp = a.paras[a.paras.length - 1], t = ptx(b.paras[0]).trim();
+    if (b.paras.length === 1 && /[，、：；,]\s*$/.test(ptx(lp)) && !/^[▻►▶•・●○■□◆◇\-–—*0-9０-９]/.test(t) && b.y >= a.y && b.y - (a.y + a.h) < a.h * .6 && t.length <= 30) {
+      lp.push({ t: '↵', red: false }, ...b.paras[0]); items.splice(k, 1); k--;
+    }
+  }
+  // 標題框分好幾段短句（「2. 真理：」「是非對錯認定的信念」）：合成同一個標題，用換行分開
+  const t0 = items[0];
+  if (t0 && items.length > 1 && t0.paras.length > 1 && t0.paras.length <= 3 && t0.paras.every(p => ptx(p).replace(/↵/g, '').trim().length <= 20)) t0.paras = [t0.paras.reduce((acc, p, i) => i ? acc.concat([{ t: '↵', red: false }], p) : p.slice(), [])];
+  return items.flatMap(i => i.paras);
+}
+// ---------- 直接讀 Keynote（.key）----------
+// .key 是 zip，裡面 Index/*.iwa 是 Snappy 壓縮的 protobuf。只讀需要的：頁順序、文字框位置、文字、字色
+function snappyRaw(b) {
+  let i = 0, n = 0, sh = 0; for (;;) { const c = b[i++]; n |= (c & 0x7f) << sh; sh += 7; if (c < 0x80) break; }
+  const out = new Uint8Array(n); let o = 0;
+  while (i < b.length) {
+    const t = b[i++], k = t & 3;
+    if (k === 0) { let L = t >> 2; if (L >= 60) { const nb = L - 59; L = 0; for (let j = 0; j < nb; j++) L |= b[i + j] << (8 * j); i += nb; } L += 1; out.set(b.subarray(i, i + L), o); o += L; i += L; }
+    else { let L, off; if (k === 1) { L = ((t >> 2) & 7) + 4; off = ((t >> 5) << 8) | b[i++]; } else if (k === 2) { L = (t >> 2) + 1; off = b[i] | (b[i + 1] << 8); i += 2; } else { L = (t >> 2) + 1; off = (b[i] | (b[i + 1] << 8) | (b[i + 2] << 16) | (b[i + 3] << 24)) >>> 0; i += 4; }
+      for (let j = 0; j < L; j++) { out[o] = out[o - off]; o++; } }
+  }
+  return out;
+}
+function iwaDecode(d) {
+  const parts = []; let i = 0, total = 0;
+  while (i + 4 <= d.length) { const L = d[i + 1] | (d[i + 2] << 8) | (d[i + 3] << 16); const p = snappyRaw(d.subarray(i + 4, i + 4 + L)); parts.push(p); total += p.length; i += 4 + L; }
+  const out = new Uint8Array(total); let o = 0; parts.forEach(p => { out.set(p, o); o += p.length; }); return out;
+}
+function pbVarint(b, i) { let n = 0, m = 1; for (;;) { const c = b[i++]; n += (c & 0x7f) * m; m *= 128; if (c < 0x80) return [n, i]; } }
+function pbFields(b) {
+  const out = []; let i = 0;
+  while (i < b.length) {
+    let k; [k, i] = pbVarint(b, i); const f = Math.floor(k / 8), w = k & 7; let v;
+    if (w === 0) [v, i] = pbVarint(b, i);
+    else if (w === 1) { v = b.subarray(i, i + 8); i += 8; }
+    else if (w === 2) { let L; [L, i] = pbVarint(b, i); v = b.subarray(i, i + L); i += L; }
+    else if (w === 5) { v = new DataView(b.buffer, b.byteOffset + i, 4).getFloat32(0, true); i += 4; }
+    else throw new Error('pb wire ' + w);
+    out.push({ f, w, v });
+  }
+  return out;
+}
+const pbGet = (b, ...path) => { for (const k of path) { if (!b) return null; const h = pbFields(b).find(x => x.f === k); b = h ? h.v : null; } return b; };
+const pbAll = (b, k) => b ? pbFields(b).filter(x => x.f === k).map(x => x.v) : [];
+const pbRef = b => { if (!b || !b.length) return null; try { const fs = pbFields(b); return fs.length === 1 && fs[0].f === 1 && fs[0].w === 0 ? fs[0].v : null; } catch (e) { return null; } };
+function iwaObjects(d, into) {
+  let i = 0;
+  while (i < d.length) {
+    let L; [L, i] = pbVarint(d, i); const info = pbFields(d.subarray(i, i + L)); i += L;
+    const id = (info.find(x => x.f === 1) || {}).v;
+    info.filter(x => x.f === 2).forEach(x => { const mi = pbFields(x.v), t = (mi.find(y => y.f === 1) || {}).v, ln = (mi.find(y => y.f === 3) || {}).v || 0; if (!into.has(id)) into.set(id, { t, p: d.subarray(i, i + ln) }); i += ln; });
+  }
+}
+async function parseKey(buf) {
+  const zip = await JSZip.loadAsync(buf), O = new Map();
+  const files = Object.keys(zip.files).filter(n => /^Index\/.*\.iwa$/.test(n) && !/TemplateSlide/.test(n));
+  if (!files.length) throw new Error('not keynote');
+  for (const n of files) { try { iwaObjects(iwaDecode(await zip.file(n).async('uint8array')), O); } catch (e) { console.warn('略過', n, e); } }
+  const ofType = t => [...O].filter(([, o]) => o.t === t);
+  // 頁順序：簡報（type 2）的 slide tree 依序列出每一頁的節點（type 4），節點裡指到那一頁（type 5）
+  const findRefs = (b, want, depth = 0, out = []) => { let fs; try { fs = pbFields(b); } catch (e) { return out; } fs.forEach(x => { if (x.w !== 2) return; const r = pbRef(x.v); if (r != null && want(r)) out.push(r); else if (r == null && depth < 4) findRefs(x.v, want, depth + 1, out); }); return out; };
+  const isT = t => r => O.has(r) && O.get(r).t === t;
+  let order = [];
+  for (const [, o] of ofType(2)) { const nodes = findRefs(o.p, isT(4)); if (nodes.length > order.length) order = nodes; }
+  let slideIds = order.map(n => findRefs(O.get(n).p, isT(5))[0]).filter(x => x != null);
+  if (!slideIds.length) slideIds = ofType(5).map(([id]) => id);
+  // 字色：字元樣式（type 2021）的 11 → 7 是 RGB
+  const colorOf = sid => { const o = O.get(sid); if (!o) return null; const c = pbGet(o.p, 11, 7); if (!c) return null; const fs = pbFields(c), g = k => (fs.find(x => x.f === k) || {}).v; const r = g(3), gg = g(4), bb = g(5); if (r == null) return null; const h = v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0'); return '#' + h(r) + h(gg) + h(bb); };
+  const textOf = sidRef => {
+    const o = O.get(sidRef); if (!o || o.t !== 2001) return null;
+    const txt = new TextDecoder().decode(pbGet(o.p, 3) || new Uint8Array());
+    const tbl = pbAll(pbGet(o.p, 8), 1).map(e => ({ raw: pbFields(e) })).map(e => ({ at: (e.raw.find(x => x.f === 1) || { v: 0 }).v, col: colorOf(pbRef((e.raw.find(x => x.f === 2) || {}).v)) }));
+    return { txt, tbl };
+  };
+  const geom = d => { const g = pbGet(d, 1), pos = g && pbGet(g, 1), sz = g && pbGet(g, 2), f = (b, k) => b ? ((pbFields(b).find(x => x.f === k) || {}).v || 0) : 0; return { x: f(pos, 1), y: f(pos, 2), w: f(sz, 1), h: f(sz, 2) }; };
+  const slides = [], perSlide = [], cnt = {};
+  for (const sid of slideIds) {
+    const so = O.get(sid); if (!so) continue;
+    const boxes = []; perSlide.push(boxes);
+    const visit = (ref, dx, dy, depth) => {
+      const o = O.get(ref); if (!o || depth > 6) return;
+      if (o.t === 3008) { const d = pbGet(o.p, 1), g = geom(d); pbAll(o.p, 2).forEach(c => visit(pbRef(c), dx + g.x, dy + g.y, depth + 1)); return; }
+      let shp = o.t === 2011 ? o.p : o.t === 7 ? pbGet(o.p, 1) : null; if (!shp) return;
+      const d = pbGet(shp, 1, 1), g = d ? geom(d) : { x: 0, y: 0, w: 0, h: 0 }, st = textOf(pbRef(pbGet(shp, 2))); if (!st) return;
+      if (!g.h) { const ps = pbGet(shp, 1, 3, 4, 3) || pbGet(shp, 1, 3, 5, 2); if (ps) { const fs = pbFields(ps); g.h = (fs.find(x => x.f === 2) || {}).v || 0; } }
+      boxes.push(Object.assign(st, { x: dx + g.x, y: dy + g.y, h: g.h || 60 * (st.txt.split('\n').length) }));
+    };
+    pbAll(so.p, 7).forEach(r => visit(pbRef(r), 0, 0, 0));
+    boxes.forEach(b => b.tbl.forEach((e, k) => { const end = k + 1 < b.tbl.length ? b.tbl[k + 1].at : b.txt.length; if (e.col) cnt[e.col] = (cnt[e.col] || 0) + (end - e.at); }));
+  }
+  // 整份簡報最多字用的顏色＝一般字色；跟它差很多的顏色＝強調色
+  const main = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0];
+  for (const boxes of perSlide) {
+    const dist = (a, b) => { const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)); const x = p(a), y = p(b); return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]); };
+    const items = [];
+    boxes.forEach((b, order) => {
+      const colAt = i => { let c = null; for (const e of b.tbl) { if (e.at <= i) c = e.col; else break; } return c; };
+      const paras = []; let runs = [], i = 0;
+      const push = (t, c) => { const red = !!(c && main && dist(c, main) > 60), cc = red ? c.toUpperCase() : undefined, last = runs[runs.length - 1]; if (last && last.red === red && last.c === cc) last.t += t; else runs.push(cc ? { t, red, c: cc } : { t, red }); };
+      for (const ch of b.txt) {
+        if (ch === '\n') { if (runs.map(r => r.t).join('').replace(/↵/g, '').trim()) paras.push(runs); runs = []; }
+        else if (ch === '\u2028') push('↵', null);
+        else if (ch !== '\ufffc') push(ch, colAt(i));
+        i += ch.length;
+      }
+      if (runs.map(r => r.t).join('').replace(/↵/g, '').trim()) paras.push(runs);
+      paras.forEach(p => { while (p.length && /↵$/.test(p[p.length - 1].t)) { const l = p[p.length - 1]; l.t = l.t.replace(/↵+$/, ''); if (!l.t) p.pop(); } });
+      if (paras.length) items.push({ x: b.x, y: b.y, h: b.h, order, paras });
+    });
+    const paras = arrangeItems(items);
+    if (paras.length) slides.push({ paras, fs: 1, sfs: 1 });
+  }
+  return slides;
+}
 async function phPositions(zip, dp, layoutT) {
   const look = [], read = async path => { const f = zip.file(path); return f ? dp.parseFromString(await f.async('string'), 'text/xml') : null; };
   const relOf = async path => { const f = zip.file(path.replace(/([^/]+)$/, '_rels/$1.rels')); if (!f) return {}; const m = {}; [...dp.parseFromString(await f.async('string'), 'text/xml').getElementsByTagName('Relationship')].forEach(r => m[r.getAttribute('Type').split('/').pop()] = r.getAttribute('Target')); return m; };
@@ -745,36 +882,7 @@ async function parsePptx(buf) {
       });
       if (paras.length) items.push({ y, x, h, order, paras });
     });
-    // 閱讀順序：同一列（上下範圍重疊）的框由左到右，不同列由上到下
-    items.sort((a, b) => (a.y - b.y) || (a.x - b.x) || (a.order - b.order));
-    const rows = [];
-    items.forEach(it => { const r = rows.find(rw => Math.min(rw.y1, it.y + it.h) - Math.max(rw.y0, it.y) >= Math.min(rw.y1 - rw.y0, Math.max(1, it.h)) * .5); if (r) { r.its.push(it); r.y1 = Math.max(r.y1, it.y + it.h); } else rows.push({ y0: it.y, y1: it.y + Math.max(1, it.h), its: [it] }); });
-    const NUMP = /^[0-9０-９]{1,2}\s*[.．、:：)）]?$/, ptx = p => p.map(r => r.t).join(''), isNumBox = it => it.paras.every(p => NUMP.test(ptx(p).trim()));
-    // 同一列裡，只有編號的框排在最前面（編號框常常和標題框疊在一起、起點一樣）
-    items.length = 0; rows.forEach((r, ri) => { r.its.forEach(it => it.row = ri); items.push(...r.its.sort((a, b) => (isNumBox(b) - isNumBox(a)) || (a.x - b.x))); });
-    for (let k = 0; k < items.length - 1; k++) {
-      const a = items[k]; if (!isNumBox(a) || items[k + 1].row !== a.row) continue;
-      const nx = items[k + 1], nums = a.paras.map(p => ptx(p).trim());
-      if (nums.length === 1) { nx.paras[0] = [{ t: nums[0] + ' ', red: false }].concat(nx.paras[0]); items.splice(k, 1); k--; continue; }   // 「2.」接到右邊標題前面：「2. 真理：…」
-      // 一欄「1. 2. 3.」：右邊剛好有同樣多行時，一行配一個編號
-      // 開頭空兩格以上的段落是上一行的延續（手動縮排），不算新的一行
-      const cont = p => /^[ \u3000]{2,}/.test(ptx(p)), lines = nx.paras.reduce((n, p) => n + (cont(p) ? 0 : 1) + (ptx(p).replace(/↵+$/, '').match(/↵/g) || []).length, 0);
-      if (lines !== nums.length) continue;
-      let i = 0;
-      nx.paras = nx.paras.map(p => { const out = p.map(r => Object.assign({}, r)); if (cont(p)) { out[0].t = out[0].t.replace(/^[ \u3000]+/, ''); return out; } out[0].t = nums[i++] + ' ' + out[0].t; out.forEach(r => { r.t = r.t.replace(/↵(?!$)/g, () => '↵' + (nums[i++] || '') + ' '); }); return out; });
-      items.splice(k, 1); k--;
-    }
-    // 一句話被拆到下一個框（上一句以「，、：」結尾、緊接在下面、不是新的條列）：接回同一段，保留換行
-    for (let k = 1; k < items.length; k++) {
-      const a = items[k - 1], b = items[k], lp = a.paras[a.paras.length - 1], t = ptx(b.paras[0]).trim();
-      if (b.paras.length === 1 && /[，、：；,]\s*$/.test(ptx(lp)) && !/^[▻►▶•・●○■□◆◇\-–—*0-9０-９]/.test(t) && b.y >= a.y && b.y - (a.y + a.h) < a.h * .6 && t.length <= 30) {
-        lp.push({ t: '↵', red: false }, ...b.paras[0]); items.splice(k, 1); k--;
-      }
-    }
-    // 標題框分好幾段短句（「2. 真理：」「是非對錯認定的信念」）：合成同一個標題，用換行分開
-    const t0 = items[0];
-    if (t0 && items.length > 1 && t0.paras.length > 1 && t0.paras.length <= 3 && t0.paras.every(p => ptx(p).replace(/↵/g, '').trim().length <= 20)) t0.paras = [t0.paras.reduce((acc, p, i) => i ? acc.concat([{ t: '↵', red: false }], p) : p.slice(), [])];
-    const paras = items.flatMap(i => i.paras);
+    const paras = arrangeItems(items);
     const hasPic = doc.getElementsByTagName('p:pic').length > 0;
     if (paras.length || pics.length) { const sd = { paras, fs: 1, sfs: 1, hasPic }; if (pics.length) sd.pics = pics; if (!paras.length) sd.bg = { t: 'color', c: '#F4EFE6' }; slides.push(sd); }
   }
@@ -1063,7 +1171,7 @@ function redrawSoon() { clearTimeout(redrawT); redrawT = setTimeout(renderMain, 
 
 // ---------- 載入 ----------
 async function start(slides, name, live) {
-  S.slides = slides; S.live = live || {}; S.sel = 0; S.page = 0; S.fileName = name.replace(/\.(pptx|txt)$/i, '');
+  S.slides = slides; S.live = live || {}; S.sel = 0; S.page = 0; S.fileName = name.replace(/\.(pptx|txt|key)$/i, '');
   $('drop').hidden = true; $('editor').hidden = false; $('viewHint').textContent = VIEW_HINT[S.view]; $('sideEmpty').hidden = true; $('sideBody').hidden = false; document.body.classList.remove('empty');
   await Promise.all(slides.flatMap(x => [].concat(x.bg && x.bg.t === 'img' ? [x.bg.src] : [], (x.pics || []).concat(x.spics || []).map(p => p.src))).map(loadBgImg));
   await ensureFonts(); bgCache.clear(); buildCats(); buildThemes(); buildList(); select(0); save(); histReset();
@@ -1076,9 +1184,8 @@ function parseTxt(buf) {
   return s.split(/\n[ \t]*\n+/).map(b => b.trim()).filter(Boolean).map(b => ({ paras: strToParas(b), fs: 1, sfs: 1 }));
 }
 async function loadFile(f) {
-  if (/\.key$/i.test(f.name)) { toast('這是 Keynote 檔：請在 Keynote 選「檔案 → 輸出至 → PowerPoint」，再上傳輸出的 pptx'); return; }
-  try { const isTxt = /\.txt$/i.test(f.name) || f.type === 'text/plain'; const buf = await f.arrayBuffer(); const slides = isTxt ? parseTxt(buf) : await parsePptx(buf); if (!slides.length) throw new Error('empty'); await start(slides, f.name); toast(`已讀入 ${slides.length} 頁`); if (S.autoExport) await exportByFormat().catch(e => { console.error(e); $('prog').style.display = 'none'; toast('匯出失敗：' + e.message); }); }
-  catch (e) { console.error(e); toast('讀不到這個檔案，請確認是 .pptx 或 .txt'); }
+  try { const isTxt = /\.txt$/i.test(f.name) || f.type === 'text/plain', isKey = /\.key$/i.test(f.name); const buf = await f.arrayBuffer(); const slides = isTxt ? parseTxt(buf) : isKey ? await parseKey(buf) : await parsePptx(buf); if (!slides.length) throw new Error('empty'); await start(slides, f.name); toast(`已讀入 ${slides.length} 頁`); if (S.autoExport) await exportByFormat().catch(e => { console.error(e); $('prog').style.display = 'none'; toast('匯出失敗：' + e.message); }); }
+  catch (e) { console.error(e); toast(/\.key$/i.test(f.name) ? '讀不到這個 Keynote 檔；可以在 Keynote 選「檔案 → 輸出至 → PowerPoint」再上傳' : '讀不到這個檔案，請確認是 .pptx、.key 或 .txt'); }
 }
 const SAMPLE = [
   [['耶穌是道路、真理和生命'], ['約14:6-7'], ['栗育仁  牧師']],
