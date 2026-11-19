@@ -716,7 +716,14 @@ async function parsePptx(buf) {
       const tb = sp.getElementsByTagName('p:txBody')[0]; if (!tb) return;
       const xf = sp.getElementsByTagName('a:xfrm')[0], off = xf && xf.getElementsByTagName('a:off')[0], ex = xf && xf.getElementsByTagName('a:ext')[0];
       const ph = sp.getElementsByTagName('p:ph')[0], pp = !off && ph ? phPos(ph) : null;
-      const y = off ? +off.getAttribute('y') : pp ? pp.y : -1, x = off ? +off.getAttribute('x') : pp ? pp.x : 0, h = ex ? +ex.getAttribute('cy') : pp ? pp.h : 0;
+      let y = off ? +off.getAttribute('y') : pp ? pp.y : -1, x = off ? +off.getAttribute('x') : pp ? pp.x : 0, h = ex ? +ex.getAttribute('cy') : pp ? pp.h : 0;
+      // 群組裡的文字框用的是群組自己的座標，要換算回投影片上的位置（Keynote 匯出常有）
+      for (let g = sp.parentNode; g && g.nodeName === 'p:grpSp'; g = g.parentNode) {
+        const gx = [...g.childNodes].find(n => n.nodeName === 'p:grpSpPr'), gf = gx && gx.getElementsByTagName('a:xfrm')[0]; if (!gf) continue;
+        const v = (tag, a) => { const e = gf.getElementsByTagName(tag)[0]; return e ? +e.getAttribute(a) : 0; };
+        const sx = v('a:chExt', 'cx') ? v('a:ext', 'cx') / v('a:chExt', 'cx') : 1, sy = v('a:chExt', 'cy') ? v('a:ext', 'cy') / v('a:chExt', 'cy') : 1;
+        x = v('a:off', 'x') + (x - v('a:chOff', 'x')) * sx; y = v('a:off', 'y') + (y - v('a:chOff', 'y')) * sy; h *= sy;
+      }
       const paras = [];
       [...tb.getElementsByTagName('a:p')].forEach(p => {
         const runs = [];
@@ -741,13 +748,32 @@ async function parsePptx(buf) {
     // 閱讀順序：同一列（上下範圍重疊）的框由左到右，不同列由上到下
     items.sort((a, b) => (a.y - b.y) || (a.x - b.x) || (a.order - b.order));
     const rows = [];
-    items.forEach(it => { const r = rows.find(rw => it.y < rw.y1 - (it.h || 1) * .25 && it.y + (it.h || 1) * .75 > rw.y0); if (r) { r.its.push(it); r.y1 = Math.max(r.y1, it.y + it.h); } else rows.push({ y0: it.y, y1: it.y + Math.max(1, it.h), its: [it] }); });
-    items.length = 0; rows.forEach((r, ri) => { r.its.forEach(it => it.row = ri); items.push(...r.its.sort((a, b) => a.x - b.x)); });
-    // 只有編號的小框（「2.」）接到右邊標題的前面，變成同一段「2. 真理：…」
+    items.forEach(it => { const r = rows.find(rw => Math.min(rw.y1, it.y + it.h) - Math.max(rw.y0, it.y) >= Math.min(rw.y1 - rw.y0, Math.max(1, it.h)) * .5); if (r) { r.its.push(it); r.y1 = Math.max(r.y1, it.y + it.h); } else rows.push({ y0: it.y, y1: it.y + Math.max(1, it.h), its: [it] }); });
+    const NUMP = /^[0-9０-９]{1,2}\s*[.．、:：)）]?$/, ptx = p => p.map(r => r.t).join(''), isNumBox = it => it.paras.every(p => NUMP.test(ptx(p).trim()));
+    // 同一列裡，只有編號的框排在最前面（編號框常常和標題框疊在一起、起點一樣）
+    items.length = 0; rows.forEach((r, ri) => { r.its.forEach(it => it.row = ri); items.push(...r.its.sort((a, b) => (isNumBox(b) - isNumBox(a)) || (a.x - b.x))); });
     for (let k = 0; k < items.length - 1; k++) {
-      const a = items[k], t = a.paras.map(p => p.map(r => r.t).join('')).join('').trim();
-      if (a.paras.length === 1 && /^[0-9０-９]{1,2}\s*[.．、:：)）]?$/.test(t) && items[k + 1].row === a.row) { const nx = items[k + 1]; nx.paras[0] = [{ t: t + ' ', red: false }].concat(nx.paras[0]); items.splice(k, 1); k--; }
+      const a = items[k]; if (!isNumBox(a) || items[k + 1].row !== a.row) continue;
+      const nx = items[k + 1], nums = a.paras.map(p => ptx(p).trim());
+      if (nums.length === 1) { nx.paras[0] = [{ t: nums[0] + ' ', red: false }].concat(nx.paras[0]); items.splice(k, 1); k--; continue; }   // 「2.」接到右邊標題前面：「2. 真理：…」
+      // 一欄「1. 2. 3.」：右邊剛好有同樣多行時，一行配一個編號
+      // 開頭空兩格以上的段落是上一行的延續（手動縮排），不算新的一行
+      const cont = p => /^[ \u3000]{2,}/.test(ptx(p)), lines = nx.paras.reduce((n, p) => n + (cont(p) ? 0 : 1) + (ptx(p).replace(/↵+$/, '').match(/↵/g) || []).length, 0);
+      if (lines !== nums.length) continue;
+      let i = 0;
+      nx.paras = nx.paras.map(p => { const out = p.map(r => Object.assign({}, r)); if (cont(p)) { out[0].t = out[0].t.replace(/^[ \u3000]+/, ''); return out; } out[0].t = nums[i++] + ' ' + out[0].t; out.forEach(r => { r.t = r.t.replace(/↵(?!$)/g, () => '↵' + (nums[i++] || '') + ' '); }); return out; });
+      items.splice(k, 1); k--;
     }
+    // 一句話被拆到下一個框（上一句以「，、：」結尾、緊接在下面、不是新的條列）：接回同一段，保留換行
+    for (let k = 1; k < items.length; k++) {
+      const a = items[k - 1], b = items[k], lp = a.paras[a.paras.length - 1], t = ptx(b.paras[0]).trim();
+      if (b.paras.length === 1 && /[，、：；,]\s*$/.test(ptx(lp)) && !/^[▻►▶•・●○■□◆◇\-–—*0-9０-９]/.test(t) && b.y >= a.y && b.y - (a.y + a.h) < a.h * .6 && t.length <= 30) {
+        lp.push({ t: '↵', red: false }, ...b.paras[0]); items.splice(k, 1); k--;
+      }
+    }
+    // 標題框分好幾段短句（「2. 真理：」「是非對錯認定的信念」）：合成同一個標題，用換行分開
+    const t0 = items[0];
+    if (t0 && items.length > 1 && t0.paras.length > 1 && t0.paras.length <= 3 && t0.paras.every(p => ptx(p).replace(/↵/g, '').trim().length <= 20)) t0.paras = [t0.paras.reduce((acc, p, i) => i ? acc.concat([{ t: '↵', red: false }], p) : p.slice(), [])];
     const paras = items.flatMap(i => i.paras);
     const hasPic = doc.getElementsByTagName('p:pic').length > 0;
     if (paras.length || pics.length) { const sd = { paras, fs: 1, sfs: 1, hasPic }; if (pics.length) sd.pics = pics; if (!paras.length) sd.bg = { t: 'color', c: '#F4EFE6' }; slides.push(sd); }
@@ -1050,6 +1076,7 @@ function parseTxt(buf) {
   return s.split(/\n[ \t]*\n+/).map(b => b.trim()).filter(Boolean).map(b => ({ paras: strToParas(b), fs: 1, sfs: 1 }));
 }
 async function loadFile(f) {
+  if (/\.key$/i.test(f.name)) { toast('這是 Keynote 檔：請在 Keynote 選「檔案 → 輸出至 → PowerPoint」，再上傳輸出的 pptx'); return; }
   try { const isTxt = /\.txt$/i.test(f.name) || f.type === 'text/plain'; const buf = await f.arrayBuffer(); const slides = isTxt ? parseTxt(buf) : await parsePptx(buf); if (!slides.length) throw new Error('empty'); await start(slides, f.name); toast(`已讀入 ${slides.length} 頁`); if (S.autoExport) await exportByFormat().catch(e => { console.error(e); $('prog').style.display = 'none'; toast('匯出失敗：' + e.message); }); }
   catch (e) { console.error(e); toast('讀不到這個檔案，請確認是 .pptx 或 .txt'); }
 }
