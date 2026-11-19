@@ -768,13 +768,26 @@ async function parseKey(buf) {
     return { txt, tbl };
   };
   const geom = d => { const g = pbGet(d, 1), pos = g && pbGet(g, 1), sz = g && pbGet(g, 2), f = (b, k) => b ? ((pbFields(b).find(x => x.f === k) || {}).v || 0) : 0; return { x: f(pos, 1), y: f(pos, 2), w: f(sz, 1), h: f(sz, 2) }; };
-  const slides = [], perSlide = [], cnt = {};
+  // 投影片大小（簡報 type 2 的欄位 4），照片位置要換成比例
+  let SWk = 1920, SHk = 1080;
+  for (const [, o] of ofType(2)) { const sz = pbGet(o.p, 4); if (sz) { const fs = pbFields(sz); const w = (fs.find(x => x.f === 1) || {}).v, h = (fs.find(x => x.f === 2) || {}).v; if (w > 100 && h > 100) { SWk = w; SHk = h; break; } } }
+  // 照片檔：Data/ 裡檔名結尾是「-編號.副檔名」
+  const dataFile = id => Object.keys(zip.files).find(n => n.startsWith('Data/') && new RegExp('-' + id + '\\.\\w+$').test(n));
+  const MIMEK = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', heic: null, tif: null, tiff: null };
+  const slides = [], perSlide = [], picsOf = [], cnt = {};
   for (const sid of slideIds) {
     const so = O.get(sid); if (!so) continue;
-    const boxes = []; perSlide.push(boxes);
+    const boxes = [], pics = []; perSlide.push(boxes); picsOf.push(pics);
     const visit = (ref, dx, dy, depth) => {
       const o = O.get(ref); if (!o || depth > 6) return;
       if (o.t === 3008) { const d = pbGet(o.p, 1), g = geom(d); pbAll(o.p, 2).forEach(c => visit(pbRef(c), dx + g.x, dy + g.y, depth + 1)); return; }
+      if (o.t === 3005) {   // 照片：外框位置＋遮罩（裁切）
+        const g = geom(pbGet(o.p, 1)), id = pbRef(pbGet(o.p, 11)) ?? pbRef(pbGet(o.p, 12)), fn = id != null && dataFile(id); if (!fn || !g.w || !g.h) return;
+        const mo = O.get(pbRef(pbGet(o.p, 5))), m = mo && mo.t === 3006 ? geom(pbGet(mo.p, 1)) : null;
+        const vis = m && m.w && m.h ? { x: g.x + m.x, y: g.y + m.y, w: m.w, h: m.h } : g;
+        const crop = m && m.w ? { l: Math.max(0, m.x / g.w), t: Math.max(0, m.y / g.h), r: Math.max(0, 1 - (m.x + m.w) / g.w), b: Math.max(0, 1 - (m.y + m.h) / g.h) } : { l: 0, t: 0, r: 0, b: 0 };
+        pics.push({ fn, x: (dx + vis.x) / SWk, y: (dy + vis.y) / SHk, w: vis.w / SWk, h: vis.h / SHk, crop }); return;
+      }
       let shp = o.t === 2011 ? o.p : o.t === 7 ? pbGet(o.p, 1) : null; if (!shp) return;
       const d = pbGet(shp, 1, 1), g = d ? geom(d) : { x: 0, y: 0, w: 0, h: 0 }, st = textOf(pbRef(pbGet(shp, 2))); if (!st) return;
       if (!g.h) { const ps = pbGet(shp, 1, 3, 4, 3) || pbGet(shp, 1, 3, 5, 2); if (ps) { const fs = pbFields(ps); g.h = (fs.find(x => x.f === 2) || {}).v || 0; } }
@@ -785,7 +798,8 @@ async function parseKey(buf) {
   }
   // 整份簡報最多字用的顏色＝一般字色；跟它差很多的顏色＝強調色
   const main = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0];
-  for (const boxes of perSlide) {
+  for (let si = 0; si < perSlide.length; si++) {
+    const boxes = perSlide[si];
     const dist = (a, b) => { const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)); const x = p(a), y = p(b); return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]); };
     const items = [];
     boxes.forEach((b, order) => {
@@ -802,8 +816,12 @@ async function parseKey(buf) {
       paras.forEach(p => { while (p.length && /↵$/.test(p[p.length - 1].t)) { const l = p[p.length - 1]; l.t = l.t.replace(/↵+$/, ''); if (!l.t) p.pop(); } });
       if (paras.length) items.push({ x: b.x, y: b.y, h: b.h, order, paras });
     });
-    const paras = arrangeItems(items);
-    if (paras.length) slides.push({ paras, fs: 1, sfs: 1 });
+    const paras = arrangeItems(items), pics = [];
+    for (const pc of picsOf[si]) {
+      try { const ext = pc.fn.split('.').pop().toLowerCase(), mime = MIMEK[ext] || 'image/jpeg'; if (MIMEK[ext] === null) continue;
+        pics.push({ src: await shrinkImg(`data:${mime};base64,${await zip.file(pc.fn).async('base64')}`, mime), x: pc.x, y: pc.y, w: pc.w, h: pc.h, crop: pc.crop }); } catch (e) { console.warn('照片略過', e); }
+    }
+    if (paras.length || pics.length) { const sd = { paras, fs: 1, sfs: 1, hasPic: pics.length > 0 }; if (pics.length) sd.pics = pics; if (!paras.length) sd.bg = { t: 'color', c: '#F4EFE6' }; slides.push(sd); }
   }
   return slides;
 }
