@@ -98,7 +98,8 @@ details.more summary:hover{color:var(--ink)}
 #paraBar{position:absolute;display:flex;gap:4px;align-items:center;padding:4px;background:var(--raise2,#22242a);border:1px solid var(--line2);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.45);z-index:6;transform:translateY(-100%);white-space:nowrap}
 #paraBar.below{transform:none}
 #tbText{width:180px;height:28px;padding:0 8px;border:1px solid var(--line2);border-radius:6px;background:var(--bg);color:var(--ink);font-size:13px}
-#tbText[hidden],#tbDel[hidden],#paraReset[hidden]{display:none}
+#tbText[hidden],#tbDel[hidden],#paraReset[hidden],#paraUp[hidden],#paraDown[hidden],#paraJoin[hidden]{display:none}
+#paraBar .pill:disabled{opacity:.35}
 .picbtns{position:absolute;left:0;top:100%;margin-top:8px;display:none;gap:6px;white-space:nowrap}
 .picsel.pinned .picbtns{display:flex}
 .picbtns button{position:static!important;display:block!important;margin:0!important}
@@ -568,7 +569,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
         <div class="cap"><span class="onair"><i class="tally" id="capTally"></i><b id="capName">現場版</b><span id="capPage"></span></span><span id="viewHint"></span><span id="capLive"></span><div class="svAlign capAlign" id="capAlign" hidden role="group" aria-label="字條對齊"><button class="pill" data-a="auto" title="標題靠左、內文往右退">錯開</button><button class="pill" data-a="left">靠左</button><button class="pill" data-a="center">置中</button></div><div class="pages" id="pages"></div></div>
         <div class="frame" id="frameLive"><canvas id="cvLive" width="1920" height="1080"></canvas>
           <div id="paraBox" hidden></div>
-          <div id="paraBar" hidden role="toolbar" aria-label="這一段文字"><input id="tbText" hidden aria-label="文字框的內容" placeholder="輸入文字"><button class="pill" id="paraMinus" title="縮小" aria-label="縮小">A−</button><output id="paraK">100%</output><button class="pill" id="paraPlus" title="這一段放大" aria-label="這一段放大">A＋</button><button class="pill" id="paraReset" title="這一段的位置和大小還原">還原</button><button class="pill" id="tbDel" hidden>刪除</button></div>
+          <div id="paraBar" hidden role="toolbar" aria-label="這一段文字"><input id="tbText" hidden aria-label="文字框的內容" placeholder="輸入文字"><button class="pill" id="paraMinus" title="縮小" aria-label="縮小">A−</button><output id="paraK">100%</output><button class="pill" id="paraPlus" title="這一段放大" aria-label="這一段放大">A＋</button><button class="pill" id="paraUp" title="這一段往上移">上移</button><button class="pill" id="paraDown" title="這一段往下移">下移</button><button class="pill" id="paraJoin" title="把這一段接到上一段後面">併到上一段</button><button class="pill" id="paraReset" title="這一段的位置和大小還原">還原</button><button class="pill" id="tbDel" hidden>刪除</button></div>
         </div>
         <div class="frame video" id="frameStrip" hidden><canvas id="cvStrip" width="1920" height="1080"></canvas></div>
       </div>
@@ -816,7 +817,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=92"></script>
+<script src="app.js?v=94"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));

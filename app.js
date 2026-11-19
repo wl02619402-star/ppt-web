@@ -670,6 +670,18 @@ async function shrinkImg(src, mime) {
   const sc = Math.min(1, 1600 / m), c = mk(Math.round(im.width * sc), Math.round(im.height * sc)); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
   return mime === 'image/png' ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', .85);
 }
+async function phPositions(zip, dp, layoutT) {
+  const look = [], read = async path => { const f = zip.file(path); return f ? dp.parseFromString(await f.async('string'), 'text/xml') : null; };
+  const relOf = async path => { const f = zip.file(path.replace(/([^/]+)$/, '_rels/$1.rels')); if (!f) return {}; const m = {}; [...dp.parseFromString(await f.async('string'), 'text/xml').getElementsByTagName('Relationship')].forEach(r => m[r.getAttribute('Type').split('/').pop()] = r.getAttribute('Target')); return m; };
+  if (layoutT) {
+    const lp = 'ppt/slideLayouts/' + layoutT.split('/').pop(), ld = await read(lp); if (ld) look.push(ld);
+    const mt = (await relOf(lp)).slideMaster; if (mt) { const md = await read('ppt/slideMasters/' + mt.split('/').pop()); if (md) look.push(md); }
+  }
+  const tbl = look.map(d => [...d.getElementsByTagName('p:sp')].map(sp => { const ph = sp.getElementsByTagName('p:ph')[0], o = sp.getElementsByTagName('a:off')[0], e = sp.getElementsByTagName('a:ext')[0]; return ph && o ? { type: ph.getAttribute('type') || 'body', idx: ph.getAttribute('idx'), x: +o.getAttribute('x'), y: +o.getAttribute('y'), h: e ? +e.getAttribute('cy') : 0 } : null; }).filter(Boolean));
+  const norm = t => t === 'ctrTitle' ? 'title' : t === 'subTitle' ? 'body' : t;
+  return ph => { const ty = norm(ph.getAttribute('type') || 'body'), idx = ph.getAttribute('idx');
+    for (const list of tbl) { const hit = (idx && list.find(q => q.idx === idx)) || list.find(q => norm(q.type) === ty); if (hit) return hit; } return null; };
+}
 async function parsePptx(buf) {
   const zip = await JSZip.loadAsync(buf), dp = new DOMParser();
   const txt = async p => zip.file(p).async('string');
@@ -686,6 +698,8 @@ async function parsePptx(buf) {
     // 圖片：連同位置、裁切一起帶進來
     const pics = [], rf = zip.file('ppt/slides/_rels/' + tgt.split('/').pop() + '.rels'), rmap = {};
     if (rf) [...dp.parseFromString(await rf.async('string'), 'text/xml').getElementsByTagName('Relationship')].forEach(r => rmap[r.getAttribute('Id')] = r.getAttribute('Target'));
+    // 版面配置區（標題、內文框）常常沒寫位置，位置在版面配置／母片裡：先查出來，排順序才不會亂
+    const phPos = await phPositions(zip, dp, Object.values(rmap).find(t => /slideLayout/.test(t)));
     for (const pic of [...doc.getElementsByTagName('p:pic')]) {
       try {
         const blip = pic.getElementsByTagName('a:blip')[0], rid = blip && blip.getAttribute('r:embed'), t = rid && rmap[rid]; if (!t) continue;
@@ -700,13 +714,14 @@ async function parsePptx(buf) {
     const items = [];
     [...doc.getElementsByTagName('p:sp')].forEach((sp, order) => {
       const tb = sp.getElementsByTagName('p:txBody')[0]; if (!tb) return;
-      const off = sp.getElementsByTagName('a:off')[0];
-      const y = off ? +off.getAttribute('y') : -1, x = off ? +off.getAttribute('x') : 0;
+      const xf = sp.getElementsByTagName('a:xfrm')[0], off = xf && xf.getElementsByTagName('a:off')[0], ex = xf && xf.getElementsByTagName('a:ext')[0];
+      const ph = sp.getElementsByTagName('p:ph')[0], pp = !off && ph ? phPos(ph) : null;
+      const y = off ? +off.getAttribute('y') : pp ? pp.y : -1, x = off ? +off.getAttribute('x') : pp ? pp.x : 0, h = ex ? +ex.getAttribute('cy') : pp ? pp.h : 0;
       const paras = [];
       [...tb.getElementsByTagName('a:p')].forEach(p => {
         const runs = [];
         [...p.childNodes].forEach(n => {
-          if (n.nodeName === 'a:br') { runs.push({ t: ' ', red: false }); return; }
+          if (n.nodeName === 'a:br') { const l0 = runs[runs.length - 1]; if (l0) l0.t += '↵'; else runs.push({ t: '↵', red: false }); return; }   // 原檔的手動換行（Shift+Enter）保留
           if (n.nodeName !== 'a:r') return;
           const t = (n.getElementsByTagName('a:t')[0] || {}).textContent || '';
           const clr = n.getElementsByTagName('a:srgbClr')[0];
@@ -721,9 +736,18 @@ async function parsePptx(buf) {
         });
         if (runs.map(r => r.t).join('').trim()) paras.push(runs);
       });
-      if (paras.length) items.push({ y, x, order, paras });
+      if (paras.length) items.push({ y, x, h, order, paras });
     });
+    // 閱讀順序：同一列（上下範圍重疊）的框由左到右，不同列由上到下
     items.sort((a, b) => (a.y - b.y) || (a.x - b.x) || (a.order - b.order));
+    const rows = [];
+    items.forEach(it => { const r = rows.find(rw => it.y < rw.y1 - (it.h || 1) * .25 && it.y + (it.h || 1) * .75 > rw.y0); if (r) { r.its.push(it); r.y1 = Math.max(r.y1, it.y + it.h); } else rows.push({ y0: it.y, y1: it.y + Math.max(1, it.h), its: [it] }); });
+    items.length = 0; rows.forEach((r, ri) => { r.its.forEach(it => it.row = ri); items.push(...r.its.sort((a, b) => a.x - b.x)); });
+    // 只有編號的小框（「2.」）接到右邊標題的前面，變成同一段「2. 真理：…」
+    for (let k = 0; k < items.length - 1; k++) {
+      const a = items[k], t = a.paras.map(p => p.map(r => r.t).join('')).join('').trim();
+      if (a.paras.length === 1 && /^[0-9０-９]{1,2}\s*[.．、:：)）]?$/.test(t) && items[k + 1].row === a.row) { const nx = items[k + 1]; nx.paras[0] = [{ t: t + ' ', red: false }].concat(nx.paras[0]); items.splice(k, 1); k--; }
+    }
     const paras = items.flatMap(i => i.paras);
     const hasPic = doc.getElementsByTagName('p:pic').length > 0;
     if (paras.length || pics.length) { const sd = { paras, fs: 1, sfs: 1, hasPic }; if (pics.length) sd.pics = pics; if (!paras.length) sd.bg = { t: 'color', c: '#F4EFE6' }; slides.push(sd); }
@@ -1742,8 +1766,18 @@ function syncParaBar() {
   Object.assign(bar.style, { left: Math.max(1, Math.min(70, x0 / W * 100)) + '%', top: (below ? y1 + 10 : y0 - 10) / H * 100 + '%' });
   const d = ppOf(sl, v, paraSel.gid) || {}, tbo = isTB && sl.tb.find(z => z.id === paraSel.tb);
   $('paraK').textContent = isTB ? tbo.s : Math.round((d.k || 1) * 100) + '%';
-  $('tbText').hidden = $('tbDel').hidden = !isTB; $('paraReset').hidden = isTB; if (isTB && document.activeElement !== $('tbText')) $('tbText').value = tbo.t;
+  $('tbText').hidden = $('tbDel').hidden = !isTB; $('paraReset').hidden = isTB; ['paraUp', 'paraDown', 'paraJoin'].forEach(id => $(id).hidden = isTB);
+  if (!isTB) { $('paraUp').disabled = $('paraJoin').disabled = paraSel.gid <= 0; $('paraDown').disabled = paraSel.gid >= sl.paras.length - 1; } if (isTB && document.activeElement !== $('tbText')) $('tbText').value = tbo.t;
   bar.hidden = box.hidden = false;
+}
+// 調整段落順序：上移、下移、併到上一段（例如「2.」和標題被拆成兩段時）
+function paraMove(kind) {
+  const sl = S.slides[S.sel]; if (!paraSel || paraSel.tb || !sl) return; const i = paraSel.gid, ps = sl.paras;
+  if (kind === 'up' && i > 0) { [ps[i - 1], ps[i]] = [ps[i], ps[i - 1]]; paraSel.gid = i - 1; }
+  else if (kind === 'down' && i < ps.length - 1) { [ps[i + 1], ps[i]] = [ps[i], ps[i + 1]]; paraSel.gid = i + 1; }
+  else if (kind === 'join' && i > 0) { const a = ps[i - 1], b = ps[i].map(r => Object.assign({}, r)); if (b[0]) delete b[0].ps; const gap = /[0-9A-Za-z.．、:：]$/.test(plain(a)) ? ' ' : ''; ps.splice(i - 1, 2, a.concat(gap ? [{ t: gap, red: false }] : [], b)); paraSel.gid = i - 1; }
+  else return;
+  delete sl.pp; _deck.sig = ''; if (typeof edRender === 'function') edRender(); redrawSoon();
 }
 function paraScale(f) {
   const sl = S.slides[S.sel]; if (!paraSel || !sl) return;
@@ -1854,6 +1888,7 @@ function syncStripLook() {
   $('stR').oninput = () => { S.sLook.r = +$('stR').value; go(); };
   $('stPad').oninput = () => { S.sLook.pad = +$('stPad').value; go(); };
   $('saNum').onchange = () => { S.sAuto.num = $('saNum').checked; go(); };
+  $('paraUp').onclick = () => paraMove('up'); $('paraDown').onclick = () => paraMove('down'); $('paraJoin').onclick = () => paraMove('join');
   $('paraMinus').onclick = () => paraScale(1 / 1.08); $('paraPlus').onclick = () => paraScale(1.08); $('paraReset').onclick = () => paraScale(0);
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && paraSel) selPara(null); });
   $('tbText').oninput = () => { const sl = S.slides[S.sel], b = paraSel && sl && (sl.tb || []).find(z => z.id === paraSel.tb); if (b) { b.t = $('tbText').value || ' '; redrawSoon(); } };
