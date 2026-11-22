@@ -413,13 +413,28 @@ function liveSplit(c, slide, T, o, sf, L, sp, noText) {
 }
 // ---------- 照 Keynote 原樣畫出來 ----------
 const NAT_LH = 1.41, NAT_DESC = .29, EMPTY_LH = 1.2;   // 從 Keynote 匯出的投影片量出來的：一般行高、基線下方、空白行行高
+// Keynote 的字型名稱（PostScript 名）→ 瀏覽器字型：源樣用思源（Noto），西文字型用 Mac 內建同名字型，沒有就用相近的
+const _famCache = new Map();
+function hasLocalFont(fam) {
+  if (_famCache.has(fam)) return _famCache.get(fam);
+  const t = 'Mg2.Wq', a = (measureCtx.font = `72px "${fam}",monospace`, measureCtx.measureText(t).width), b = (measureCtx.font = '72px monospace', measureCtx.measureText(t).width);
+  const ok = Math.abs(a - b) > .5; _famCache.set(fam, ok); return ok;
+}
+function famOf(r) {
+  const n = String(r.fn || '');
+  if (!n || /GenYo|Source|Noto|PingFang|Hiragino|Heiti|Songti|Kaiti|Ming|Hei|Sung|Kai|STHeiti|LiHei|LiSong|BiauKai|jf/i.test(n)) return { ff: r.serif ? SERIF : FONT };
+  if (/AcademyEngraved/i.test(n)) return hasLocalFont('Academy Engraved LET') ? { ff: '"Academy Engraved LET",serif' } : { ff: '"Playfair Display",serif', eng: true };
+  const fam = n.split('-')[0].replace(/MT$|PS$|Std$|Pro$/, '').replace(/([a-z])([A-Z])/g, '$1 $2');
+  if (/Times/i.test(fam)) return { ff: '"Times New Roman",Times,serif' };
+  return { ff: `"${fam}",${r.serif || /Serif|Garamond|Baskerville|Didot|Bodoni|Georgia|Times|Palatino|Caslon/i.test(fam) ? SERIF : FONT}` };
+}
 function origImg(src) { const e = imgCache.get(src); if (e) return e.im; loadBgImg(src).then(x => { if (x) { _origDirty = true; redrawSoon(); } }); return null; }
 let _origDirty = false;
 function origWrap(c, runs, maxW, k, pk) {
   // 依寬度換行：中文逐字、英數字整個字一起；行首不放標點
   const toks = []; runs.forEach(r => { (r.t.match(/\n|[A-Za-z0-9.,:;'"!?()\-–—’”]+|\s+|[\s\S]/gu) || []).forEach(t => toks.push({ t, r })); });
   const lines = []; let cur = [], cw = 0;
-  const fontOf = r => `${r.w} ${r.size * k * pk}px ${r.serif ? SERIF : FONT}`;
+  const fontOf = r => `${r.w} ${r.size * k * pk}px ${famOf(r).ff}`;
   const flush = () => { lines.push({ segs: cur, w: cw }); cur = []; cw = 0; };
   for (const tk of toks) {
     if (tk.t === '\n') { flush(); continue; }
@@ -431,6 +446,53 @@ function origWrap(c, runs, maxW, k, pk) {
   }
   if (cur.length || !lines.length) flush();
   return lines;
+}
+// ---------- 原樣頁面改字：編輯框直接改 Keynote 的文字框，字型、大小、顏色盡量保留 ----------
+const textBoxesOf = sl => sl.orig.items.map((it, n) => ({ it, n })).filter(x => x.it.k === 'text').sort((a, b) => (a.it.y - b.it.y) || (a.it.x - b.it.x));
+const baseColor = p => p.bc || (p.bc = baseColor0(p));   // 段落的一般字色記住，改顏色後不會變
+const baseColor0 = p => { const cnt = {}; p.runs.forEach(r => { cnt[r.c] = (cnt[r.c] || 0) + r.t.length; }); return Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0] || '#000000'; };
+function origEdRender(sl) {
+  return textBoxesOf(sl).map(({ it, n }) => it.paras.map(p => {
+    const base = baseColor(p), h = p.runs.map(r => r.c === base ? escH(r.t) : `<span style="color:${r.c}">${escH(r.t)}</span>`).join('');   // 一般字色不標，編輯框才看得清楚
+    return `<div data-ob="${n}">${h.length && p.runs.some(r => r.t) ? h.replace(/\n/g, '<br>') : '<br>'}</div>`;
+  }).join('')).join('');
+}
+const rgbHex = v => { const m = String(v).match(/(\d+),\s*(\d+),\s*(\d+)/); return m ? '#' + [m[1], m[2], m[3]].map(x => (+x).toString(16).padStart(2, '0')).join('').toUpperCase() : null; };
+function origEdApply(sl) {
+  const groups = new Map(); let lastOb = null;
+  [...ed.children].forEach(div => {
+    const ob = div.dataset && div.dataset.ob != null ? +div.dataset.ob : lastOb; if (ob == null) return; lastOb = ob;
+    const chars = [];
+    const walk = (node, col) => {
+      if (node.nodeType === 3) { for (const ch of node.nodeValue.replace(/ /g, ' ')) chars.push({ ch: ch === '\n' ? '\n' : ch, col }); return; }
+      if (node.nodeType !== 1) return; if (node.nodeName === 'BR') { if (node.nextSibling || node.previousSibling) chars.push({ ch: '\n', col }); return; }
+      const st = node.style && node.style.color ? rgbHex(node.style.color) : null, fc = node.nodeName === 'FONT' && node.getAttribute('color'); node.childNodes.forEach(k => walk(k, st || (fc ? fc.toUpperCase() : null) || col));
+    };
+    div.childNodes.forEach(k => walk(k, null));
+    while (chars.length && chars[chars.length - 1].ch === '\n') chars.pop();
+    (groups.get(ob) || groups.set(ob, []).get(ob)).push(chars);
+  });
+  sl.orig.items.forEach((it, n) => {
+    if (it.k !== 'text') return; const news = groups.get(n) || [], olds = it.paras;
+    it.paras = news.map((chars, j) => {
+      const op = olds[Math.min(j, olds.length - 1)] || { align: 0, lh: { mode: 0, amt: 1 }, sb: 0, sa: 0, size: 18, runs: [] };
+      const oc = op.runs.flatMap(r => [...r.t].map(ch => ({ ch, r }))), base = baseColor(op), def = op.runs[0] || { size: op.size || 18, w: 400, serif: false, c: base, fn: '' };
+      let a = 0; while (a < oc.length && a < chars.length && oc[a].ch === chars[a].ch) a++;
+      let b = 0; while (b < oc.length - a && b < chars.length - a && oc[oc.length - 1 - b].ch === chars[chars.length - 1 - b].ch) b++;
+      const runs = [];
+      chars.forEach((x, i) => {
+        const src = i < a ? oc[i].r : i >= chars.length - b ? oc[oc.length - (chars.length - i)].r : (oc[Math.min(a, oc.length - 1)] || { r: def }).r;
+        const c = x.col || base, last = runs[runs.length - 1];
+        if (last && last.size === src.size && last.w === src.w && last.serif === src.serif && last.fn === src.fn && last.c === c) last.t += x.ch;
+        else runs.push({ t: x.ch, size: src.size, w: src.w, serif: src.serif, fn: src.fn, c });
+      });
+      return Object.assign({}, op, { runs });
+    });
+  });
+  // 線上版字條跟著更新：用同一套閱讀順序規則
+  const items = [], main = (() => { const cnt = {}; sl.orig.items.forEach(it => (it.paras || []).forEach(p => p.runs.forEach(r => { cnt[r.c] = (cnt[r.c] || 0) + r.t.length; }))); return Object.keys(cnt).sort((x, y) => cnt[y] - cnt[x])[0]; })();
+  sl.orig.items.forEach((it, order) => { if (it.k !== 'text') return; const ps = it.paras.filter(p => p.runs.some(r => r.t.trim())).map(p => { const rs = []; p.runs.forEach(r => { const red = !!(main && r.c.toLowerCase() !== main.toLowerCase()), t = r.t.replace(/\n/g, '↵'), l = rs[rs.length - 1]; if (l && l.red === red && l.c === (red ? r.c : undefined)) l.t += t; else rs.push(red ? { t, red, c: r.c } : { t, red }); }); return rs; }); if (ps.length) items.push({ x: it.x, y: it.y, h: it.h || 60, order, paras: ps }); });
+  const paras = arrangeItems(items); sl.paras = paras.length ? paras : [[{ t: ' ', red: false }]]; sl.origSig = JSON.stringify(sl.paras);
 }
 function drawOrig(cv, slide, idx, noText) {
   const c = cv.getContext('2d'), O = slide.orig, k = W / (O.sw || 1920), rec = [], otext = [];
@@ -462,7 +524,7 @@ function drawOrig(cv, slide, idx, noText) {
         const lines = []; let yy = 0;
         it.paras.forEach((p, pi) => {
           yy += (pi ? p.sb : 0) * k * pk;
-          const wrapped = origWrap(c, p.runs, it.nowrap ? 1e9 : bw, k, pk), maxS = (p.runs.length ? Math.max(...p.runs.map(r => r.size)) : (p.size || 18)) * k * pk;   // 空白段落也要佔一行
+          const wrapped = origWrap(c, p.runs, it.nowrap ? Math.max(bw, W - it.x * k - inset - 40) : bw, k, pk), maxS = (p.runs.length ? Math.max(...p.runs.map(r => r.size)) : (p.size || 18)) * k * pk;   // 空白段落也要佔一行
           const lhOf = sz => p.lh.mode === 2 ? p.lh.amt * k * pk : p.lh.mode === 1 ? Math.max(p.lh.amt * k * pk, sz * NAT_LH) : sz * NAT_LH * (p.lh.amt || 1);
           const empty = !p.runs.length;
           wrapped.forEach(ln => { const sz = ln.segs.length ? Math.max(maxS * .3, ...ln.segs.map(sg => sg.r.size * k * pk)) : maxS, lh = empty && p.lh.mode !== 2 ? sz * EMPTY_LH * (p.lh.amt || 1) : lhOf(sz); lines.push({ ln, y: yy, lh, sz, align: p.align }); yy += lh; });
@@ -478,7 +540,9 @@ function drawOrig(cv, slide, idx, noText) {
         if (L.ln.w > 0) rec.push({ gid, x: lx, y: ty + L.y, w: L.ln.w, h: L.lh });
         if (noText) return;
         let px = lx; c.textBaseline = 'alphabetic';
-        L.ln.segs.forEach(sg => { c.font = sg.font; c.fillStyle = sg.r.c; c.fillText(sg.t, px, base); px += sg.w; });
+        L.ln.segs.forEach(sg => { c.font = sg.font; c.fillStyle = sg.r.c; c.fillText(sg.t, px, base);
+          if (famOf(sg.r).eng) { c.save(); c.strokeStyle = O.bg || '#fff'; c.lineWidth = Math.max(1, sg.r.size * k * pk * .025); c.strokeText(sg.t, px + sg.r.size * k * pk * .02, base - sg.r.size * k * pk * .02); c.restore(); }   // 沒有雕刻字型時，用內線模仿
+          px += sg.w; });
       });
       otext.push({ x: tx, y: ty, w: bw, h: yy, paras: it.paras, k: k * pk });
     }
@@ -1479,7 +1543,7 @@ async function exportEditable() {
     prog(`正在輸出可編輯版 第 ${i + 1} / ${total} 頁…`, i / total); await sleep(0);
     const sd = S.slides[i], r = drawLive(cv, sd, i, true), g = r.geo;
     const sl = pL.addSlide(); sl.addImage({ data: await dataOf(await blobOf(cv, 'image/jpeg', .93)), x: 0, y: 0, w: 13.333, h: 7.5 });
-    (g.otext || []).forEach(b => sl.addText(b.paras.flatMap((p, pi) => p.runs.map((r, ri) => ({ text: r.t.replace(/\n/g, '\n'), options: { fontSize: ptOf(r.size * b.k), color: hexNo(r.c), bold: r.w >= 700, fontFace: r.serif ? 'Noto Serif TC' : 'Noto Sans TC', breakLine: ri === p.runs.length - 1 && pi < b.paras.length - 1, align: ['left', 'right', 'center', 'justify', 'left'][p.align] || 'left' } }))), { x: inch(b.x), y: inch(b.y), w: inch(b.w), h: inch(Math.max(40, b.h)), margin: 0, valign: 'top' }));
+    (g.otext || []).forEach(b => sl.addText(b.paras.flatMap((p, pi) => p.runs.map((r, ri) => ({ text: r.t.replace(/\n/g, '\n'), options: { fontSize: ptOf(r.size * b.k), color: hexNo(r.c), bold: r.w >= 700, fontFace: (famOf(r).ff.match(/"([^"]+)"/) || [, r.serif ? 'Noto Serif TC' : 'Noto Sans TC'])[1], breakLine: ri === p.runs.length - 1 && pi < b.paras.length - 1, align: ['left', 'right', 'center', 'justify', 'left'][p.align] || 'left' } }))), { x: inch(b.x), y: inch(b.y), w: inch(b.w), h: inch(Math.max(40, b.h)), margin: 0, valign: 'top' }));
     addTextGroups(sl, g.lines, g.y, g.o, g.x, g.maxW, g.align, g.T); addTBText(sl, g.tb || []);
     (g.extra || []).forEach(e => addTextGroups(sl, e.lines, e.y, e.o, e.x, e.w, 'left', e.T));
     if (g.numeral) { const hh = g.numSize * 1.3; sl.addText(g.numeral, { x: inch(g.numX - 6), y: inch(g.numY - hh / 2), w: 1.1, h: inch(hh), margin: 0, valign: 'middle', align: 'left', fontSize: ptOf(g.numSize), italic: true, bold: true, fontFace: 'Noto Serif TC', color: hexNo(g.T.accent) }); }
@@ -1534,6 +1598,7 @@ function edColor(c, T) {
 function mixHex(a, b, k) { const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)), A = p(a), B = p(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * k).toString(16).padStart(2, '0')).join(''); }
 function edRender() {
   const sl = S.slides[S.sel]; if (!sl) return; const T = curTheme(sl);
+  if (useOrig(sl)) { ed.innerHTML = origEdRender(sl); $('accSw').style.background = T.accent; return; }
   const v = autoVariant(sl, S.sel), hr = liveOpts(v === 'title', v, sl).headRule;
   ed.innerHTML = sl.paras.map((p, pi) => {
     const isH = p[0] && p[0].ps ? p[0].ps === 'h' : hr(pi, sl.paras);
@@ -1571,6 +1636,13 @@ document.addEventListener('selectionchange', () => { const s = getSelection(); i
 function colorText(c) {
   const s = getSelection(); let r = s.rangeCount && ed.contains(s.anchorNode) && !s.isCollapsed ? s.getRangeAt(0) : edRange;
   if (!r || r.collapsed || !ed.contains(r.commonAncestorContainer)) { toast('先在文字框裡選取要改顏色的字'); return; }
+  const slO = S.slides[S.sel];
+  if (useOrig(slO)) {   // 原樣頁面：直接把選取的字換顏色；「一般」＝那一段原本最多字的顏色
+    const T = curTheme(slO), top = n => { while (n && n.parentNode !== ed) n = n.parentNode; return n; }, d0 = top(r.startContainer), it = d0 && slO.orig.items[+d0.dataset.ob];
+    const hex = c === 'red' ? '#C0392B' : c === 'accent' ? T.accent : c ? c : (it && it.paras[0] ? baseColor(it.paras[0]) : '#000000');
+    s.removeAllRanges(); s.addRange(r); document.execCommand('styleWithCSS', false, true); document.execCommand('foreColor', false, hex);
+    ed.dispatchEvent(new Event('input')); return;
+  }
   const r2 = r.cloneRange(); r2.collapse(false); r2.insertNode(document.createTextNode('\uE001'));
   const r1 = r.cloneRange(); r1.collapse(true); r1.insertNode(document.createTextNode('\uE000'));
   let on = false, sel = null; const out = [];
@@ -1598,7 +1670,7 @@ function edSelect(sel) {
 }
 ed.addEventListener('input', async () => {
   const sl = S.slides[S.sel]; if (!sl) return;
-  if (useOrig(sl) && !sl._origWarned) { sl._origWarned = true; toast('這一頁照 Keynote 原樣顯示，改的字會用在線上版；現場版要改字，請到「模板」把這一頁改用網站排版'); }
+  if (useOrig(sl)) { origEdApply(sl); if (await ensureFonts()) buildList(); redrawSoon(); return; }
   const n0 = sl.paras.length; sl.paras = edParse(); if (!sl.paras.length) sl.paras = [[{ t: ' ', red: false }]]; if (sl.paras.length !== n0) delete sl.pp;
   if (await ensureFonts()) buildList();
   redrawSoon();
