@@ -85,8 +85,10 @@ function slideBgTheme(bg) {
 }
 const BLANK = { key: 'blank', name: '白底', text: '#1F1A17', red: '#C0392B', accent: '#8A8F98', dark: false, flat: true, card: { fill: '#FFFFFF', alpha: .96, radius: 10, grain: false, deco: 'none' }, bg(c) { c.fillStyle = '#FFFFFF'; c.fillRect(0, 0, W, H); } };
 const dimOf = () => S.customDim == null ? (S.customMode === 'light' ? .62 : .58) : S.customDim;
+const useOrig = sl => !!(sl && sl.orig && S.keepOrig !== false && !sl.noOrig);
 function curTheme(slide) {
   if (slide && slide.bg && !bandOf(slide)) { const t = slideBgTheme(slide.bg); if (t) return t; }
+  if (useOrig(slide)) { const t = slideBgTheme({ t: 'color', c: slide.orig.bg }); if (t) return Object.assign({}, t, { key: 'orig:' + slide.orig.bg, P: null, card: { fill: slide.orig.bg, alpha: 1, radius: 10, grain: false, deco: 'none' } }); }   // 照 Keynote 原樣：字條也用原本的底色
   if (tplOn()) return tplTheme();
   if (S._demo && THEMES[S._demo]) return Object.assign({ key: S._demo }, THEMES[S._demo]);   // 首頁範例用
   if (S.plain) {   // 還沒有模板時的素色底：乾淨的底色，不加任何裝飾
@@ -409,8 +411,84 @@ function liveSplit(c, slide, T, o, sf, L, sp, noText) {
   slide._autoAlign = 'left';
   return { shrunk: size < Math.round(base) && size < 48, geo: { lines: body, x: x2, y: top, o: bo, align: 'left', maxW: rw, T, extra } };
 }
+// ---------- 照 Keynote 原樣畫出來 ----------
+const NAT_LH = 1.41, NAT_DESC = .29, EMPTY_LH = 1.2;   // 從 Keynote 匯出的投影片量出來的：一般行高、基線下方、空白行行高
+function origImg(src) { const e = imgCache.get(src); if (e) return e.im; loadBgImg(src).then(x => { if (x) { _origDirty = true; redrawSoon(); } }); return null; }
+let _origDirty = false;
+function origWrap(c, runs, maxW, k, pk) {
+  // 依寬度換行：中文逐字、英數字整個字一起；行首不放標點
+  const toks = []; runs.forEach(r => { (r.t.match(/\n|[A-Za-z0-9.,:;'"!?()\-–—’”]+|\s+|[\s\S]/gu) || []).forEach(t => toks.push({ t, r })); });
+  const lines = []; let cur = [], cw = 0;
+  const fontOf = r => `${r.w} ${r.size * k * pk}px ${r.serif ? SERIF : FONT}`;
+  const flush = () => { lines.push({ segs: cur, w: cw }); cur = []; cw = 0; };
+  for (const tk of toks) {
+    if (tk.t === '\n') { flush(); continue; }
+    const w = tw(fontOf(tk.r), tk.t);
+    if (cur.length && cw + w > maxW + .5 && !NO_START.has(tk.t) && !/^\s+$/.test(tk.t)) { const carry = []; while (cur.length && NO_END.has(cur[cur.length - 1].t)) carry.unshift(cur.pop()); cw = cur.reduce((a, s) => a + s.w, 0); flush(); carry.forEach(s => { cur.push(s); cw += s.w; }); if (/^\s+$/.test(tk.t)) continue; }
+    if (!cur.length && /^\s+$/.test(tk.t) && lines.length) continue;
+    const last = cur[cur.length - 1];
+    if (last && last.r === tk.r) { last.t += tk.t; last.w += w; } else cur.push({ t: tk.t, r: tk.r, w, font: fontOf(tk.r) }); cw += w;
+  }
+  if (cur.length || !lines.length) flush();
+  return lines;
+}
+function drawOrig(cv, slide, idx, noText) {
+  const c = cv.getContext('2d'), O = slide.orig, k = W / (O.sw || 1920), rec = [], otext = [];
+  c.clearRect(0, 0, W, H); c.fillStyle = O.bg || '#FFFFFF'; c.fillRect(0, 0, W, H);
+  const rot = (it, fn) => { c.save(); const cx = (it.x + it.w / 2) * k, cy = (it.y + it.h / 2) * k; c.translate(cx, cy); if (it.rot) c.rotate(-it.rot * Math.PI / 180); c.translate(-it.w * k / 2, -it.h * k / 2); fn(it.w * k, it.h * k); c.restore(); };
+  O.items.forEach((it, n) => {
+    if (it.k === 'shape') rot(it, (w, h) => {
+      const P = new Path2D(), pt = it.path, sx = w / (pt.nat[0] || 1), sy = h / (pt.nat[1] || 1);
+      if (pt.cmds) pt.cmds.forEach(([t, ...a]) => { const X = i => a[i] * sx, Y = i => a[i + 1] * sy;
+        if (t === 1) P.moveTo(X(0), Y(0)); else if (t === 2) P.lineTo(X(0), Y(0)); else if (t === 3 && a.length >= 4) P.quadraticCurveTo(X(0), Y(0), X(2), Y(2)); else if (t === 4 && a.length >= 6) P.bezierCurveTo(X(0), Y(0), X(2), Y(2), X(4), Y(4)); else if (t === 5) P.closePath(); });
+      else if (pt.poly) { const nn = pt.poly; for (let i = 0; i < nn; i++) { const an = -Math.PI / 2 + i * 2 * Math.PI / nn, px = w / 2 + Math.cos(an) * w / 2, py = h / 2 + Math.sin(an) * h / 2; i ? P.lineTo(px, py) : P.moveTo(px, py); } P.closePath(); }
+      else P.roundRect(0, 0, w, h, Math.max(0, (pt.round || 0) * Math.min(sx, sy)));
+      c.globalAlpha = it.op == null ? 1 : it.op;
+      const f = it.fill;
+      if (f && f.c) { c.globalAlpha *= f.a == null ? 1 : f.a; c.fillStyle = f.c; c.fill(P); c.globalAlpha = it.op == null ? 1 : it.op; }
+      else if (f && f.img) { const im = origImg(f.img); if (im) { c.save(); c.clip(P);
+        if (f.tech === 2) { c.fillStyle = c.createPattern(im, 'repeat'); c.fillRect(0, 0, w, h); }
+        else if (f.tech === 3 || f.tech === 4) { const s2 = (f.tech === 3 ? Math.max : Math.min)(w / im.width, h / im.height); c.drawImage(im, (w - im.width * s2) / 2, (h - im.height * s2) / 2, im.width * s2, im.height * s2); }
+        else c.drawImage(im, 0, 0, w, h);
+        c.restore(); } }
+      if (it.stroke) { c.globalAlpha *= it.stroke.a == null ? 1 : it.stroke.a; c.strokeStyle = it.stroke.c; c.lineWidth = Math.max(1, it.stroke.w * k); c.setLineDash(it.stroke.dash ? [6 * k, 4 * k] : []); c.stroke(P); c.setLineDash([]); }
+      c.globalAlpha = 1;
+    });
+    else if (it.k === 'pic') rot(it, (w, h) => { const im = origImg(it.src); if (!im) return; const cr = it.crop || { l: 0, t: 0, r: 0, b: 0 }; c.drawImage(im, im.width * cr.l, im.height * cr.t, im.width * (1 - cr.l - cr.r), im.height * (1 - cr.t - cr.b), 0, 0, w, h); });
+    else if (it.k === 'text') {
+      const gid = 'b' + n, d = ppOf(slide, 'l', gid) || {}, inset = 3.6 * k, bw = Math.max(40, it.w * k * (d.k || 1) - inset * 2);
+      const ox = (d.x || 0), oy = (d.y || 0);
+      const lay = pk => {
+        const lines = []; let yy = 0;
+        it.paras.forEach((p, pi) => {
+          yy += (pi ? p.sb : 0) * k * pk;
+          const wrapped = origWrap(c, p.runs, it.nowrap ? 1e9 : bw, k, pk), maxS = (p.runs.length ? Math.max(...p.runs.map(r => r.size)) : (p.size || 18)) * k * pk;   // 空白段落也要佔一行
+          const lhOf = sz => p.lh.mode === 2 ? p.lh.amt * k * pk : p.lh.mode === 1 ? Math.max(p.lh.amt * k * pk, sz * NAT_LH) : sz * NAT_LH * (p.lh.amt || 1);
+          const empty = !p.runs.length;
+          wrapped.forEach(ln => { const sz = ln.segs.length ? Math.max(maxS * .3, ...ln.segs.map(sg => sg.r.size * k * pk)) : maxS, lh = empty && p.lh.mode !== 2 ? sz * EMPTY_LH * (p.lh.amt || 1) : lhOf(sz); lines.push({ ln, y: yy, lh, sz, align: p.align }); yy += lh; });
+          yy += p.sa * k * pk;
+        });
+        return { lines, yy };
+      };
+      const pk = d.k || 1, L0 = lay(pk);
+      const lines = L0.lines, yy = L0.yy; (slide._pk = slide._pk || {})[gid] = pk;
+      const tx = it.x * k + inset + ox, ty = it.y * k + inset + oy;
+      lines.forEach(L => {
+        const lx = tx + (L.align === 2 ? (bw - L.ln.w) / 2 : L.align === 1 ? bw - L.ln.w : 0), base = ty + L.y + L.lh - NAT_DESC * L.sz;
+        if (L.ln.w > 0) rec.push({ gid, x: lx, y: ty + L.y, w: L.ln.w, h: L.lh });
+        if (noText) return;
+        let px = lx; c.textBaseline = 'alphabetic';
+        L.ln.segs.forEach(sg => { c.font = sg.font; c.fillStyle = sg.r.c; c.fillText(sg.t, px, base); px += sg.w; });
+      });
+      otext.push({ x: tx, y: ty, w: bw, h: yy, paras: it.paras, k: k * pk });
+    }
+  });
+  const T = curTheme(slide), tb = drawTB(c, slide, 'l', Object.assign({}, T, { text: lumOf(O.bg || '#fff') < .5 ? '#FFFFFF' : '#1F1A17' }), noText);
+  return { shrunk: false, capped: false, geo: { lines: [], x: 0, y: 0, o: { headRule: () => false, headScale: 1, lineGap: LN, paraGap: 0 }, align: 'left', maxW: W, T, extra: [], rec, tb, otext } };
+}
 function drawLive(cv, slide, idx, noText) {
   tagParas(slide);
+  if (useOrig(slide) && !slide.bg) return drawOrig(cv, slide, idx, noText);
   if (tplOn() && (!slide.bg || bandOf(slide))) return drawTplSlide(cv, slide, idx, noText);
   const v = autoVariant(slide, idx), T = slideTheme(curTheme(slide), v), c = cv.getContext('2d');
   const isTitle = v === 'title', isSpark = v === 'spark' || v === 'solid' || (v === 'spot' && isShort(slide));
@@ -748,7 +826,7 @@ function iwaObjects(d, into) {
 }
 async function parseKey(buf) {
   const zip = await JSZip.loadAsync(buf), O = new Map();
-  const files = Object.keys(zip.files).filter(n => /^Index\/.*\.iwa$/.test(n) && !/TemplateSlide/.test(n));
+  const files = Object.keys(zip.files).filter(n => /^Index\/.*\.iwa$/.test(n));
   if (!files.length) throw new Error('not keynote');
   for (const n of files) { try { iwaObjects(iwaDecode(await zip.file(n).async('uint8array')), O); } catch (e) { console.warn('略過', n, e); } }
   const ofType = t => [...O].filter(([, o]) => o.t === t);
@@ -758,7 +836,7 @@ async function parseKey(buf) {
   let order = [];
   for (const [, o] of ofType(2)) { const nodes = findRefs(o.p, isT(4)); if (nodes.length > order.length) order = nodes; }
   let slideIds = order.map(n => findRefs(O.get(n).p, isT(5))[0]).filter(x => x != null);
-  if (!slideIds.length) slideIds = ofType(5).map(([id]) => id);
+  if (!slideIds.length) { const tpl = new Set(ofType(5).flatMap(([, o]) => { const r = pbRef(pbGet(o.p, 17)); return r != null ? [r] : []; })); slideIds = ofType(5).map(([id]) => id).filter(id => !tpl.has(id)); }
   // 字色：字元樣式（type 2021）的 11 → 7 是 RGB
   const colorOf = sid => { const o = O.get(sid); if (!o) return null; const c = pbGet(o.p, 11, 7); if (!c) return null; const fs = pbFields(c), g = k => (fs.find(x => x.f === k) || {}).v; const r = g(3), gg = g(4), bb = g(5); if (r == null) return null; const h = v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0'); return '#' + h(r) + h(gg) + h(bb); };
   const textOf = sidRef => {
@@ -768,15 +846,111 @@ async function parseKey(buf) {
     return { txt, tbl };
   };
   const geom = d => { const g = pbGet(d, 1), pos = g && pbGet(g, 1), sz = g && pbGet(g, 2), f = (b, k) => b ? ((pbFields(b).find(x => x.f === k) || {}).v || 0) : 0; return { x: f(pos, 1), y: f(pos, 2), w: f(sz, 1), h: f(sz, 2) }; };
+  // ===== 照 Keynote 原樣：底色、形狀、照片、文字（位置、字型、字級、顏色、對齊、行距）=====
+  const pbF = (b, k) => { if (!b) return null; try { return pbFields(b).find(x => x.f === k) || null; } catch (e) { return null; } };
+  const colOf = b => { if (!b) return null; const fs = pbFields(b), g = k => (fs.find(x => x.f === k) || {}).v; const r = g(3); if (r == null) return null; const h = v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0'); return { c: '#' + h(r) + h(g(4)) + h(g(5)), a: g(6) == null ? 1 : g(6) }; };
+  // 樣式往上找：這一層沒設，就看父樣式
+  const sProp = (sid, propsPath, k, superPath, guard = 0) => {
+    const o = O.get(sid); if (!o || guard > 12) return null;
+    const f = pbF(pbGet(o.p, ...propsPath), k); if (f) return f;
+    return sProp(pbRef(pbGet(o.p, ...superPath, 3)), propsPath, k, superPath, guard + 1);
+  };
+  const charP = (sid, k) => sProp(sid, [11], k, [1]), paraP = (sid, k) => sProp(sid, [12], k, [1]), shapeP = (sid, k) => sProp(sid, [1, 11], k, [1, 1]);
+  const fontSpec = (name, bold) => {
+    const n = String(name || ''), serif = /Min|Serif|Ming|Song|宋|明/i.test(n) && !/Gothic|Sans|Hei/i.test(n);
+    let w = /Heavy|Black|ExtraBold|UltraBold/i.test(n) ? 900 : /Bold|Semibold|SemiBold|Demi/i.test(n) ? 700 : /Medium/i.test(n) ? 500 : /Light|Thin|ExtraLight/i.test(n) ? 300 : 400;
+    if (bold && w < 700) w = 700;
+    return { serif, w };
+  };
+  const imgCacheK = new Map();
+  const dataURL = async id => {
+    if (imgCacheK.has(id)) return imgCacheK.get(id);
+    const fn = id != null && Object.keys(zip.files).find(n => n.startsWith('Data/') && new RegExp('-' + id + '\\.\\w+$').test(n)); let v = null;
+    if (fn) { const ext = fn.split('.').pop().toLowerCase(), mime = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' }[ext]; if (mime) v = await shrinkImg(`data:${mime};base64,${await zip.file(fn).async('base64')}`, mime); }
+    imgCacheK.set(id, v); return v;
+  };
+  const pathOf = shp => {   // 回傳 { nat:[w,h], cmds:[[type, x,y, ...]] }
+    const ps = pbGet(shp, 1, 3); if (!ps) return null;
+    const sc = pbGet(ps, 4);
+    if (sc) { const fs = pbFields(sc), g = k => (fs.find(x => x.f === k) || {}).v, sz = pbFields(g(3) || new Uint8Array()), w = (sz.find(x => x.f === 1) || {}).v || 1, h = (sz.find(x => x.f === 2) || {}).v || 1; return { nat: [w, h], round: (g(1) || 0) === 0 ? Math.min(g(2) || 0, w / 2, h / 2) : null, poly: (g(1) || 0) === 1 ? Math.max(3, Math.round(g(2) || 5)) : null }; }
+    const bz = pbGet(ps, 5) || pbGet(ps, 8);
+    if (bz) {
+      const sz = pbGet(bz, 2), szf = sz ? pbFields(sz) : [], w = (szf.find(x => x.f === 1) || {}).v || 1, h = (szf.find(x => x.f === 2) || {}).v || 1, cmds = [];
+      pbAll(pbGet(bz, 3), 1).forEach(el => { const t = pbGet(el, 1) != null ? (pbFields(el).find(x => x.f === 1) || {}).v : 0, pts = pbAll(el, 2).flatMap(pt => { const f = pbFields(pt); return [(f.find(x => x.f === 1) || {}).v || 0, (f.find(x => x.f === 2) || {}).v || 0]; }); cmds.push([t, ...pts]); });
+      return { nat: [w, h], cmds };
+    }
+    return null;
+  };
+  async function origOf(sid) {
+    const so = O.get(sid), out = { bg: null, items: [] };
+    const bgOf = s => { const o = O.get(s); if (!o) return null; const st = pbRef(pbGet(o.p, 1)); const f = st != null && sProp(st, [11], 1, [1]); const c = f && colOf(pbGet(f.v, 1)); return c ? c.c : null; };
+    out.bg = bgOf(sid) || bgOf(pbRef(pbGet(so.p, 17))) || '#FFFFFF';
+    const draws = [];
+    const tplS = pbRef(pbGet(so.p, 17)); if (tplS != null && O.get(tplS)) pbAll(O.get(tplS).p, 7).forEach(r => draws.push([pbRef(r), 0, 0]));
+    pbAll(so.p, 7).forEach(r => draws.push([pbRef(r), 0, 0]));
+    const visit = async (ref, dx, dy, depth) => {
+      const o = O.get(ref); if (!o || depth > 6) return;
+      if (o.t === 3008) { const g = geom(pbGet(o.p, 1)); for (const c of pbAll(o.p, 2)) await visit(pbRef(c), dx + g.x, dy + g.y, depth + 1); return; }
+      if (o.t === 3005) {
+        const gd = pbGet(o.p, 1), g = geom(gd), ang = (pbF(pbGet(gd, 1), 4) || {}).v || 0, src = await dataURL(pbRef(pbGet(o.p, 11)) ?? pbRef(pbGet(o.p, 12))); if (!src) return;
+        const mo = O.get(pbRef(pbGet(o.p, 5))), m = mo && mo.t === 3006 ? geom(pbGet(mo.p, 1)) : null;
+        const vis = m && m.w ? { x: g.x + m.x, y: g.y + m.y, w: m.w, h: m.h } : g, crop = m && m.w ? { l: Math.max(0, m.x / g.w), t: Math.max(0, m.y / g.h), r: Math.max(0, 1 - (m.x + m.w) / g.w), b: Math.max(0, 1 - (m.y + m.h) / g.h) } : { l: 0, t: 0, r: 0, b: 0 };
+        out.items.push({ k: 'pic', src, x: dx + vis.x, y: dy + vis.y, w: vis.w, h: vis.h, rot: ang, crop }); return;
+      }
+      const shp = o.t === 2011 ? o.p : o.t === 7 ? pbGet(o.p, 1) : null; if (!shp) return;
+      const gd = pbGet(shp, 1, 1), g = geom(gd), ang = (pbF(pbGet(gd, 1), 4) || {}).v || 0, x = dx + g.x, y = dy + g.y;
+      const st = pbRef(pbGet(shp, 1, 2)), path = pathOf(shp);
+      if (path && (!g.w || !g.h)) { g.w = g.w || path.nat[0]; g.h = g.h || path.nat[1]; }   // 自動大小的框：大小寫在路徑裡
+      // 形狀：填色（純色／圖片）、外框、透明度
+      if (st != null && path) {
+        const fill = shapeP(st, 1), stroke = shapeP(st, 2), op = shapeP(st, 3);
+        let f = null;
+        if (fill && fill.w === 2) { const fc = pbGet(fill.v, 1), fi = pbGet(fill.v, 3), gr = pbGet(fill.v, 2);
+          if (fc) { const c = colOf(fc); if (c) f = { c: c.c, a: c.a }; }
+          else if (fi) { const tech = (pbF(fi, 2) || {}).v || 0, src = await dataURL(pbRef(pbGet(fi, 6))); if (src) f = { img: src, tech }; }
+          else if (gr) { const stp = pbAll(gr, 2)[0], c = stp && colOf(pbGet(stp, 1)); if (c) f = { c: c.c, a: c.a }; } }
+        let sk = null;
+        if (stroke && stroke.w === 2) { const pt = (pbF(pbGet(stroke.v, 6), 1) || {}).v; const c = colOf(pbGet(stroke.v, 1)), wd = (pbF(stroke.v, 2) || {}).v || 1; if (c && pt !== 2) sk = { c: c.c, a: c.a, w: wd, dash: pt === 0 }; }
+        if (f || sk) out.items.push({ k: 'shape', x, y, w: g.w || path.nat[0], h: g.h || path.nat[1], rot: ang, path, fill: f, stroke: sk, op: op && op.w === 5 ? op.v : 1 });
+      }
+      // 文字：每一段的字型、字級、顏色、對齊、行距
+      const so2 = O.get(pbRef(pbGet(shp, 2))); if (!so2 || so2.t !== 2001) return;
+      const txt = new TextDecoder().decode(pbGet(so2.p, 3) || new Uint8Array()); if (!txt.replace(/[\n￼\s]/g, '')) return;
+      const tab = k => pbAll(pbGet(so2.p, k), 1).map(e => { const f = pbFields(e); return { at: (f.find(x => x.f === 1) || { v: 0 }).v, ref: pbRef((f.find(x => x.f === 2) || {}).v) }; });
+      const pT = tab(5), cT = tab(8), at = (T, i, keep) => { let r = null; for (const e of T) { if (e.at <= i) { if (e.ref != null || !keep) r = e.ref ?? (keep ? r : null); } else break; } return r; };
+      const paras = []; let cur = null, i = 0;
+      const newPara = pos => { const ps = at(pT, pos, true), ls = paraP(ps, 13), lsF = ls ? pbFields(ls.v) : [], mode = (lsF.find(x => x.f === 1) || {}).v || 0, amt = (lsF.find(x => x.f === 2) || {}).v;
+        cur = { align: (paraP(ps, 1) || {}).v || 0, lh: { mode, amt: amt == null ? 1 : amt }, sb: (paraP(ps, 21) || {}).v || 0, sa: (paraP(ps, 20) || {}).v || 0, size: (charP(ps, 3) || {}).v || 18, runs: [] }; paras.push(cur); return ps; };
+      let ps = newPara(0);
+      for (const ch of txt) {
+        if (ch === '\n') { if (!cur.runs.length) { const cs = at(cT, i), f = cs != null && O.get(cs) && pbF(pbGet(O.get(cs).p, 11), 3); if (f) cur.size = f.v; }   // 空白段落的高度看那個換行字元的字級
+          i += 1; ps = newPara(i); continue; }
+        if (ch !== '￼') {
+          const cs = at(cT, i), pick = k => (cs != null && O.get(cs) && pbF(pbGet(O.get(cs).p, 11), k)) || charP(ps, k);   // 字元樣式只看自己設的，其餘照段落樣式
+          const size = (pick(3) || {}).v || 18, font = pick(5) ? new TextDecoder().decode(pick(5).v) : '', bold = !!(pick(1) || {}).v, col = pick(7) && colOf(pick(7).v);
+          const spec = fontSpec(font, bold), ch2 = ch === ' ' ? '\n' : ch, last = cur.runs[cur.runs.length - 1], c = col ? col.c : '#000000';
+          if (last && last.size === size && last.w === spec.w && last.serif === spec.serif && last.c === c && last.fn === font) last.t += ch2; else cur.runs.push({ t: ch2, size, w: spec.w, serif: spec.serif, c, fn: font });
+        }
+        i += ch.length;
+      }
+      while (paras.length && !paras[paras.length - 1].runs.length) paras.pop();
+      // 寬度自動的框：位置記的是對齊點（置中＝中心、靠右＝右緣），要換回左上角
+      const flags = (pbF(pbGet(gd, 1), 3) || {}).v || 0, al = paras[0] ? paras[0].align : 0;
+      const tx0 = (flags & 1) ? x : x - g.w * (al === 2 ? .5 : al === 1 ? 1 : 0);
+      out.items.push({ k: 'text', x: tx0, y, w: g.w, h: g.h, rot: ang, paras, nowrap: !(flags & 1) });   // 寬度自動的框不換行
+    };
+    for (const [r, dx, dy] of draws) await visit(r, dx, dy, 0);
+    return out;
+  }
   // 投影片大小（簡報 type 2 的欄位 4），照片位置要換成比例
   let SWk = 1920, SHk = 1080;
   for (const [, o] of ofType(2)) { const sz = pbGet(o.p, 4); if (sz) { const fs = pbFields(sz); const w = (fs.find(x => x.f === 1) || {}).v, h = (fs.find(x => x.f === 2) || {}).v; if (w > 100 && h > 100) { SWk = w; SHk = h; break; } } }
   // 照片檔：Data/ 裡檔名結尾是「-編號.副檔名」
   const dataFile = id => Object.keys(zip.files).find(n => n.startsWith('Data/') && new RegExp('-' + id + '\\.\\w+$').test(n));
   const MIMEK = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', heic: null, tif: null, tiff: null };
-  const slides = [], perSlide = [], picsOf = [], cnt = {};
+  const slides = [], perSlide = [], picsOf = [], sidOf = [], cnt = {};
   for (const sid of slideIds) {
-    const so = O.get(sid); if (!so) continue;
+    const so = O.get(sid); if (!so) continue; sidOf.push(sid);
     const boxes = [], pics = []; perSlide.push(boxes); picsOf.push(pics);
     const visit = (ref, dx, dy, depth) => {
       const o = O.get(ref); if (!o || depth > 6) return;
@@ -821,7 +995,8 @@ async function parseKey(buf) {
       try { const ext = pc.fn.split('.').pop().toLowerCase(), mime = MIMEK[ext] || 'image/jpeg'; if (MIMEK[ext] === null) continue;
         pics.push({ src: await shrinkImg(`data:${mime};base64,${await zip.file(pc.fn).async('base64')}`, mime), x: pc.x, y: pc.y, w: pc.w, h: pc.h, crop: pc.crop }); } catch (e) { console.warn('照片略過', e); }
     }
-    if (paras.length || pics.length) { const sd = { paras, fs: 1, sfs: 1, hasPic: pics.length > 0 }; if (pics.length) sd.pics = pics; if (!paras.length) sd.bg = { t: 'color', c: '#F4EFE6' }; slides.push(sd); }
+    let orig = null; try { orig = await origOf(sidOf[si]); orig.sw = SWk; orig.sh = SHk; } catch (e) { console.warn('原樣略過', e); }
+    if (paras.length || pics.length || (orig && orig.items.length)) { const sd = { paras: paras.length ? paras : [[{ t: ' ', red: false }]], fs: 1, sfs: 1, hasPic: pics.length > 0 }; if (pics.length) sd.pics = pics; if (orig) { sd.orig = orig; sd.origSig = JSON.stringify(sd.paras); } else if (!paras.length) sd.bg = { t: 'color', c: '#F4EFE6' }; slides.push(sd); }
   }
   return slides;
 }
@@ -918,10 +1093,12 @@ function strToParas(s) {
 // ---------- 字型 ----------
 const loadedChars = new Set();
 async function ensureFonts() {
-  const all = new Set(); S.slides.forEach(s => s.paras.forEach(p => p.forEach(r => [...r.t].forEach(ch => all.add(ch)))));
+  const all = new Set(); S.slides.forEach(s => { s.paras.forEach(p => p.forEach(r => [...r.t].forEach(ch => all.add(ch)))); if (s.orig) s.orig.items.forEach(it => (it.paras || []).forEach(p => p.runs.forEach(r => [...r.t].forEach(ch => all.add(ch))))); });
   const fresh = [...all].filter(ch => !loadedChars.has(ch)); if (!fresh.length) return false;
   const sample = fresh.join(''); fresh.forEach(ch => loadedChars.add(ch));
   const jobs = [400, 500, 700].map(w => document.fonts.load(`${w} 40px "Noto Sans TC"`, sample)).concat([document.fonts.load('700 40px "Noto Serif TC"', sample)]);
+  const ow = new Set(); S.slides.forEach(s => s.orig && s.orig.items.forEach(it => (it.paras || []).forEach(p => p.runs.forEach(r => ow.add((r.serif ? 'S' : 'G') + r.w)))));
+  ow.forEach(x => jobs.push(document.fonts.load(`${x.slice(1)} 40px ${x[0] === 'S' ? '"Noto Serif TC"' : '"Noto Sans TC"'}`, sample)));
   for (const id of [S.fonts.head, S.fonts.body, S.fonts.scr]) { const o = fontOpt(id); if (o) [o.w, o.rw].forEach(w => jobs.push(document.fonts.load(`${w} 40px ${o.stack}`, sample))); }
   try { await Promise.allSettled(jobs); } catch (e) { }
   wcache.clear(); return true;
@@ -1156,10 +1333,10 @@ function renderLocalList() {
 }
 
 // ---------- 記住上次的樣式 ----------
-const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, deckScale: S.deckScale, anchor: S.anchor, stripFixed: S.stripFixed, stripGap: S.stripGap, stripScale: S.stripScale, sAlign: S.stripAlign, sLook: S.sLook, sAuto: S.sAuto, plain: S.plain || null, shadow: S.shadow, blocks: S.blocks, dashRef: S.dashRef, autoVary: S.autoVary, bgAll: S.bgAll, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
+const styleObj = () => ({ themeKey: S.themeKey, stripW: S.stripW, stripY: S.stripY, stripX: S.stripX, lineGap: S.lineGap, fonts: S.fonts, autoExport: S.autoExport, exportFmt: S.exportFmt, deckScale: S.deckScale, anchor: S.anchor, stripFixed: S.stripFixed, stripGap: S.stripGap, stripScale: S.stripScale, sAlign: S.stripAlign, keepOrig: S.keepOrig !== false, sLook: S.sLook, sAuto: S.sAuto, plain: S.plain || null, shadow: S.shadow, blocks: S.blocks, dashRef: S.dashRef, autoVary: S.autoVary, bgAll: S.bgAll, localFonts: S.localFonts.map(f => ({ name: f.name, fam: f.fam })) });
 async function applyStyle(v) {
   if (!v) return;
-  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: false, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: 'middle', stripFixed: !!v.stripFixed, stripGap: v.stripGap || null, stripScale: v.stripScale || 1, stripAlign: v.sAlign || 'auto', sLook: Object.assign({ bg: null, r: null, pad: 46 }, v.sLook, { a: 1 }), sAuto: Object.assign({ num: true }, v.sAuto, { ref: true }), plain: v.plain || null, shadow: false, blocks: false, dashRef: v.dashRef !== false, autoVary: v.autoVary !== false, bgAll: v.bgAll || null });
+  Object.assign(S, { themeKey: THEMES[v.themeKey] ? v.themeKey : 'torn_kraft', stripW: v.stripW || .81, stripY: v.stripY == null ? 64 : v.stripY, stripX: v.stripX || 0, lineGap: v.lineGap || null, autoExport: false, exportFmt: v.exportFmt || 'image', deckScale: v.deckScale || 1, anchor: 'middle', stripFixed: !!v.stripFixed, stripGap: v.stripGap || null, stripScale: v.stripScale || 1, stripAlign: v.sAlign || 'auto', keepOrig: v.keepOrig !== false, sLook: Object.assign({ bg: null, r: null, pad: 46 }, v.sLook, { a: 1 }), sAuto: Object.assign({ num: true }, v.sAuto, { ref: true }), plain: v.plain || null, shadow: false, blocks: false, dashRef: v.dashRef !== false, autoVary: v.autoVary !== false, bgAll: v.bgAll || null });
   if (v.fonts) S.fonts = Object.assign({}, v.fonts, { scr: 'same' });
   for (const f of (v.localFonts || [])) await registerLocal(f.name, f.fam);
   $('optShadow').checked = !!S.shadow; $('optDash').checked = S.dashRef !== false; $('optBlocks').checked = !!S.blocks;
@@ -1191,7 +1368,7 @@ function redrawSoon() { clearTimeout(redrawT); redrawT = setTimeout(renderMain, 
 async function start(slides, name, live) {
   S.slides = slides; S.live = live || {}; S.sel = 0; S.page = 0; S.fileName = name.replace(/\.(pptx|txt|key)$/i, '');
   $('drop').hidden = true; $('editor').hidden = false; $('viewHint').textContent = VIEW_HINT[S.view]; $('sideEmpty').hidden = true; $('sideBody').hidden = false; document.body.classList.remove('empty');
-  await Promise.all(slides.flatMap(x => [].concat(x.bg && x.bg.t === 'img' ? [x.bg.src] : [], (x.pics || []).concat(x.spics || []).map(p => p.src))).map(loadBgImg));
+  await Promise.all(slides.flatMap(x => [].concat(x.bg && x.bg.t === 'img' ? [x.bg.src] : [], x.orig ? x.orig.items.flatMap(it => [it.src, it.fill && it.fill.img]).filter(Boolean) : [], (x.pics || []).concat(x.spics || []).map(p => p.src))).map(loadBgImg));
   await ensureFonts(); bgCache.clear(); buildCats(); buildThemes(); buildList(); select(0); save(); histReset();
   setTimeout(() => { const w = S.slides.map((s, i) => s._warn ? i + 1 : 0).filter(Boolean); if (w.length) toast(`排好了。第 ${w.slice(0, 5).join('、')}${w.length > 5 ? ' 等' : ''} 頁字比較多，縮圖上有標「看一下」`); }, 1500);
 }
@@ -1302,6 +1479,7 @@ async function exportEditable() {
     prog(`正在輸出可編輯版 第 ${i + 1} / ${total} 頁…`, i / total); await sleep(0);
     const sd = S.slides[i], r = drawLive(cv, sd, i, true), g = r.geo;
     const sl = pL.addSlide(); sl.addImage({ data: await dataOf(await blobOf(cv, 'image/jpeg', .93)), x: 0, y: 0, w: 13.333, h: 7.5 });
+    (g.otext || []).forEach(b => sl.addText(b.paras.flatMap((p, pi) => p.runs.map((r, ri) => ({ text: r.t.replace(/\n/g, '\n'), options: { fontSize: ptOf(r.size * b.k), color: hexNo(r.c), bold: r.w >= 700, fontFace: r.serif ? 'Noto Serif TC' : 'Noto Sans TC', breakLine: ri === p.runs.length - 1 && pi < b.paras.length - 1, align: ['left', 'right', 'center', 'justify', 'left'][p.align] || 'left' } }))), { x: inch(b.x), y: inch(b.y), w: inch(b.w), h: inch(Math.max(40, b.h)), margin: 0, valign: 'top' }));
     addTextGroups(sl, g.lines, g.y, g.o, g.x, g.maxW, g.align, g.T); addTBText(sl, g.tb || []);
     (g.extra || []).forEach(e => addTextGroups(sl, e.lines, e.y, e.o, e.x, e.w, 'left', e.T));
     if (g.numeral) { const hh = g.numSize * 1.3; sl.addText(g.numeral, { x: inch(g.numX - 6), y: inch(g.numY - hh / 2), w: 1.1, h: inch(hh), margin: 0, valign: 'middle', align: 'left', fontSize: ptOf(g.numSize), italic: true, bold: true, fontFace: 'Noto Serif TC', color: hexNo(g.T.accent) }); }
@@ -1420,6 +1598,7 @@ function edSelect(sel) {
 }
 ed.addEventListener('input', async () => {
   const sl = S.slides[S.sel]; if (!sl) return;
+  if (useOrig(sl) && !sl._origWarned) { sl._origWarned = true; toast('這一頁照 Keynote 原樣顯示，改的字會用在線上版；現場版要改字，請到「模板」把這一頁改用網站排版'); }
   const n0 = sl.paras.length; sl.paras = edParse(); if (!sl.paras.length) sl.paras = [[{ t: ' ', red: false }]]; if (sl.paras.length !== n0) delete sl.pp;
   if (await ensureFonts()) buildList();
   redrawSoon();
@@ -1692,7 +1871,9 @@ function renderTplUI() {
   const has = !!S.tpl; $('tplBox').hidden = !has; $('tplNow').textContent = has ? `已經有模板：${S.tpl.name}（會自動套用）` : ''; $('tplBanner').hidden = has;
   $('btnPickTpl').textContent = has ? '換一個模板' : '上傳模板'; $('btnTpl').innerHTML = ic('image') + (has ? '換一個模板…' : '上傳模板 pptx…');
   $('tplHint').textContent = S.bgScope === 'slide' && S.slides[S.sel] ? `點縮圖，第 ${S.sel + 1} 頁就改用那一頁模板（橘框是目前用的）。` : '橘框的頁面會輪流當背景，點縮圖可以選用或不用。';
-  $('tplSteps').hidden = has; $('plainRow').hidden = has;
+  const anyOrig = S.slides.some(x => x.orig), cur = S.slides[S.sel]; $('origRow').hidden = !anyOrig;
+  if (anyOrig) { $('optOrig').checked = S.keepOrig !== false; $('origSlide').hidden = !(S.keepOrig !== false && cur && cur.orig); $('origSlide').textContent = cur && cur.noOrig ? `第 ${S.sel + 1} 頁改回 Keynote 原樣` : `第 ${S.sel + 1} 頁改用網站排版`; }
+  $('tplSteps').hidden = has || anyOrig; $('plainRow').hidden = has || anyOrig; $('tplBanner').hidden = has || (anyOrig && S.keepOrig !== false);
   document.querySelectorAll('#plainSw .sw').forEach(b => b.classList.toggle('sel', (S.plain || '') === b.dataset.c));
   if (!has) return;
   $('tplName').textContent = S.tpl.name; $('tplOn').checked = !!S.tpl.on;
@@ -1917,9 +2098,10 @@ function syncParaBar() {
   const below = y0 < 170; bar.classList.toggle('below', below);
   Object.assign(bar.style, { left: Math.max(1, Math.min(70, x0 / W * 100)) + '%', top: (below ? y1 + 10 : y0 - 10) / H * 100 + '%' });
   const d = ppOf(sl, v, paraSel.gid) || {}, tbo = isTB && sl.tb.find(z => z.id === paraSel.tb);
-  $('paraK').textContent = isTB ? tbo.s : Math.round((d.k || 1) * 100) + '%';
+  $('paraK').textContent = isTB ? tbo.s : Math.round((d.k || (sl._pk && sl._pk[paraSel.gid]) || 1) * 100) + '%';
   $('tbText').hidden = $('tbDel').hidden = !isTB; $('paraReset').hidden = isTB; ['paraUp', 'paraDown', 'paraJoin'].forEach(id => $(id).hidden = isTB);
-  if (!isTB) { $('paraUp').disabled = $('paraJoin').disabled = paraSel.gid <= 0; $('paraDown').disabled = paraSel.gid >= sl.paras.length - 1; } if (isTB && document.activeElement !== $('tbText')) $('tbText').value = tbo.t;
+  if (typeof paraSel.gid === 'string') ['paraUp', 'paraDown', 'paraJoin'].forEach(id => $(id).hidden = true);
+  else if (!isTB) { $('paraUp').disabled = $('paraJoin').disabled = paraSel.gid <= 0; $('paraDown').disabled = paraSel.gid >= sl.paras.length - 1; } if (isTB && document.activeElement !== $('tbText')) $('tbText').value = tbo.t;
   bar.hidden = box.hidden = false;
 }
 // 調整段落順序：上移、下移、併到上一段（例如「2.」和標題被拆成兩段時）
@@ -1934,8 +2116,8 @@ function paraMove(kind) {
 function paraScale(f) {
   const sl = S.slides[S.sel]; if (!paraSel || !sl) return;
   if (paraSel.tb) { const b = (sl.tb || []).find(z => z.id === paraSel.tb); if (b && f) b.s = Math.max(16, Math.min(300, Math.round(b.s * f))); redrawSoon(); return; }
-  const d = ppOf(sl, paraSel.view, paraSel.gid) || {};
-  if (f === 0) ppSet(sl, paraSel.view, paraSel.gid, null); else ppSet(sl, paraSel.view, paraSel.gid, { k: Math.max(.4, Math.min(3, +((d.k || 1) * f).toFixed(3))) });
+  const d = ppOf(sl, paraSel.view, paraSel.gid) || {}, k0 = d.k || (sl._pk && sl._pk[paraSel.gid]) || 1;
+  if (f === 0) ppSet(sl, paraSel.view, paraSel.gid, null); else ppSet(sl, paraSel.view, paraSel.gid, { k: Math.max(.3, Math.min(3, +(k0 * f).toFixed(3))) });
   _deck.sig = ''; redrawSoon();
 }
 const snap4 = v => Math.round(v / 4) * 4, clampN = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -2048,4 +2230,10 @@ function syncStripLook() {
   $('btnAddTB').onclick = addTextBox; $('btnAddPic').onclick = () => $('addPicFile').click();
   $('addPicFile').onchange = e => { const f = e.target.files[0]; e.target.value = ''; addPicFile(f).catch(er => { console.error(er); toast('讀不到這張圖片'); }); };
   syncStripLook();
+})();
+
+(function wireOrig() {
+  if (!$('optOrig')) return;
+  $('optOrig').onchange = () => { S.keepOrig = $('optOrig').checked; bgCache.clear(); _scCache.clear(); _deck.sig = ''; renderTplUI(); buildList(); renderMain(); save(); };
+  $('origSlide').onclick = () => { const sl = S.slides[S.sel]; if (!sl) return; sl.noOrig = !sl.noOrig; if (!sl.noOrig) delete sl.noOrig; delete sl.pp; bgCache.clear(); _scCache.clear(); _deck.sig = ''; renderTplUI(); renderMain(); renderThumb(S.sel); save(); };
 })();
