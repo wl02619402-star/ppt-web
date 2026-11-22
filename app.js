@@ -448,20 +448,25 @@ function origWrap(c, runs, maxW, k, pk) {
   return lines;
 }
 // ---------- 原樣頁面改字：編輯框直接改 Keynote 的文字框，字型、大小、顏色盡量保留 ----------
-const textBoxesOf = sl => sl.orig.items.map((it, n) => ({ it, n })).filter(x => x.it.k === 'text').sort((a, b) => (a.it.y - b.it.y) || (a.it.x - b.it.x));
+// 文字框照閱讀順序：同一列（上下重疊一半以上）由左到右，不同列由上到下
+function textBoxesOf(sl) {
+  const bs = sl.orig.items.map((it, n) => ({ it, n })).filter(x => x.it.k === 'text' && x.it.paras.length).sort((a, b) => a.it.y - b.it.y), rows = [];
+  bs.forEach(b => { const h = b.it.h || 60, r = rows.find(rw => Math.min(rw.y1, b.it.y + h) - Math.max(rw.y0, b.it.y) >= Math.min(rw.y1 - rw.y0, h) * .5); if (r) { r.bs.push(b); r.y1 = Math.max(r.y1, b.it.y + h); } else rows.push({ y0: b.it.y, y1: b.it.y + h, bs: [b] }); });
+  return rows.flatMap(r => r.bs.sort((a, b) => a.it.x - b.it.x));
+}
 const baseColor = p => p.bc || (p.bc = baseColor0(p));   // 段落的一般字色記住，改顏色後不會變
 const baseColor0 = p => { const cnt = {}; p.runs.forEach(r => { cnt[r.c] = (cnt[r.c] || 0) + r.t.length; }); return Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0] || '#000000'; };
 function origEdRender(sl) {
-  return textBoxesOf(sl).map(({ it, n }) => it.paras.map(p => {
+  return textBoxesOf(sl).map(({ it, n }, i) => `<section data-ob="${n}" data-label="文字框 ${i + 1}">` + it.paras.map(p => {
     const base = baseColor(p), h = p.runs.map(r => r.c === base ? escH(r.t) : `<span style="color:${r.c}">${escH(r.t)}</span>`).join('');   // 一般字色不標，編輯框才看得清楚
-    return `<div data-ob="${n}">${h.length && p.runs.some(r => r.t) ? h.replace(/\n/g, '<br>') : '<br>'}</div>`;
-  }).join('')).join('');
+    return `<div>${h.length && p.runs.some(r => r.t) ? h.replace(/\n/g, '<br>') : '<br>'}</div>`;
+  }).join('') + '</section>').join('');
 }
 const rgbHex = v => { const m = String(v).match(/(\d+),\s*(\d+),\s*(\d+)/); return m ? '#' + [m[1], m[2], m[3]].map(x => (+x).toString(16).padStart(2, '0')).join('').toUpperCase() : null; };
 function origEdApply(sl) {
   const groups = new Map(); let lastOb = null;
-  [...ed.children].forEach(div => {
-    const ob = div.dataset && div.dataset.ob != null ? +div.dataset.ob : lastOb; if (ob == null) return; lastOb = ob;
+  [...ed.querySelectorAll('section > div, :scope > div')].forEach(div => {
+    const sec = div.closest('section'), ob = sec && sec.dataset.ob != null ? +sec.dataset.ob : div.dataset.ob != null ? +div.dataset.ob : lastOb; if (ob == null) return; lastOb = ob;
     const chars = [];
     const walk = (node, col) => {
       if (node.nodeType === 3) { for (const ch of node.nodeValue.replace(/ /g, ' ')) chars.push({ ch: ch === '\n' ? '\n' : ch, col }); return; }
@@ -1598,7 +1603,10 @@ function edColor(c, T) {
 function mixHex(a, b, k) { const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)), A = p(a), B = p(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * k).toString(16).padStart(2, '0')).join(''); }
 function edRender() {
   const sl = S.slides[S.sel]; if (!sl) return; const T = curTheme(sl);
-  if (useOrig(sl)) { ed.innerHTML = origEdRender(sl); $('accSw').style.background = T.accent; return; }
+  const og = useOrig(sl); document.querySelectorAll('#colorBar [data-ps]').forEach(b => b.hidden = og);
+  if (!edRender._hint) edRender._hint = $('edHint').textContent;
+  $('edHint').textContent = og ? '這一頁照 Keynote 原樣：每張卡片就是投影片上的一個文字框，順序由上到下、由左到右。點投影片上的字，對應的卡片會亮起來；點兩下可以直接改那一框。' : edRender._hint;
+  if (og) { ed.innerHTML = origEdRender(sl); $('accSw').style.background = T.accent; return; }
   const v = autoVariant(sl, S.sel), hr = liveOpts(v === 'title', v, sl).headRule;
   ed.innerHTML = sl.paras.map((p, pi) => {
     const isH = p[0] && p[0].ps ? p[0].ps === 'h' : hr(pi, sl.paras);
@@ -1638,7 +1646,7 @@ function colorText(c) {
   if (!r || r.collapsed || !ed.contains(r.commonAncestorContainer)) { toast('先在文字框裡選取要改顏色的字'); return; }
   const slO = S.slides[S.sel];
   if (useOrig(slO)) {   // 原樣頁面：直接把選取的字換顏色；「一般」＝那一段原本最多字的顏色
-    const T = curTheme(slO), top = n => { while (n && n.parentNode !== ed) n = n.parentNode; return n; }, d0 = top(r.startContainer), it = d0 && slO.orig.items[+d0.dataset.ob];
+    const T = curTheme(slO), st0 = r.startContainer.nodeType === 1 ? r.startContainer : r.startContainer.parentElement, sec = st0 && st0.closest('section'), it = sec && slO.orig.items[+sec.dataset.ob];
     const hex = c === 'red' ? '#C0392B' : c === 'accent' ? T.accent : c ? c : (it && it.paras[0] ? baseColor(it.paras[0]) : '#000000');
     s.removeAllRanges(); s.addRange(r); document.execCommand('styleWithCSS', false, true); document.execCommand('foreColor', false, hex);
     ed.dispatchEvent(new Event('input')); return;
@@ -2159,7 +2167,19 @@ function pickPara(view, cx, cy) {
     click() { selPara(view, gid); } };
 }
 let paraSel = null;
-function selPara(view, gid, tb) { paraSel = view ? { view, gid, tb } : null; syncParaBar(); }
+function selPara(view, gid, tb) {
+  paraSel = view ? { view, gid, tb } : null; syncParaBar();
+  // 原樣頁面：點投影片上的文字框，右邊對應的卡片亮起來
+  ed.querySelectorAll('section.hot').forEach(x => x.classList.remove('hot'));
+  if (typeof gid === 'string' && gid[0] === 'b') { const sec = ed.querySelector(`section[data-ob="${gid.slice(1)}"]`); if (sec) { sec.classList.add('hot'); sec.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } }
+}
+// 雙擊投影片上的文字框：游標直接跳到右邊那張卡片的最後
+$('cvLive').addEventListener('dblclick', e => {
+  const r = $('cvLive').getBoundingClientRect(), k = W / r.width, p = pickPara('l', (e.clientX - r.left) * k, (e.clientY - r.top) * k); if (!p) return;
+  const sec = ed.querySelector('section.hot'); if (!sec) return;
+  const tab = document.querySelector('#side .tabs [data-pane="pText"]'); if (tab && !tab.classList.contains('on')) tab.click();
+  ed.focus(); const rg = document.createRange(); rg.selectNodeContents(sec.lastElementChild || sec); rg.collapse(false); const s2 = getSelection(); s2.removeAllRanges(); s2.addRange(rg);
+});
 function syncParaBar() {
   const bar = $('paraBar'), box = $('paraBox'); if (!bar) return;
   const sl = S.slides[S.sel], v = S.view === 'live' ? 'l' : 's', isTB = !!(paraSel && paraSel.tb), bs = paraSel && sl && paraSel.view === v ? (isTB ? tbBoxes(v).filter(q => q.tb === paraSel.tb) : paraBoxes(v).filter(q => q.gid === paraSel.gid)) : [];

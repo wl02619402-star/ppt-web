@@ -94,6 +94,10 @@ details.more summary:hover{color:var(--ink)}
 .cap{display:flex;align-items:center;gap:12px;min-height:32px;font-size:13px;color:var(--muted)}
 .cap #viewHint{flex:1}
 .capAlign{display:flex;gap:4px}
+#ed section{position:relative;margin:0 0 10px;padding:22px 10px 8px;border:1px solid var(--line2);border-radius:8px;background:rgba(255,255,255,.02);transition:border-color .15s,background .15s}
+#ed section::before{content:attr(data-label);position:absolute;left:10px;top:5px;font-size:11px;line-height:1;color:var(--muted);pointer-events:none;user-select:none}
+#ed section.hot,#ed section:focus-within{border-color:var(--accent);background:rgba(255,255,255,.05)}
+#ed section:last-child{margin-bottom:0}
 #paraBox{position:absolute;border:1.5px dashed var(--accent);border-radius:4px;pointer-events:none}
 #paraBar{position:absolute;display:flex;gap:4px;align-items:center;padding:4px;background:var(--raise2,#22242a);border:1px solid var(--line2);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.45);z-index:6;transform:translateY(-100%);white-space:nowrap}
 #paraBar.below{transform:none}
@@ -598,7 +602,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
             <button class="cbtn" data-ps="b" title="游標所在的這一段變成內文">內文</button>
           </div>
           <div id="ed" class="ed" contenteditable="true" spellcheck="false"></div>
-          <div class="hint">選取文字再點顏色就能改色。粗體大字的段落是標題；點一段再按「標題」或「內文」可以切換。標題裡按 Enter，下一行也是標題。</div>
+          <div class="hint" id="edHint">選取文字再點顏色就能改色。粗體大字的段落是標題；點一段再按「標題」或「內文」可以切換。標題裡按 Enter，下一行也是標題。</div>
         </div>
         <div class="sec" id="stripLookSec" hidden>
           <h3>字條樣式</h3>
@@ -823,7 +827,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=119"></script>
+<script src="app.js?v=121"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
