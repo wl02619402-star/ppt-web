@@ -94,6 +94,9 @@ details.more summary:hover{color:var(--ink)}
 .cap{display:flex;align-items:center;gap:12px;min-height:32px;font-size:13px;color:var(--muted)}
 .cap #viewHint{flex:1}
 .capAlign{display:flex;gap:4px}
+#inEd{position:absolute;z-index:5;outline:1.5px dashed var(--accent);outline-offset:6px;background:transparent;white-space:normal;word-break:break-all;line-break:strict;caret-color:var(--accent);cursor:text;padding:0}
+#inEd[hidden]{display:none}
+#inEd div{margin:0}
 #ed section{position:relative;margin:0 0 10px;padding:22px 10px 8px;border:1px solid var(--line2);border-radius:8px;background:rgba(255,255,255,.02);transition:border-color .15s,background .15s}
 #ed section::before{content:attr(data-label);position:absolute;left:10px;top:5px;font-size:11px;line-height:1;color:var(--muted);pointer-events:none;user-select:none}
 #ed section.hot,#ed section:focus-within{border-color:var(--accent);background:rgba(255,255,255,.05)}
@@ -827,7 +830,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=121"></script>
+<script src="app.js?v=123"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));

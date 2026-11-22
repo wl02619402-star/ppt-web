@@ -463,10 +463,10 @@ function origEdRender(sl) {
   }).join('') + '</section>').join('');
 }
 const rgbHex = v => { const m = String(v).match(/(\d+),\s*(\d+),\s*(\d+)/); return m ? '#' + [m[1], m[2], m[3]].map(x => (+x).toString(16).padStart(2, '0')).join('').toUpperCase() : null; };
-function origEdApply(sl) {
+function origEdApply(sl, root = ed, only = null) {   // only＝只改這一個文字框（投影片上直接編輯時）
   const groups = new Map(); let lastOb = null;
-  [...ed.querySelectorAll('section > div, :scope > div')].forEach(div => {
-    const sec = div.closest('section'), ob = sec && sec.dataset.ob != null ? +sec.dataset.ob : div.dataset.ob != null ? +div.dataset.ob : lastOb; if (ob == null) return; lastOb = ob;
+  [...root.querySelectorAll(only != null ? ':scope > div' : 'section > div, :scope > div')].forEach(div => {
+    const sec = only != null ? null : div.closest('section'), ob = only != null ? only : sec && sec.dataset.ob != null ? +sec.dataset.ob : div.dataset.ob != null ? +div.dataset.ob : lastOb; if (ob == null) return; lastOb = ob;
     const chars = [];
     const walk = (node, col) => {
       if (node.nodeType === 3) { for (const ch of node.nodeValue.replace(/ /g, ' ')) chars.push({ ch: ch === '\n' ? '\n' : ch, col }); return; }
@@ -478,7 +478,7 @@ function origEdApply(sl) {
     (groups.get(ob) || groups.set(ob, []).get(ob)).push(chars);
   });
   sl.orig.items.forEach((it, n) => {
-    if (it.k !== 'text') return; const news = groups.get(n) || [], olds = it.paras;
+    if (it.k !== 'text' || (only != null && n !== only)) return; const news = groups.get(n) || [], olds = it.paras;
     it.paras = news.map((chars, j) => {
       const op = olds[Math.min(j, olds.length - 1)] || { align: 0, lh: { mode: 0, amt: 1 }, sb: 0, sa: 0, size: 18, runs: [] };
       const oc = op.runs.flatMap(r => [...r.t].map(ch => ({ ch, r }))), base = baseColor(op), def = op.runs[0] || { size: op.size || 18, w: 400, serif: false, c: base, fn: '' };
@@ -543,13 +543,14 @@ function drawOrig(cv, slide, idx, noText) {
       lines.forEach(L => {
         const lx = tx + (L.align === 2 ? (bw - L.ln.w) / 2 : L.align === 1 ? bw - L.ln.w : 0), base = ty + L.y + L.lh - NAT_DESC * L.sz;
         if (L.ln.w > 0) rec.push({ gid, x: lx, y: ty + L.y, w: L.ln.w, h: L.lh });
-        if (noText) return;
+        if (noText || slide._editing === n) return;
         let px = lx; c.textBaseline = 'alphabetic';
         L.ln.segs.forEach(sg => { c.font = sg.font; c.fillStyle = sg.r.c; c.fillText(sg.t, px, base);
           if (famOf(sg.r).eng) { c.save(); c.strokeStyle = O.bg || '#fff'; c.lineWidth = Math.max(1, sg.r.size * k * pk * .025); c.strokeText(sg.t, px + sg.r.size * k * pk * .02, base - sg.r.size * k * pk * .02); c.restore(); }   // 沒有雕刻字型時，用內線模仿
           px += sg.w; });
       });
       otext.push({ x: tx, y: ty, w: bw, h: yy, paras: it.paras, k: k * pk });
+      (slide._box = slide._box || {})[n] = { x: tx, y: ty, w: it.nowrap ? Math.max(bw, W - tx - 40) : bw * 1.01 + 4, pk, k };
     }
   });
   const T = curTheme(slide), tb = drawTB(c, slide, 'l', Object.assign({}, T, { text: lumOf(O.bg || '#fff') < .5 ? '#FFFFFF' : '#1F1A17' }), noText);
@@ -1225,6 +1226,7 @@ function buildList() {
   let i = 0; const step = () => { if (i < S.slides.length) { renderThumb(i++); setTimeout(step, 0); } }; step();
 }
 function select(i) {
+  if ($('inEd') && !$('inEd').hidden) inlineClose();
   S.sel = i; S.page = 0; paraSel = null; if (typeof picSel !== 'undefined') { picSel.hidden = true; picPinned = false; }
   document.querySelectorAll('.thumb').forEach((d, k) => d.classList.toggle('sel', k === i));
   const sl = S.slides[i];
@@ -1233,7 +1235,7 @@ function select(i) {
   const th = document.querySelectorAll('.thumb')[i]; if (th) th.scrollIntoView({ block: 'nearest' });
 }
 const VIEW_HINT = {
-  live: '按住一段文字可以單獨拖動，點一下可以調大小；拖空白處移動全部文字',
+  live: '按住一段文字可以拖動，點一下調大小，點兩下直接改字',
   strip: '按住一段文字可以拖動，點一下可以調大小；拖空白處移動字條',
 };
 function setView(v) {
@@ -1644,7 +1646,11 @@ document.addEventListener('selectionchange', () => { const s = getSelection(); i
 function colorText(c) {
   const s = getSelection(); let r = s.rangeCount && ed.contains(s.anchorNode) && !s.isCollapsed ? s.getRangeAt(0) : edRange;
   if (!r || r.collapsed || !ed.contains(r.commonAncestorContainer)) { toast('先在文字框裡選取要改顏色的字'); return; }
-  const slO = S.slides[S.sel];
+  const slO = S.slides[S.sel], ov = $('inEd');
+  if (ov && !ov.hidden && ov.contains(getSelection().anchorNode)) {   // 投影片上直接編輯時
+    const it = slO.orig.items[slO._editing], T = curTheme(slO), hex = c === 'red' ? '#C0392B' : c === 'accent' ? T.accent : c ? c : (it && it.paras[0] ? baseColor(it.paras[0]) : '#000000');
+    document.execCommand('styleWithCSS', false, true); document.execCommand('foreColor', false, hex); ov.dispatchEvent(new Event('input')); return;
+  }
   if (useOrig(slO)) {   // 原樣頁面：直接把選取的字換顏色；「一般」＝那一段原本最多字的顏色
     const T = curTheme(slO), st0 = r.startContainer.nodeType === 1 ? r.startContainer : r.startContainer.parentElement, sec = st0 && st0.closest('section'), it = sec && slO.orig.items[+sec.dataset.ob];
     const hex = c === 'red' ? '#C0392B' : c === 'accent' ? T.accent : c ? c : (it && it.paras[0] ? baseColor(it.paras[0]) : '#000000');
@@ -2173,11 +2179,33 @@ function selPara(view, gid, tb) {
   ed.querySelectorAll('section.hot').forEach(x => x.classList.remove('hot'));
   if (typeof gid === 'string' && gid[0] === 'b') { const sec = ed.querySelector(`section[data-ob="${gid.slice(1)}"]`); if (sec) { sec.classList.add('hot'); sec.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } }
 }
-// 雙擊投影片上的文字框：游標直接跳到右邊那張卡片的最後
+// 雙擊投影片上的文字框：就在投影片上改字（字型、大小、顏色跟投影片一樣）
+function inlineClose() { const ov = $('inEd'); if (!ov || ov.hidden) return; ov.hidden = true; ov.innerHTML = ''; const sl = S.slides[S.sel]; if (sl) delete sl._editing; renderMain(); edRender(); save(); }
+function inlineOpen(n, cx, cy) {
+  const sl = S.slides[S.sel], it = sl && sl.orig && sl.orig.items[n], bx = sl && sl._box && sl._box[n]; if (!it || !bx || it.rot) return false;
+  const frame = $('frameLive'), disp = frame.clientWidth / W, ov = $('inEd') || (() => { const d = document.createElement('div'); d.id = 'inEd'; d.contentEditable = 'true'; d.spellcheck = false; frame.appendChild(d);
+    d.addEventListener('input', () => { const s2 = S.slides[S.sel]; if (s2 && s2._editing != null) { origEdApply(s2, d, s2._editing); renderMain(); redrawSoon(); } });
+    d.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); d.blur(); } e.stopPropagation(); });
+    d.addEventListener('blur', () => setTimeout(() => { if (!d.contains(document.activeElement) && !(document.activeElement && document.activeElement.closest && document.activeElement.closest('#colorBar'))) inlineClose(); }, 120));
+    d.addEventListener('paste', e => { e.preventDefault(); const t = (e.clipboardData || window.clipboardData).getData('text/plain').replace(/\r/g, ''); t.split('\n').forEach((line, i) => { if (i) document.execCommand('insertParagraph'); if (line) document.execCommand('insertText', false, line); }); });
+    return d; })();
+  const k = bx.k, pk = bx.pk, px = v => (v * disp) + 'px';
+  ov.innerHTML = it.paras.map((p, pi) => {
+    const sz = (p.runs.length ? Math.max(...p.runs.map(r => r.size)) : (p.size || 18)) * k * pk, lh = p.lh.mode === 2 ? p.lh.amt * k * pk : p.lh.mode === 1 ? Math.max(p.lh.amt * k * pk, sz * NAT_LH) : sz * NAT_LH * (p.lh.amt || 1);
+    const h = p.runs.map(r => `<span style="font:${r.w} ${px(r.size * k * pk)} ${famOf(r).ff.replace(/"/g, "'")};color:${r.c}">${escH(r.t).replace(/\n/g, '<br>')}</span>`).join('');
+    return `<div style="text-align:${['left', 'right', 'center', 'justify', 'left'][p.align] || 'left'};line-height:${px(lh)};font-size:${px(sz)};margin-top:${pi ? px(p.sb * k * pk) : 0};margin-bottom:${px(p.sa * k * pk)}">${p.runs.some(r => r.t) ? h : '<br>'}</div>`;
+  }).join('');
+  Object.assign(ov.style, { left: bx.x / W * 100 + '%', top: bx.y / H * 100 + '%', width: px(bx.w + 2) });
+  ov.hidden = false; sl._editing = n; renderMain(); ov.focus();
+  const rg = document.caretRangeFromPoint && cx != null ? document.caretRangeFromPoint(cx, cy) : null, s2 = getSelection();
+  if (rg && ov.contains(rg.startContainer)) { s2.removeAllRanges(); s2.addRange(rg); } else { const r2 = document.createRange(); r2.selectNodeContents(ov); r2.collapse(false); s2.removeAllRanges(); s2.addRange(r2); }
+  return true;
+}
 $('cvLive').addEventListener('dblclick', e => {
-  const r = $('cvLive').getBoundingClientRect(), k = W / r.width, p = pickPara('l', (e.clientX - r.left) * k, (e.clientY - r.top) * k); if (!p) return;
-  const sec = ed.querySelector('section.hot'); if (!sec) return;
-  const tab = document.querySelector('#side .tabs [data-pane="pText"]'); if (tab && !tab.classList.contains('on')) tab.click();
+  const r = $('cvLive').getBoundingClientRect(), k = W / r.width, cx = (e.clientX - r.left) * k, cy = (e.clientY - r.top) * k, sl = S.slides[S.sel];
+  const b = useOrig(sl) && (S.liveGeo.rec || []).find(q => typeof q.gid === 'string' && cy >= q.y && cy <= q.y + q.h && cx >= q.x - 24 && cx <= q.x + q.w + 24);
+  if (b && inlineOpen(+b.gid.slice(1), e.clientX, e.clientY)) { selPara(null); return; }
+  const sec = ed.querySelector('section.hot'); if (!sec) return;   // 其他情況：游標跳到右邊對應的卡片
   ed.focus(); const rg = document.createRange(); rg.selectNodeContents(sec.lastElementChild || sec); rg.collapse(false); const s2 = getSelection(); s2.removeAllRanges(); s2.addRange(rg);
 });
 function syncParaBar() {
