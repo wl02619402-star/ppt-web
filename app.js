@@ -48,6 +48,13 @@ function drawBand(c, slide) {
   coverDraw(c, e.im, k.x, 0, k.w, H, k.b);
   const dim = k.b.dim == null ? 0 : k.b.dim; if (dim > 0) { c.fillStyle = `rgba(10,8,6,${dim})`; c.fillRect(k.x, 0, k.w, H); }
 }
+// 插入的照片：front＝放在文字上面，back＝最下層；沒設就照預設（網站排版在文字下面、Keynote 原樣在最上面）
+function drawPic(c, p) {
+  const e = imgCache.get(p.src); if (!e) { loadBgImg(p.src).then(x => x && redrawSoon()); return; }
+  const im = e.im, cr = p.crop || { l: 0, t: 0, r: 0, b: 0 };
+  c.save(); if (!p.free) { c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = 26; c.shadowOffsetY = 8; }
+  c.drawImage(im, im.width * cr.l, im.height * cr.t, Math.max(1, im.width * (1 - cr.l - cr.r)), Math.max(1, im.height * (1 - cr.t - cr.b)), p.x * W, p.y * H, p.w * W, p.h * H); c.restore();
+}
 function tagParas(slide) { slide.paras.forEach((p, i) => { p._i = i; }); }
 const measureCtx = mk(10, 10).getContext('2d');
 const FONT = '"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif';
@@ -514,6 +521,7 @@ function drawOrig(cv, slide, idx, noText) {
   const c = cv.getContext('2d'), O = slide.orig, k = W / (O.sw || 1920), rec = [], otext = [];
   c.clearRect(0, 0, W, H); c.fillStyle = O.bg || '#FFFFFF'; c.fillRect(0, 0, W, H);
   if (O.bgImg) { const im = origImg(O.bgImg); if (im) coverDraw(c, im, 0, 0, W, H, null); }   // 這一頁換成照片背景
+  (slide.pics || []).filter(p => p.z === 'back').forEach(p => drawPic(c, p));
   const rot = (it, fn) => { c.save(); const cx = (it.x + it.w / 2) * k, cy = (it.y + it.h / 2) * k; c.translate(cx, cy); if (it.rot) c.rotate(-it.rot * Math.PI / 180); c.translate(-it.w * k / 2, -it.h * k / 2); fn(it.w * k, it.h * k); c.restore(); };
   O.items.forEach((it, n) => {
     if (it.k === 'shape') rot(it, (w, h) => {
@@ -565,6 +573,7 @@ function drawOrig(cv, slide, idx, noText) {
       (slide._box = slide._box || {})[n] = { x: tx, y: ty, w: it.nowrap ? Math.max(bw, W - tx - 40) : bw * 1.01 + 4, pk, k };
     }
   });
+  (slide.pics || []).filter(p => p.z !== 'back').forEach(p => drawPic(c, p));
   const T = curTheme(slide), tb = drawTB(c, slide, 'l', Object.assign({}, T, { text: lumOf(O.bg || '#fff') < .5 ? '#FFFFFF' : '#1F1A17' }), noText);
   return { shrunk: false, capped: false, geo: { lines: [], x: 0, y: 0, o: { headRule: () => false, headScale: 1, lineGap: LN, paraGap: 0 }, align: 'left', maxW: W, T, extra: [], rec, tb, otext } };
 }
@@ -576,11 +585,7 @@ function drawLive(cv, slide, idx, noText) {
   const isTitle = v === 'title', isSpark = v === 'spark' || v === 'solid' || (v === 'spot' && isShort(slide));
   c.clearRect(0, 0, W, H);
   c.drawImage(getBg(v, idx, slide), 0, 0); drawBand(c, slide);
-  (slide.pics || []).forEach(p => {
-    const e = imgCache.get(p.src); if (!e) return; const im = e.im, cr = p.crop || { l: 0, t: 0, r: 0, b: 0 };
-    c.save(); if (!p.free) { c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = 26; c.shadowOffsetY = 8; }
-    c.drawImage(im, im.width * cr.l, im.height * cr.t, im.width * (1 - cr.l - cr.r), im.height * (1 - cr.t - cr.b), p.x * W, p.y * H, p.w * W, p.h * H); c.restore();
-  });
+  (slide.pics || []).filter(p => p.z !== 'front').forEach(p => drawPic(c, p));
   const o = liveOpts(isTitle, v, slide), fs = slide.fs || 1, L = liveCfg(slide, isTitle, v), sf = picSafe(slide, safeOf(T, v, idx));
   let paras = S.dashRef !== false ? stripParas(slide, true).paras : slide.paras, numeral = null, panel = null;
   if (v === 'side' && paras.length > 1 && plain(paras[0]).length <= 28) {
@@ -627,6 +632,7 @@ function drawLive(cv, slide, idx, noText) {
     drawLines(c, lines, x, y, o, T, align, maxW);
     if (numeral) { c.font = `italic 700 ${numSize}px ${SERIF}`; c.fillStyle = T.accent; c.textBaseline = 'middle'; c.fillText(numeral, numX, numY); }
   }
+  (slide.pics || []).filter(p => p.z === 'front').forEach(p => drawPic(c, p));
   const tb = drawTB(c, slide, 'l', T, noText);
   return { shrunk: size < Math.round(base * fs) && size < 48, capped: size < Math.round(base * fs), geo: { lines, x, y, o, align, maxW, T, numeral, numX, numY, numSize, extra: panel ? [panel] : [], rec: o.rec, tb } };
 }
@@ -1938,7 +1944,7 @@ function drawTplSlide(cv, slide, idx, noText, dry) {
   c.clearRect(0, 0, W, H); c.drawImage(getBg('tpl', idx, slide), 0, 0); drawBand(c, slide);
   const bd = bandOf(slide), fx0 = bd && bd.left ? bd.w + 80 : 0, fx1 = bd && !bd.left ? bd.x - 80 : W;   // 圖片佔掉的那一側，文字不放
   const clipR = r => { if (!r || !bd) return r; const a = Math.max(r.x, fx0), b2 = Math.min(r.x + r.w, fx1); return Object.assign({}, r, { x: a, w: Math.max(240, b2 - a) }); };
-  (slide.pics || []).forEach(p => { const e = imgCache.get(p.src); if (!e) return; const im = e.im, cr = p.crop || { l: 0, t: 0, r: 0, b: 0 }; c.save(); if (!p.free) { c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = 26; c.shadowOffsetY = 8; } c.drawImage(im, im.width * cr.l, im.height * cr.t, im.width * (1 - cr.l - cr.r), im.height * (1 - cr.t - cr.b), p.x * W, p.y * H, p.w * W, p.h * H); c.restore(); });
+  (slide.pics || []).filter(p => p.z !== 'front').forEach(p => drawPic(c, p));
   const colorFor = r => { const dark = (r ? r.lum : pg.lum) < .5; return { text: dark ? '#FFFFFF' : '#1F1A17', red: dark ? '#FFB3A0' : '#C0392B', accent: pg.accent, dark }; };
   const pad = r => r && { x: r.x + 12 + L.dx, y: r.y + 8 + L.dy, w: Math.max(200, r.w - 24), h: Math.max(80, r.h - 16), align: r.align, anchor: r.anchor, lum: r.lum };
   // 文字放不下時把文字框往右、往下撐大，但不能蓋到模板上的圖片和圖形
@@ -1970,6 +1976,7 @@ function drawTplSlide(cv, slide, idx, noText, dry) {
   else if (idx === 0 && tR) { place(hp, tR, false, 110); if (rest.length) place(rest, bR || grow({ x: tR.x, y: tR.y + tR.h + 20, w: tR.w, h: 200, align: tR.align, anchor: 'top', lum: tR.lum }), false, 60); }
   else place(paras, bR || tR, true, (bR ? 80 : 96), idx !== 0);
   if (!noText) parts.forEach(p => drawLines(c, p.lines, p.x, p.y, p.o, p.T, p.align, p.w));
+  (slide.pics || []).filter(p => p.z === 'front').forEach(p => drawPic(c, p));
   const main = parts[parts.length - 1], tb = drawTB(c, slide, 'l', main.T, noText);
   slide._autoAlign = main.align;
   const bp = parts.find(p => p.body);
@@ -2014,7 +2021,7 @@ async function loadSavedTpl() { try { const t = await tplDB.get('tpl'); if (t &&
 
 // ---------- 圖片：直接在畫面上選取，拖曳移動、拉四個角縮放（像 PowerPoint） ----------
 const picSel = document.createElement('div'); picSel.className = 'picsel'; picSel.hidden = true;
-picSel.innerHTML = '<i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i><span class="picbtns"><button class="picall" type="button" title="把這張圖放到每一頁的同一個位置">每一頁都放</button><button class="picdel" type="button">移除圖片</button></span>';
+picSel.innerHTML = '<i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i><span class="picbtns"><button class="pb" data-pa="crop" type="button">裁切</button><button class="pb" data-pa="fill" type="button" title="放大到整頁，當成背景">鋪滿整頁</button><button class="pb" data-pa="front" type="button" title="放到文字上面">上層</button><button class="pb" data-pa="back" type="button" title="放到最下面">下層</button><button class="pb" data-pa="swap" type="button" title="換成另一張照片">換圖</button><button class="picall" type="button" title="把這張圖放到每一頁的同一個位置">每頁都放</button><button class="picdel" type="button">刪除</button></span>';
 $('frameLive').appendChild(picSel);
 let selPic = -1, picPinned = false;
 const picKey = () => S.view === 'strip' ? 'spics' : 'pics', curPics = () => (S.slides[S.sel] || {})[picKey()] || [], curCv = () => $(S.view === 'strip' ? 'cvStrip' : 'cvLive');
@@ -2023,6 +2030,7 @@ function placePicSel(i) {
   if (!p) { picSel.hidden = true; selPic = -1; picPinned = false; return; }
   if (picSel.parentElement !== fr) fr.appendChild(picSel);
   picSel.querySelector('.picall').hidden = !p.free;
+  const bb = picSel.querySelector('.picbtns'); if (bb) { const right = p.x + p.w / 2 > .5; bb.style.left = right ? 'auto' : '0'; bb.style.right = right ? '0' : 'auto'; const low = p.y + p.h > .82; bb.style.top = low ? 'auto' : '100%'; bb.style.bottom = low ? '100%' : 'auto'; bb.style.marginTop = low ? '0' : '10px'; bb.style.marginBottom = low ? '10px' : '0'; }
   selPic = i; Object.assign(picSel.style, { left: p.x * 100 + '%', top: p.y * 100 + '%', width: p.w * 100 + '%', height: p.h * 100 + '%' }); picSel.hidden = false;
 }
 function picAt(cx, cy) { const ps = curPics(); for (let i = ps.length - 1; i >= 0; i--) { const p = ps[i]; if (cx >= p.x * W && cx <= (p.x + p.w) * W && cy >= p.y * H && cy <= (p.y + p.h) * H) return i; } return -1; }
@@ -2041,7 +2049,20 @@ picSel.addEventListener('pointerdown', e => {
   try { picSel.setPointerCapture(e.pointerId); } catch (err) { }
   const mv = ev => {
     const dx = (ev.clientX - sx) * k / W, dy = (ev.clientY - sy) * k / H;
-    if (h === 'move') { p.x = clampN(o.x + dx, -o.w + .05, .95); p.y = clampN(o.y + dy, -o.h + .05, .95); }
+    if (h === 'move' && !picSel.classList.contains('crop')) { p.x = clampN(o.x + dx, -o.w + .05, .95); p.y = clampN(o.y + dy, -o.h + .05, .95); }
+    else if (picSel.classList.contains('crop')) {   // 裁切：拉角落把邊往內收；拖中間是移動要留的範圍，照片本身大小不變
+      const c0 = o.crop || { l: 0, t: 0, r: 0, b: 0 }, sx = o.w / Math.max(.01, 1 - c0.l - c0.r), sy = o.h / Math.max(.01, 1 - c0.t - c0.b), cr = Object.assign({}, c0);
+      if (h === 'move') {
+        const mx = clampN(-dx / sx, -c0.l, c0.r), my = clampN(-dy / sy, -c0.t, c0.b);
+        cr.l = c0.l + mx; cr.r = c0.r - mx; cr.t = c0.t + my; cr.b = c0.b - my; p.crop = cr;
+      } else {
+        if (h.includes('e')) cr.r = clampN(c0.r - dx / sx, 0, 1 - c0.l - .05);
+        if (h.includes('w')) cr.l = clampN(c0.l + dx / sx, 0, 1 - c0.r - .05);
+        if (h.includes('s')) cr.b = clampN(c0.b - dy / sy, 0, 1 - c0.t - .05);
+        if (h.includes('n')) cr.t = clampN(c0.t + dy / sy, 0, 1 - c0.b - .05);
+        p.crop = cr; p.x = o.x + (cr.l - c0.l) * sx; p.y = o.y + (cr.t - c0.t) * sy; p.w = sx * (1 - cr.l - cr.r); p.h = sy * (1 - cr.t - cr.b);
+      }
+    }
     else {
       const sgn = h.includes('e') ? 1 : -1, nw = Math.max(.06, o.w + sgn * dx), nh = nw * o.h / o.w;
       p.w = nw; p.h = nh; if (h.includes('w')) p.x = o.x + (o.w - nw); if (h.includes('n')) p.y = o.y + (o.h - nh);
@@ -2535,3 +2556,25 @@ $('paraEdit').onclick = () => {
   if (ok) { selPara(null); setTimeout(editBar, 30); }
 };
 $('paraPick').addEventListener('mousedown', () => { const s2 = getSelection(), ov = curEditor(); if (ov && s2.rangeCount && ov.contains(s2.anchorNode)) _edRange = s2.getRangeAt(0).cloneRange(); });
+
+// ---- 照片工具列：裁切、鋪滿整頁、上層／下層、換一張 ----
+picSel.querySelectorAll('[data-pa]').forEach(b => b.onclick = async e => {
+  e.stopPropagation(); const p = curPics()[selPic]; if (!p) return; const act = b.dataset.pa;
+  if (act === 'crop') { const on = !picSel.classList.contains('crop'); picSel.classList.toggle('crop', on); b.textContent = on ? '完成裁切' : '裁切'; if (on) toast('拉四個角往內，就能裁掉不要的部分；拖曳照片可以移動要留的範圍'); return; }
+  if (act === 'fill') {
+    const e2 = imgCache.get(p.src) || await loadBgImg(p.src); if (!e2) return; const ia = e2.im.width / e2.im.height, sa = W / H;
+    p.crop = ia > sa ? { l: (1 - sa / ia) / 2, r: (1 - sa / ia) / 2, t: 0, b: 0 } : { t: (1 - ia / sa) / 2, b: (1 - ia / sa) / 2, l: 0, r: 0 };
+    Object.assign(p, { x: 0, y: 0, w: 1, h: 1, z: 'back' }); toast('已經鋪滿整頁，放在最下層');
+  }
+  if (act === 'front') { p.z = 'front'; const ps = curPics(); ps.push(ps.splice(selPic, 1)[0]); selPic = ps.length - 1; }
+  if (act === 'back') { p.z = 'back'; const ps = curPics(); ps.unshift(ps.splice(selPic, 1)[0]); selPic = 0; }
+  if (act === 'swap') {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+    inp.onchange = async () => { const f = inp.files[0]; if (!f) return; const raw = await new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result); r.readAsDataURL(f); }); const src = await shrinkImg(raw, f.type), e3 = await loadBgImg(src); if (!e3) return;
+      const cx = p.x + p.w / 2; p.src = src; p.crop = { l: 0, t: 0, r: 0, b: 0 }; p.h = p.w * (e3.im.height / e3.im.width) * W / H; p.x = cx - p.w / 2; placePicSel(selPic); _deck.sig = ''; renderMain(); renderThumb(S.sel); save(); };
+    inp.click(); return;
+  }
+  placePicSel(selPic); _deck.sig = ''; renderMain(); renderThumb(S.sel); save();
+});
+// 右邊「插入照片」＝跟上方「加圖片」一樣
+$('pgPhoto').onclick = () => $('addPicFile').click();

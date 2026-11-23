@@ -142,7 +142,11 @@ body.empty .htools{display:none}
 #tbText{width:180px;height:28px;padding:0 8px;border:1px solid var(--line2);border-radius:6px;background:var(--bg);color:var(--ink);font-size:13px}
 #tbText[hidden],#tbDel[hidden],#paraReset[hidden],#paraUp[hidden],#paraDown[hidden],#paraJoin[hidden]{display:none}
 #paraBar .pill:disabled{opacity:.35}
-.picbtns{position:absolute;left:0;top:100%;margin-top:8px;display:none;gap:6px;white-space:nowrap}
+.picbtns{position:absolute;left:0;top:100%;margin-top:10px;display:none;gap:4px;white-space:nowrap;padding:4px;background:var(--raise2,#22242a);border:1px solid var(--line2);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.45);z-index:6}
+.picbtns button{height:28px;padding:0 10px;border:1px solid transparent;border-radius:6px;background:none;color:var(--ink);font-size:12px;cursor:pointer}
+.picbtns button:hover{border-color:var(--line2)}
+.picsel.crop{border-style:dashed;cursor:grab}
+.picsel.crop i{background:var(--accent)}
 .picsel.pinned .picbtns{display:flex}
 .picbtns button{position:static!important;display:block!important;margin:0!important}
 .picall[hidden]{display:none!important}
@@ -513,8 +517,8 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 .picsel i[data-h=ne]{right:-7px;top:-7px;cursor:nesw-resize}
 .picsel i[data-h=sw]{left:-7px;bottom:-7px;cursor:nesw-resize}
 .picsel i[data-h=se]{right:-7px;bottom:-7px;cursor:nwse-resize}
-.picdel,.picall{position:absolute;right:0;top:-38px;height:28px;padding:0 10px;border:1px solid var(--line2);border-radius:8px;background:var(--panel);color:var(--ink);font-size:12px;display:none}
-.picsel.pinned .picdel{display:block}
+
+
 @media (pointer:coarse){.picsel i{width:20px;height:20px}.picsel i[data-h=nw],.picsel i[data-h=sw]{left:-11px}.picsel i[data-h=ne],.picsel i[data-h=se]{right:-11px}.picsel i[data-h=nw],.picsel i[data-h=ne]{top:-11px}.picsel i[data-h=sw],.picsel i[data-h=se]{bottom:-11px}}
 /* 動態：只用在說明「發生了什麼」的地方 */
 .frame canvas.swap{animation:swap .18s var(--ease)}
@@ -630,7 +634,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
         <div class="sec">
           <h3>這一頁的背景</h3>
           <div class="row pgbg" id="pgBg"></div>
-          <div class="row" style="margin-top:8px"><button class="btn small" id="pgPhoto">換成照片</button><button class="btn small" id="pgAll">套用到所有頁</button></div>
+          <div class="row" style="margin-top:8px"><button class="btn small" id="pgPhoto">插入照片</button><button class="btn small" id="pgAll">套用到所有頁</button></div>
         </div>
         <div id="pgMove"></div>
         <div class="sec"><button class="btn small" id="moreOpen">更多設定</button></div>
@@ -882,7 +886,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=132"></script>
+<script src="app.js?v=134"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
