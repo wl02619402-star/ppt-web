@@ -530,7 +530,9 @@ function origPicsToFree(slide) {
   const rectish = it => { const pt = it.path; if (!pt) return false; if (pt.round != null) return true; if (!pt.cmds) return false; const pts = pt.cmds.filter(c => c[0] === 1 || c[0] === 2); if (pt.cmds.some(c => c[0] === 3 || c[0] === 4) || pts.length < 4 || pts.length > 6) return false; const xs = new Set(pts.map(c => Math.round(c[1]))), ys = new Set(pts.map(c => Math.round(c[2]))); return xs.size <= 2 && ys.size <= 2; };
   O.items.forEach((it, n) => {
     if (it.pid || it.rot) return;
-    const isPic = it.k === 'pic', isFill = it.k === 'shape' && it.fill && it.fill.img && !it.stroke && rectish(it) && it.w > sw * .12 && it.h > sh * .12 && (it.w * it.h) / (sw * sh) < .6;   // 太大的（整頁紋理）當背景，不讓它被點到
+    // 太大、整片直通上下或左右、超出投影片邊的（底板、紋理、裝飾）當背景，不讓它被點到
+    const deco = (it.w * it.h) / (sw * sh) >= .6 || it.w >= sw * .95 || it.h >= sh * .95 || it.x < -sw * .03 || it.y < -sh * .03 || it.x + it.w > sw * 1.03 || it.y + it.h > sh * 1.03;
+    const isPic = it.k === 'pic' && !deco, isFill = !deco && it.k === 'shape' && it.fill && it.fill.img && !it.stroke && rectish(it) && it.w > sw * .12 && it.h > sh * .12;
     if (!isPic && !isFill) return;
     const id = 'k' + n + '_' + Date.now().toString(36), p = { id, src: isPic ? it.src : it.fill.img, x: it.x / sw, y: it.y / sh, w: it.w / sw, h: it.h / sh, crop: isPic ? Object.assign({}, it.crop) : { l: 0, t: 0, r: 0, b: 0 }, free: true, inOrig: true };
     if (isFill) { if (it.fill.tech === 3) p.cover = true; if (it.path.round) p.rr = Math.min(1, it.path.round / (Math.min(...it.path.nat) / 2)); if (it.op != null && it.op < 1) p.op = it.op; }
@@ -2064,6 +2066,7 @@ const cvL = $('cvLive'), toCvL = e => { const r = curCv().getBoundingClientRect(
   cvx.addEventListener('pointerdown', () => { if (picPinned) { picPinned = false; picSel.hidden = true; picSel.classList.remove('pinned'); } });
 });
 picSel.addEventListener('pointerleave', () => { if (!picPinned) picSel.hidden = true; });
+picSel.addEventListener('pointermove', e => { if (picPinned || e.buttons || e.target.closest('.picbtns')) return; const i = picAt(...toCvL(e)); if (i < 0) picSel.hidden = true; else if (i !== selPic) placePicSel(i); });   // 滑到上面那張照片時，改選上面那張
 picSel.addEventListener('pointerdown', e => {
   if (e.target.tagName === 'BUTTON') return;
   e.preventDefault(); e.stopPropagation();
