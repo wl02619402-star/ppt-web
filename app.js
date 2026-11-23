@@ -454,11 +454,18 @@ function textBoxesOf(sl) {
   bs.forEach(b => { const h = b.it.h || 60, r = rows.find(rw => Math.min(rw.y1, b.it.y + h) - Math.max(rw.y0, b.it.y) >= Math.min(rw.y1 - rw.y0, h) * .5); if (r) { r.bs.push(b); r.y1 = Math.max(r.y1, b.it.y + h); } else rows.push({ y0: b.it.y, y1: b.it.y + h, bs: [b] }); });
   return rows.flatMap(r => r.bs.sort((a, b) => a.it.x - b.it.x));
 }
-const baseColor = p => p.bc || (p.bc = baseColor0(p));   // 段落的一般字色記住，改顏色後不會變
+// 原樣頁面的顏色：整頁共用一個「一般字色」（字最多的顏色），第二多的當「主題色」；第一次看到時記住，之後改顏色也不會變
+function origColors(sl) {
+  const O = sl.orig; if (O.mc) return { mc: O.mc, ac: O.ac };
+  const cnt = {}; O.items.forEach(it => (it.paras || []).forEach(p => p.runs.forEach(r => { cnt[r.c] = (cnt[r.c] || 0) + r.t.replace(/\s/g, '').length; })));
+  const ks = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a]); O.mc = ks[0] || '#000000'; O.ac = ks[1] || null; return { mc: O.mc, ac: O.ac };
+}
+const origHex = (sl, c) => { const { mc, ac } = origColors(sl); return c === 'red' ? '#C0392B' : c === 'accent' ? (ac || curTheme(sl).accent) : c ? c : mc; };
+const baseColor = p => p.bc || (p.bc = baseColor0(p));
 const baseColor0 = p => { const cnt = {}; p.runs.forEach(r => { cnt[r.c] = (cnt[r.c] || 0) + r.t.length; }); return Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0] || '#000000'; };
 function origEdRender(sl) {
   return textBoxesOf(sl).map(({ it, n }, i) => `<section data-ob="${n}" data-label="文字框 ${i + 1}">` + it.paras.map(p => {
-    const base = baseColor(p), h = p.runs.map(r => r.c === base ? escH(r.t) : `<span style="color:${r.c}">${escH(r.t)}</span>`).join('');   // 一般字色不標，編輯框才看得清楚
+    const base = origColors(sl).mc, h = p.runs.map(r => r.c === base ? escH(r.t) : `<span style="color:${r.c}">${escH(r.t)}</span>`).join('');   // 一般字色不標，編輯框才看得清楚
     return `<div>${h.length && p.runs.some(r => r.t) ? h.replace(/\n/g, '<br>') : '<br>'}</div>`;
   }).join('') + '</section>').join('');
 }
@@ -481,7 +488,7 @@ function origEdApply(sl, root = ed, only = null) {   // only＝只改這一個�
     if (it.k !== 'text' || (only != null && n !== only)) return; const news = groups.get(n) || [], olds = it.paras;
     it.paras = news.map((chars, j) => {
       const op = olds[Math.min(j, olds.length - 1)] || { align: 0, lh: { mode: 0, amt: 1 }, sb: 0, sa: 0, size: 18, runs: [] };
-      const oc = op.runs.flatMap(r => [...r.t].map(ch => ({ ch, r }))), base = baseColor(op), def = op.runs[0] || { size: op.size || 18, w: 400, serif: false, c: base, fn: '' };
+      const oc = op.runs.flatMap(r => [...r.t].map(ch => ({ ch, r }))), base = origColors(sl).mc, def = op.runs[0] || { size: op.size || 18, w: 400, serif: false, c: base, fn: '' };
       let a = 0; while (a < oc.length && a < chars.length && oc[a].ch === chars[a].ch) a++;
       let b = 0; while (b < oc.length - a && b < chars.length - a && oc[oc.length - 1 - b].ch === chars[chars.length - 1 - b].ch) b++;
       const runs = [];
@@ -495,7 +502,7 @@ function origEdApply(sl, root = ed, only = null) {   // only＝只改這一個�
     });
   });
   // 線上版字條跟著更新：用同一套閱讀順序規則
-  const items = [], main = (() => { const cnt = {}; sl.orig.items.forEach(it => (it.paras || []).forEach(p => p.runs.forEach(r => { cnt[r.c] = (cnt[r.c] || 0) + r.t.length; }))); return Object.keys(cnt).sort((x, y) => cnt[y] - cnt[x])[0]; })();
+  const items = [], main = origColors(sl).mc;
   sl.orig.items.forEach((it, order) => { if (it.k !== 'text') return; const ps = it.paras.filter(p => p.runs.some(r => r.t.trim())).map(p => { const rs = []; p.runs.forEach(r => { const red = !!(main && r.c.toLowerCase() !== main.toLowerCase()), t = r.t.replace(/\n/g, '↵'), l = rs[rs.length - 1]; if (l && l.red === red && l.c === (red ? r.c : undefined)) l.t += t; else rs.push(red ? { t, red, c: r.c } : { t, red }); }); return rs; }); if (ps.length) items.push({ x: it.x, y: it.y, h: it.h || 60, order, paras: ps }); });
   const paras = arrangeItems(items); sl.paras = paras.length ? paras : [[{ t: ' ', red: false }]]; sl.origSig = JSON.stringify(sl.paras);
 }
@@ -1243,7 +1250,7 @@ function setView(v) {
   document.querySelectorAll('.view').forEach(b => b.classList.toggle('on', b.dataset.v === v));
   $('frameLive').hidden = v !== 'live'; $('frameStrip').hidden = v !== 'strip';
   $('posLive').hidden = v !== 'live'; $('posStrip').hidden = v !== 'strip';
-  $('viewHint').textContent = VIEW_HINT[v]; $('capAlign').hidden = v !== 'strip'; $('stripLookSec').hidden = v !== 'strip';   // 字條的設定只在看線上版時出現 renderMain();
+  $('viewHint').textContent = VIEW_HINT[v]; if (typeof edRender === 'function' && S.slides.length) edRender(); $('capAlign').hidden = v !== 'strip'; $('stripLookSec').hidden = v !== 'strip';   // 字條的設定只在看線上版時出現 renderMain();
   if (S.slides.length) setTimeout(() => S.slides.forEach((_, i) => renderThumb(i)), 60);   // 縮圖跟著換成現場版／字條
 }
 // ---------- 大小位置：同一個「整份／這一頁」開關，現場版、線上版各自一組 ----------
@@ -1605,10 +1612,16 @@ function edColor(c, T) {
 function mixHex(a, b, k) { const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)), A = p(a), B = p(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * k).toString(16).padStart(2, '0')).join(''); }
 function edRender() {
   const sl = S.slides[S.sel]; if (!sl) return; const T = curTheme(sl);
-  const og = useOrig(sl); document.querySelectorAll('#colorBar [data-ps]').forEach(b => b.hidden = og);
+  const og = useOrig(sl); document.querySelectorAll('#colorBar [data-ps], #colorBar .cbsep').forEach(b => b.hidden = og);
   if (!edRender._hint) edRender._hint = $('edHint').textContent;
-  $('edHint').textContent = og ? '這一頁照 Keynote 原樣：每張卡片就是投影片上的一個文字框，順序由上到下、由左到右。點投影片上的字，對應的卡片會亮起來；點兩下可以直接改那一框。' : edRender._hint;
-  if (og) { ed.innerHTML = origEdRender(sl); $('accSw').style.background = T.accent; return; }
+  // Keynote 原樣頁面：右邊只留一句說明，文字清單要用再打開
+  $('edSimple').hidden = !og; ed.hidden = og && !S.edCards; $('edHint').hidden = og;
+  if (og) {
+    $('edSimpleTxt').textContent = S.view === 'strip' ? '字條的文字會跟著現場版。要改字，切到「現場版」，在投影片上點兩下。' : '在投影片上點兩下，就能直接改字。要換顏色，先選取字，再按上面的顏色。';
+    $('edToggle').textContent = S.edCards ? '收起文字清單' : '用文字清單改';
+    ed.innerHTML = origEdRender(sl); $('accSw').style.background = origColors(sl).ac || T.accent; return;
+  }
+  $('edHint').textContent = edRender._hint;
   const v = autoVariant(sl, S.sel), hr = liveOpts(v === 'title', v, sl).headRule;
   ed.innerHTML = sl.paras.map((p, pi) => {
     const isH = p[0] && p[0].ps ? p[0].ps === 'h' : hr(pi, sl.paras);
@@ -1648,12 +1661,12 @@ function colorText(c) {
   if (!r || r.collapsed || !ed.contains(r.commonAncestorContainer)) { toast('先在文字框裡選取要改顏色的字'); return; }
   const slO = S.slides[S.sel], ov = $('inEd');
   if (ov && !ov.hidden && ov.contains(getSelection().anchorNode)) {   // 投影片上直接編輯時
-    const it = slO.orig.items[slO._editing], T = curTheme(slO), hex = c === 'red' ? '#C0392B' : c === 'accent' ? T.accent : c ? c : (it && it.paras[0] ? baseColor(it.paras[0]) : '#000000');
+    const hex = origHex(slO, c);
     document.execCommand('styleWithCSS', false, true); document.execCommand('foreColor', false, hex); ov.dispatchEvent(new Event('input')); return;
   }
   if (useOrig(slO)) {   // 原樣頁面：直接把選取的字換顏色；「一般」＝那一段原本最多字的顏色
     const T = curTheme(slO), st0 = r.startContainer.nodeType === 1 ? r.startContainer : r.startContainer.parentElement, sec = st0 && st0.closest('section'), it = sec && slO.orig.items[+sec.dataset.ob];
-    const hex = c === 'red' ? '#C0392B' : c === 'accent' ? T.accent : c ? c : (it && it.paras[0] ? baseColor(it.paras[0]) : '#000000');
+    const hex = origHex(slO, c);
     s.removeAllRanges(); s.addRange(r); document.execCommand('styleWithCSS', false, true); document.execCommand('foreColor', false, hex);
     ed.dispatchEvent(new Event('input')); return;
   }
@@ -2201,6 +2214,7 @@ function inlineOpen(n, cx, cy) {
   if (rg && ov.contains(rg.startContainer)) { s2.removeAllRanges(); s2.addRange(rg); } else { const r2 = document.createRange(); r2.selectNodeContents(ov); r2.collapse(false); s2.removeAllRanges(); s2.addRange(r2); }
   return true;
 }
+$('cvStrip').addEventListener('dblclick', () => { const sl = S.slides[S.sel]; if (useOrig(sl)) { setView('live'); toast('在現場版的投影片上點兩下改字，字條會跟著改'); } });
 $('cvLive').addEventListener('dblclick', e => {
   const r = $('cvLive').getBoundingClientRect(), k = W / r.width, cx = (e.clientX - r.left) * k, cy = (e.clientY - r.top) * k, sl = S.slides[S.sel];
   const b = useOrig(sl) && (S.liveGeo.rec || []).find(q => typeof q.gid === 'string' && cy >= q.y && cy <= q.y + q.h && cx >= q.x - 24 && cx <= q.x + q.w + 24);
@@ -2357,3 +2371,5 @@ function syncStripLook() {
   $('optOrig').onchange = () => { S.keepOrig = $('optOrig').checked; bgCache.clear(); _scCache.clear(); _deck.sig = ''; renderTplUI(); buildList(); renderMain(); save(); };
   $('origSlide').onclick = () => { const sl = S.slides[S.sel]; if (!sl) return; sl.noOrig = !sl.noOrig; if (!sl.noOrig) delete sl.noOrig; delete sl.pp; bgCache.clear(); _scCache.clear(); _deck.sig = ''; renderTplUI(); renderMain(); renderThumb(S.sel); save(); };
 })();
+
+(function wireEdSimple() { if (!$('edToggle')) return; $('edToggle').onclick = () => { S.edCards = !S.edCards; edRender(); }; })();

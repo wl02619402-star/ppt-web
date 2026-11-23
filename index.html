@@ -94,6 +94,9 @@ details.more summary:hover{color:var(--ink)}
 .cap{display:flex;align-items:center;gap:12px;min-height:32px;font-size:13px;color:var(--muted)}
 .cap #viewHint{flex:1}
 .capAlign{display:flex;gap:4px}
+.edsimple{padding:14px;border:1px solid var(--line2);border-radius:8px;margin:0 0 10px;background:rgba(255,255,255,.03)}
+.edsimple p{margin:0 0 10px;font-size:14px;line-height:1.7;color:var(--ink)}
+.edsimple[hidden],#ed[hidden],.cbsep[hidden]{display:none}
 #inEd{position:absolute;z-index:5;outline:1.5px dashed var(--accent);outline-offset:6px;background:transparent;white-space:normal;word-break:break-all;line-break:strict;caret-color:var(--accent);cursor:text;padding:0}
 #inEd[hidden]{display:none}
 #inEd div{margin:0}
@@ -604,6 +607,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
             <button class="cbtn" data-ps="h" title="游標所在的這一段變成標題（大字）">標題</button>
             <button class="cbtn" data-ps="b" title="游標所在的這一段變成內文">內文</button>
           </div>
+          <div id="edSimple" class="edsimple" hidden><p id="edSimpleTxt"></p><button class="btn small" id="edToggle">用文字清單改</button></div>
           <div id="ed" class="ed" contenteditable="true" spellcheck="false"></div>
           <div class="hint" id="edHint">選取文字再點顏色就能改色。粗體大字的段落是標題；點一段再按「標題」或「內文」可以切換。標題裡按 Enter，下一行也是標題。</div>
         </div>
@@ -830,7 +834,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=123"></script>
+<script src="app.js?v=125"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
