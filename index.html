@@ -112,9 +112,14 @@ body.empty .htools{display:none}
 .pgbg button.sel{outline:2px solid var(--accent);outline-offset:2px}
 .pgbg button.orig{background:repeating-linear-gradient(45deg,#3a3c42 0 6px,#2a2c31 6px 12px);color:var(--ink2);font-size:11px;width:auto;padding:0 8px}
 .morebar{padding:10px 16px 0}
-.mobonly{display:none}
+#paraBar .edonly{display:none}
+#paraBar.editing .edonly{display:inline-flex}
+#paraBar.editing .noed{display:none!important}
+#paraBar .tip{font-size:12px;color:var(--muted);padding:0 6px;align-items:center;white-space:nowrap}
+#paraBar.editing{z-index:7}
+#side .mobonly{display:none}
 @media (max-width:640px){
-  .mobonly{display:flex;gap:8px;flex-wrap:wrap}
+  #side .mobonly{display:flex;gap:8px;flex-wrap:wrap}
   #hAddTB,#hAddPic,#btnOpen,#btnRedo{display:none!important}
   .htools{margin-right:4px}
   .seg{height:36px}.seg button{white-space:nowrap;padding:0 10px}
@@ -611,7 +616,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
         <div class="cap"><span class="onair"><i class="tally" id="capTally"></i><b id="capName">現場版</b><span id="capPage"></span></span><span id="viewHint"></span><span id="capLive"></span><div class="svAlign capAlign" id="capAlign" hidden role="group" aria-label="字條對齊"><button class="pill" data-a="auto" title="標題靠左、內文往右退">錯開</button><button class="pill" data-a="left">靠左</button><button class="pill" data-a="center">置中</button></div><div class="pages" id="pages"></div></div>
         <div class="frame" id="frameLive"><canvas id="cvLive" width="1920" height="1080"></canvas>
           <div id="paraBox" hidden></div>
-          <div id="paraBar" hidden role="toolbar" aria-label="這一段文字"><input id="tbText" hidden aria-label="文字框的內容" placeholder="輸入文字"><button class="pill" id="paraMinus" title="字小一點">字小</button><output id="paraK" hidden>100%</output><button class="pill" id="paraPlus" title="字大一點">字大</button><span class="bsep"></span><button class="dot" data-pc="" title="一般顏色" aria-label="一般顏色"><i class="d0"></i></button><button class="dot" data-pc="red" title="紅色" aria-label="紅色"><i style="background:#D6453D"></i></button><button class="dot" data-pc="accent" title="主題色" aria-label="主題色"><i class="dA"></i></button><label class="dot" title="自己挑顏色" aria-label="自己挑顏色"><i class="dP"></i><input type="color" id="paraPick" value="#D9822B"></label><span class="bsep"></span><button class="pill" id="paraBold" title="粗體">粗體</button><button class="pill" id="paraAlign" title="對齊">置中</button><button class="pill" id="paraDelete" title="刪除這一段">刪除</button><button class="pill" id="paraUp" hidden>上移</button><button class="pill" id="paraDown" hidden>下移</button><button class="pill" id="paraJoin" hidden>併到上一段</button><button class="pill" id="paraReset" hidden>還原</button><button class="pill" id="tbDel" hidden>刪除</button></div>
+          <div id="paraBar" hidden role="toolbar" aria-label="這一段文字"><input id="tbText" hidden aria-label="文字框的內容" placeholder="輸入文字"><button class="pill edonly" id="paraDone" title="改好了">完成</button><span class="tip edonly" id="paraTip">選取字，再按顏色</span><button class="pill noed" id="paraEdit" title="直接打字修改">改字</button><button class="pill noed" id="paraMinus" title="字小一點">字小</button><output id="paraK" hidden>100%</output><button class="pill noed" id="paraPlus" title="字大一點">字大</button><span class="bsep noed"></span><button class="dot" data-pc="" title="一般顏色" aria-label="一般顏色"><i class="d0"></i></button><button class="dot" data-pc="red" title="紅色" aria-label="紅色"><i style="background:#D6453D"></i></button><button class="dot" data-pc="accent" title="主題色" aria-label="主題色"><i class="dA"></i></button><label class="dot" title="自己挑顏色" aria-label="自己挑顏色"><i class="dP"></i><input type="color" id="paraPick" value="#D9822B"></label><span class="bsep noed"></span><button class="pill noed" id="paraBold" title="粗體">粗體</button><button class="pill noed" id="paraAlign" title="對齊">置中</button><button class="pill noed" id="paraDelete" title="刪除這一段">刪除</button><button class="pill" id="paraUp" hidden>上移</button><button class="pill" id="paraDown" hidden>下移</button><button class="pill" id="paraJoin" hidden>併到上一段</button><button class="pill" id="paraReset" hidden>還原</button><button class="pill" id="tbDel" hidden>刪除</button></div>
         </div>
         <div class="frame video" id="frameStrip" hidden><canvas id="cvStrip" width="1920" height="1080"></canvas></div>
       </div>
@@ -877,7 +882,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=128"></script>
+<script src="app.js?v=130"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));

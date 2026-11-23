@@ -1664,13 +1664,16 @@ function edParse() {
 let edRange = null;
 document.addEventListener('selectionchange', () => { const s = getSelection(); if (s.rangeCount && ed.contains(s.anchorNode) && !s.isCollapsed) edRange = s.getRangeAt(0).cloneRange(); });
 function colorText(c) {
+  {
+    const slO = S.slides[S.sel], ov = [$('inEd'), $('pEd')].find(x => x && !x.hidden && x.contains(getSelection().anchorNode));
+  if (ov) {   // 投影片上直接編輯時
+      const Tt = curTheme(slO), hex = ov.id === 'inEd' ? origHex(slO, c) : c === 'red' ? Tt.red : c === 'accent' ? Tt.accent : c ? c : Tt.text;
+      document.execCommand('styleWithCSS', false, true); document.execCommand('foreColor', false, hex); ov.dispatchEvent(new Event('input')); return;
+    }  }
   const s = getSelection(); let r = s.rangeCount && ed.contains(s.anchorNode) && !s.isCollapsed ? s.getRangeAt(0) : edRange;
   if (!r || r.collapsed || !ed.contains(r.commonAncestorContainer)) { toast('先在文字框裡選取要改顏色的字'); return; }
-  const slO = S.slides[S.sel], ov = [$('inEd'), $('pEd')].find(x => x && !x.hidden && x.contains(getSelection().anchorNode));
-  if (ov) {   // 投影片上直接編輯時
-    const Tt = curTheme(slO), hex = ov.id === 'inEd' ? origHex(slO, c) : c === 'red' ? Tt.red : c === 'accent' ? Tt.accent : c ? c : Tt.text;
-    document.execCommand('styleWithCSS', false, true); document.execCommand('foreColor', false, hex); ov.dispatchEvent(new Event('input')); return;
-  }
+  const slO = S.slides[S.sel];
+
   if (useOrig(slO)) {   // 原樣頁面：直接把選取的字換顏色；「一般」＝那一段原本最多字的顏色
     const T = curTheme(slO), st0 = r.startContainer.nodeType === 1 ? r.startContainer : r.startContainer.parentElement, sec = st0 && st0.closest('section'), it = sec && slO.orig.items[+sec.dataset.ob];
     const hex = origHex(slO, c);
@@ -2204,9 +2207,9 @@ function inlineClose() { const ov = $('inEd'); if (!ov || ov.hidden) return; ov.
 function inlineOpen(n, cx, cy) {
   const sl = S.slides[S.sel], it = sl && sl.orig && sl.orig.items[n], bx = sl && sl._box && sl._box[n]; if (!it || !bx || it.rot) return false;
   const frame = $('frameLive'), disp = frame.clientWidth / W, ov = $('inEd') || (() => { const d = document.createElement('div'); d.id = 'inEd'; d.contentEditable = 'true'; d.spellcheck = false; frame.appendChild(d);
-    d.addEventListener('input', () => { const s2 = S.slides[S.sel]; if (s2 && s2._editing != null) { origEdApply(s2, d, s2._editing); renderMain(); redrawSoon(); } });
+    d.addEventListener('input', () => { const s2 = S.slides[S.sel]; if (s2 && s2._editing != null) { origEdApply(s2, d, s2._editing); renderMain(); redrawSoon(); setTimeout(editBar, 0); } });
     d.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); d.blur(); } e.stopPropagation(); });
-    d.addEventListener('blur', () => setTimeout(() => { if (!d.contains(document.activeElement) && !(document.activeElement && document.activeElement.closest && document.activeElement.closest('#colorBar'))) inlineClose(); }, 120));
+    d.addEventListener('blur', () => setTimeout(() => { const a = document.activeElement; if (!d.contains(a) && !(a && a.closest && a.closest('#colorBar, #paraBar'))) { inlineClose(); editBar(); } }, 150));
     d.addEventListener('paste', e => { e.preventDefault(); const t = (e.clipboardData || window.clipboardData).getData('text/plain').replace(/\r/g, ''); t.split('\n').forEach((line, i) => { if (i) document.execCommand('insertParagraph'); if (line) document.execCommand('insertText', false, line); }); });
     return d; })();
   const k = bx.k, pk = bx.pk, px = v => (v * disp) + 'px';
@@ -2225,14 +2228,15 @@ $('cvStrip').addEventListener('dblclick', () => { const sl = S.slides[S.sel]; if
 $('cvLive').addEventListener('dblclick', e => {
   const r = $('cvLive').getBoundingClientRect(), k = W / r.width, cx = (e.clientX - r.left) * k, cy = (e.clientY - r.top) * k, sl = S.slides[S.sel];
   const b = useOrig(sl) && (S.liveGeo.rec || []).find(q => typeof q.gid === 'string' && cy >= q.y && cy <= q.y + q.h && cx >= q.x - 24 && cx <= q.x + q.w + 24);
-  if (b && inlineOpen(+b.gid.slice(1), e.clientX, e.clientY)) { selPara(null); return; }
+  if (b && inlineOpen(+b.gid.slice(1), e.clientX, e.clientY)) { selPara(null); selectWordAt($('inEd')); editBar(); return; }
   const pb = !useOrig(sl) && (S.liveGeo.rec || []).find(q => typeof q.gid === 'number' && cy >= q.y && cy <= q.y + q.h && cx >= q.x - 24 && cx <= q.x + q.w + 24);
-  if (pb && pEdOpen(pb.gid, e.clientX, e.clientY)) { selPara(null); return; }
+  if (pb && pEdOpen(pb.gid, e.clientX, e.clientY)) { selPara(null); selectWordAt($('pEd')); editBar(); return; }
   const sec = ed.querySelector('section.hot'); if (!sec) return;   // 其他情況：游標跳到右邊對應的卡片
   ed.focus(); const rg = document.createRange(); rg.selectNodeContents(sec.lastElementChild || sec); rg.collapse(false); const s2 = getSelection(); s2.removeAllRanges(); s2.addRange(rg);
 });
 function syncParaBar() {
   const bar = $('paraBar'), box = $('paraBox'); if (!bar) return;
+  if ([$('inEd'), $('pEd')].some(x => x && !x.hidden)) return;   // 打字中：工具列由 editBar 管
   const sl = S.slides[S.sel], v = S.view === 'live' ? 'l' : 's', isTB = !!(paraSel && paraSel.tb), bs = paraSel && sl && paraSel.view === v ? (isTB ? tbBoxes(v).filter(q => q.tb === paraSel.tb) : paraBoxes(v).filter(q => q.gid === paraSel.gid)) : [];
   if (!bs.length) { bar.hidden = box.hidden = true; return; }
   const x0 = Math.min(...bs.map(q => q.x)) - 14, y0 = Math.min(...bs.map(q => q.y)) - 6, x1 = Math.max(...bs.map(q => q.x + q.w)) + 14, y1 = Math.max(...bs.map(q => q.y + q.h)) + 6;
@@ -2482,7 +2486,7 @@ function pEdOpen(gid, cx, cy) {
       [...d.children].forEach(div => { const runs = []; const walk = (node, col) => { if (node.nodeType === 3) { const t = node.nodeValue.replace(/ /g, ' '); if (!t) return; const hex = col && col.toUpperCase(), red = !!(hex && hex !== String(T2.text).toUpperCase()), cc = red && hex !== String(T2.red).toUpperCase() ? (hex === String(T2.accent).toUpperCase() ? 'accent' : hex) : undefined, last = runs[runs.length - 1]; if (last && last.red === red && last.c === cc) last.t += t; else runs.push(cc ? { t, red, c: cc } : { t, red }); return; } if (node.nodeType !== 1) return; if (node.nodeName === 'BR') { if (node.nextSibling) { const l = runs[runs.length - 1]; if (l) l.t += '↵'; } return; } const st = node.style && node.style.color ? rgbHex(node.style.color) : null; node.childNodes.forEach(k => walk(k, st || col)); }; div.childNodes.forEach(k => walk(k, null)); if (runs.length) { if (div.dataset.ps) runs[0].ps = div.dataset.ps; ps.push(runs); } });
       s2.paras.splice(a, n, ...(ps.length ? ps : [])); if (!s2.paras.length) s2.paras = [[{ t: ' ', red: false }]]; s2._editP = [a, Math.max(1, ps.length)]; delete s2.pp; _deck.sig = ''; renderMain(); redrawSoon(); });
     d.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); d.blur(); } e.stopPropagation(); });
-    d.addEventListener('blur', () => setTimeout(() => { if (!d.contains(document.activeElement)) pEdClose(); }, 120));
+    d.addEventListener('blur', () => setTimeout(() => { const a = document.activeElement; if (!d.contains(a) && !(a && a.closest && a.closest('#colorBar, #paraBar'))) { pEdClose(); editBar(); } }, 150));
     d.addEventListener('paste', e => { e.preventDefault(); const t = (e.clipboardData || window.clipboardData).getData('text/plain').replace(/\r/g, ''); t.split('\n').forEach((line, i) => { if (i) document.execCommand('insertParagraph'); if (line) document.execCommand('insertText', false, line); }); });
     return d; })();
   const p = sl.paras[gid], l0 = rec[0], col = r => !r.red ? T.text : !r.c || r.c === 'red' ? T.red : r.c === 'accent' ? T.accent : r.c;
@@ -2495,3 +2499,39 @@ function pEdOpen(gid, cx, cy) {
   if (rg && ov.contains(rg.startContainer)) { s2.removeAllRanges(); s2.addRange(rg); } else { const r2 = document.createRange(); r2.selectNodeContents(ov); r2.collapse(false); s2.removeAllRanges(); s2.addRange(r2); }
   return true;
 }
+
+// ---- 打字的時候：工具列停在文字上方，顏色只改選取的字 ----
+let _edRange = null;
+const curEditor = () => [$('inEd'), $('pEd')].find(x => x && !x.hidden) || null;
+function editBar() {
+  const ov = curEditor(), bar = $('paraBar'); if (!bar) return;
+  if (!ov) { bar.classList.remove('editing'); return; }
+  const frame = ov.parentElement; if (bar.parentElement !== frame) frame.appendChild(bar);
+  bar.classList.add('editing'); bar.hidden = false; $('paraBox').hidden = true;
+  const fr = frame.getBoundingClientRect(), r = ov.getBoundingClientRect(), top = r.top - fr.top - 14, below = top < 50;
+  bar.classList.toggle('below', below);
+  Object.assign(bar.style, { left: Math.max(4, r.left - fr.left) + 'px', top: (below ? r.bottom - fr.top + 14 : top) + 'px' });
+  const sl = S.slides[S.sel], dA = bar.querySelector('.dA'); if (dA && sl) dA.style.background = ov.id === 'inEd' ? (origColors(sl).ac || curTheme(sl).accent) : curTheme(sl).accent;
+}
+document.addEventListener('selectionchange', () => { const ov = curEditor(), s2 = getSelection(); if (ov && s2.rangeCount && ov.contains(s2.anchorNode)) _edRange = s2.getRangeAt(0).cloneRange(); });
+function selectWordAt(ov) {   // 點兩下：選取游標所在的那個詞
+  const s2 = getSelection(); if (!ov || !s2.rangeCount || !s2.isCollapsed || !ov.contains(s2.anchorNode)) return;
+  try { s2.modify('move', 'backward', 'word'); s2.modify('extend', 'forward', 'word'); } catch (e) { }
+}
+const _paraColor0 = paraColor;
+paraColor = function (c) {
+  const ov = curEditor();
+  if (!ov) return _paraColor0(c);
+  const s2 = getSelection();
+  if (_edRange && (!s2.rangeCount || !ov.contains(s2.anchorNode))) { ov.focus(); s2.removeAllRanges(); s2.addRange(_edRange); }
+  if (s2.isCollapsed) { toast('先選取要換顏色的字（按住拖曳）'); return; }
+  colorText(c); setTimeout(editBar, 30);
+};
+$('paraDone').onmousedown = e => e.preventDefault();
+$('paraDone').onclick = () => { inlineClose(); pEdClose(); editBar(); };
+$('paraEdit').onclick = () => {
+  const t = paraTarget(); if (!t || t.tb) return;
+  const ok = t.orig ? inlineOpen(+t.gid.slice(1)) : pEdOpen(t.gid);
+  if (ok) { selPara(null); setTimeout(editBar, 30); }
+};
+$('paraPick').addEventListener('mousedown', () => { const s2 = getSelection(), ov = curEditor(); if (ov && s2.rangeCount && ov.contains(s2.anchorNode)) _edRange = s2.getRangeAt(0).cloneRange(); });
