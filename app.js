@@ -51,9 +51,11 @@ function drawBand(c, slide) {
 // 插入的照片：front＝放在文字上面，back＝最下層；沒設就照預設（網站排版在文字下面、Keynote 原樣在最上面）
 function drawPic(c, p) {
   const e = imgCache.get(p.src); if (!e) { loadBgImg(p.src).then(x => x && redrawSoon()); return; }
-  const im = e.im, cr = p.crop || { l: 0, t: 0, r: 0, b: 0 };
+  const im = e.im;
+  if (p.cover) { const ia = im.width / im.height, fa = (p.w * W) / (p.h * H); p.crop = ia > fa ? { l: (1 - fa / ia) / 2, r: (1 - fa / ia) / 2, t: 0, b: 0 } : { t: (1 - ia / fa) / 2, b: (1 - ia / fa) / 2, l: 0, r: 0 }; delete p.cover; }   // 填滿框：裁成框的比例
+  const cr = p.crop || { l: 0, t: 0, r: 0, b: 0 };
   const x = p.x * W, y = p.y * H, w = p.w * W, h = p.h * H, rad = (p.rr || 0) * Math.min(w, h) / 2;   // rr：0 直角、1 圓形
-  c.save(); if (!p.free) { c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = 26; c.shadowOffsetY = 8; }
+  c.save(); if (p.op != null) c.globalAlpha = p.op; if (!p.free) { c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = 26; c.shadowOffsetY = 8; }
   if (rad > 0) { c.beginPath(); c.roundRect(x, y, w, h, rad); c.clip(); }
   c.drawImage(im, im.width * cr.l, im.height * cr.t, Math.max(1, im.width * (1 - cr.l - cr.r)), Math.max(1, im.height * (1 - cr.t - cr.b)), x, y, w, h); c.restore();
   if (p.bd) { const lw = Math.max(2, Math.min(w, h) * .025); c.save(); c.strokeStyle = p.bd; c.lineWidth = lw; c.beginPath(); c.roundRect(x + lw / 2, y + lw / 2, w - lw, h - lw, Math.max(0, rad - lw / 2)); c.stroke(); c.restore(); }   // 邊框畫在照片裡面一圈
@@ -520,14 +522,31 @@ function origRebuild(sl) {
   sl.orig.items.forEach((it, order) => { if (it.k !== 'text') return; const ps = it.paras.filter(p => p.runs.some(r => r.t.trim())).map(p => { const rs = []; p.runs.forEach(r => { const red = !!(main && r.c.toLowerCase() !== main.toLowerCase()), t = r.t.replace(/\n/g, '↵'), l = rs[rs.length - 1]; if (l && l.red === red && l.c === (red ? r.c : undefined)) l.t += t; else rs.push(red ? { t, red, c: r.c } : { t, red }); }); return rs; }); if (ps.length) items.push({ x: it.x, y: it.y, h: it.h || 60, order, paras: ps }); });
   const paras = arrangeItems(items); sl.paras = paras.length ? paras : [[{ t: ' ', red: false }]]; sl.origSig = JSON.stringify(sl.paras);
 }
+// Keynote 裡的照片也要能拖、縮放、裁切：第一次畫的時候轉成「插入的照片」，原本的位置（疊放順序）留一個記號
+function origPicsToFree(slide) {
+  const O = slide.orig, sw = O.sw || 1920, sh = O.sh || 1080;
+  if (!O.picsMoved) { O.picsMoved = true; if (slide.pics) slide.pics = slide.pics.filter(p => p.free || p.inOrig); if (slide.pics && !slide.pics.length) delete slide.pics; }   // 讀檔時另外存的一份（網站排版用）拿掉，避免畫兩次
+  // 長方形（含圓角）、裝滿照片的形狀，也算照片
+  const rectish = it => { const pt = it.path; if (!pt) return false; if (pt.round != null) return true; if (!pt.cmds) return false; const pts = pt.cmds.filter(c => c[0] === 1 || c[0] === 2); if (pt.cmds.some(c => c[0] === 3 || c[0] === 4) || pts.length < 4 || pts.length > 6) return false; const xs = new Set(pts.map(c => Math.round(c[1]))), ys = new Set(pts.map(c => Math.round(c[2]))); return xs.size <= 2 && ys.size <= 2; };
+  O.items.forEach((it, n) => {
+    if (it.pid || it.rot) return;
+    const isPic = it.k === 'pic', isFill = it.k === 'shape' && it.fill && it.fill.img && !it.stroke && rectish(it) && it.w > sw * .12 && it.h > sh * .12 && (it.w * it.h) / (sw * sh) < .6;   // 太大的（整頁紋理）當背景，不讓它被點到
+    if (!isPic && !isFill) return;
+    const id = 'k' + n + '_' + Date.now().toString(36), p = { id, src: isPic ? it.src : it.fill.img, x: it.x / sw, y: it.y / sh, w: it.w / sw, h: it.h / sh, crop: isPic ? Object.assign({}, it.crop) : { l: 0, t: 0, r: 0, b: 0 }, free: true, inOrig: true };
+    if (isFill) { if (it.fill.tech === 3) p.cover = true; if (it.path.round) p.rr = Math.min(1, it.path.round / (Math.min(...it.path.nat) / 2)); if (it.op != null && it.op < 1) p.op = it.op; }
+    (slide.pics = slide.pics || []).push(p); it.pid = id;
+  });
+}
 function drawOrig(cv, slide, idx, noText) {
+  origPicsToFree(slide);
   const c = cv.getContext('2d'), O = slide.orig, k = W / (O.sw || 1920), rec = [], otext = [];
   c.clearRect(0, 0, W, H); c.fillStyle = O.bg || '#FFFFFF'; c.fillRect(0, 0, W, H);
   if (O.bgImg) { const im = origImg(O.bgImg); if (im) coverDraw(c, im, 0, 0, W, H, null); }   // 這一頁換成照片背景
   (slide.pics || []).filter(p => p.z === 'back').forEach(p => drawPic(c, p));
+  const inOrig = new Set(slide.orig.items.map(it => it.pid).filter(Boolean));
   const rot = (it, fn) => { c.save(); const cx = (it.x + it.w / 2) * k, cy = (it.y + it.h / 2) * k; c.translate(cx, cy); if (it.rot) c.rotate(-it.rot * Math.PI / 180); c.translate(-it.w * k / 2, -it.h * k / 2); fn(it.w * k, it.h * k); c.restore(); };
   O.items.forEach((it, n) => {
-    if (it.k === 'shape') rot(it, (w, h) => {
+    if (it.k === 'shape' && !it.pid) rot(it, (w, h) => {
       const P = new Path2D(), pt = it.path, sx = w / (pt.nat[0] || 1), sy = h / (pt.nat[1] || 1);
       if (pt.cmds) pt.cmds.forEach(([t, ...a]) => { const X = i => a[i] * sx, Y = i => a[i + 1] * sy;
         if (t === 1) P.moveTo(X(0), Y(0)); else if (t === 2) P.lineTo(X(0), Y(0)); else if (t === 3 && a.length >= 4) P.quadraticCurveTo(X(0), Y(0), X(2), Y(2)); else if (t === 4 && a.length >= 6) P.bezierCurveTo(X(0), Y(0), X(2), Y(2), X(4), Y(4)); else if (t === 5) P.closePath(); });
@@ -544,6 +563,7 @@ function drawOrig(cv, slide, idx, noText) {
       if (it.stroke) { c.globalAlpha *= it.stroke.a == null ? 1 : it.stroke.a; c.strokeStyle = it.stroke.c; c.lineWidth = Math.max(1, it.stroke.w * k); c.setLineDash(it.stroke.dash ? [6 * k, 4 * k] : []); c.stroke(P); c.setLineDash([]); }
       c.globalAlpha = 1;
     });
+    else if (it.pid) { const p = (slide.pics || []).find(q => q.id === it.pid); if (p && !p.z) drawPic(c, p); }   // 原本疊放順序的位置畫
     else if (it.k === 'pic') rot(it, (w, h) => { const im = origImg(it.src); if (!im) return; const cr = it.crop || { l: 0, t: 0, r: 0, b: 0 }; c.drawImage(im, im.width * cr.l, im.height * cr.t, im.width * (1 - cr.l - cr.r), im.height * (1 - cr.t - cr.b), 0, 0, w, h); });
     else if (it.k === 'text') {
       const gid = 'b' + n, d = ppOf(slide, 'l', gid) || {}, inset = 3.6 * k, bw = Math.max(40, it.w * k * (d.k || 1) - inset * 2);
@@ -576,7 +596,7 @@ function drawOrig(cv, slide, idx, noText) {
       (slide._box = slide._box || {})[n] = { x: tx, y: ty, w: it.nowrap ? Math.max(bw, W - tx - 40) : bw * 1.01 + 4, pk, k };
     }
   });
-  (slide.pics || []).filter(p => p.z !== 'back').forEach(p => drawPic(c, p));
+  (slide.pics || []).filter(p => p.z !== 'back' && (p.z || !inOrig.has(p.id))).forEach(p => drawPic(c, p));
   const T = curTheme(slide), tb = drawTB(c, slide, 'l', Object.assign({}, T, { text: lumOf(O.bg || '#fff') < .5 ? '#FFFFFF' : '#1F1A17' }), noText);
   return { shrunk: false, capped: false, geo: { lines: [], x: 0, y: 0, o: { headRule: () => false, headScale: 1, lineGap: LN, paraGap: 0 }, align: 'left', maxW: W, T, extra: [], rec, tb, otext } };
 }
