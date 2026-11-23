@@ -94,11 +94,38 @@ details.more summary:hover{color:var(--ink)}
 .cap{display:flex;align-items:center;gap:12px;min-height:32px;font-size:13px;color:var(--muted)}
 .cap #viewHint{flex:1}
 .capAlign{display:flex;gap:4px}
+.htools{display:flex;align-items:center;gap:8px;margin-right:8px}
+body.empty .htools{display:none}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden;height:34px}
+.seg button{border:0;background:none;color:var(--muted);padding:0 14px;font-size:13px;cursor:pointer}
+.seg button.on{background:var(--raise2,#2a2c31);color:var(--ink)}
+.views,#tplBanner{display:none!important}
+#paraBar .bsep{width:1px;height:20px;background:var(--line2);margin:0 2px}
+#paraBar .dot{width:28px;height:28px;border:1px solid transparent;border-radius:6px;background:none;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;position:relative;padding:0}
+#paraBar .dot:hover{border-color:var(--line2)}
+#paraBar .dot i{width:16px;height:16px;border-radius:50%;display:block;border:1px solid rgba(255,255,255,.25)}
+#paraBar .dot .d0{background:#E8E4DA}
+#paraBar .dot .dA{background:#B08A55}
+#paraBar .dot .dP{background:conic-gradient(#e44,#ec4,#4c6,#4ae,#a4e,#e44)}
+#paraBar .dot input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.pgbg button{width:34px;height:34px;border-radius:6px;border:1px solid var(--line2);cursor:pointer;padding:0}
+.pgbg button.sel{outline:2px solid var(--accent);outline-offset:2px}
+.pgbg button.orig{background:repeating-linear-gradient(45deg,#3a3c42 0 6px,#2a2c31 6px 12px);color:var(--ink2);font-size:11px;width:auto;padding:0 8px}
+.morebar{padding:10px 16px 0}
+.mobonly{display:none}
+@media (max-width:640px){
+  .mobonly{display:flex;gap:8px;flex-wrap:wrap}
+  #hAddTB,#hAddPic,#btnOpen,#btnRedo{display:none!important}
+  .htools{margin-right:4px}
+  .seg{height:36px}.seg button{white-space:nowrap;padding:0 10px}
+}
 .edsimple{padding:14px;border:1px solid var(--line2);border-radius:8px;margin:0 0 10px;background:rgba(255,255,255,.03)}
 .edsimple p{margin:0 0 10px;font-size:14px;line-height:1.7;color:var(--ink)}
 .edsimple[hidden],#ed[hidden],.cbsep[hidden]{display:none}
 #inEd{position:absolute;z-index:5;outline:1.5px dashed var(--accent);outline-offset:6px;background:transparent;white-space:normal;word-break:break-all;line-break:strict;caret-color:var(--accent);cursor:text;padding:0}
-#inEd[hidden]{display:none}
+#inEd[hidden],#pEd[hidden]{display:none}
+#pEd{position:absolute;z-index:5;outline:1.5px dashed var(--accent);outline-offset:6px;background:transparent;white-space:pre-wrap;word-break:break-all;caret-color:var(--accent);cursor:text}
+#pEd div{margin:0}
 #inEd div{margin:0}
 #ed section{position:relative;margin:0 0 10px;padding:22px 10px 8px;border:1px solid var(--line2);border-radius:8px;background:rgba(255,255,255,.02);transition:border-color .15s,background .15s}
 #ed section::before{content:attr(data-label);position:absolute;left:10px;top:5px;font-size:11px;line-height:1;color:var(--muted);pointer-events:none;user-select:none}
@@ -521,6 +548,11 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 <header>
   <h1><span class="mark" aria-hidden="true"><i></i><i></i></span><span class="t">簡報美編工坊</span></h1>
   <span class="sp"></span>
+  <div class="htools" id="hTools">
+    <button class="btn" id="hAddTB" title="在這一頁加一段文字">加文字</button>
+    <button class="btn" id="hAddPic" title="在這一頁加圖片或 logo">加圖片</button>
+    <div class="seg" id="hView" role="tablist" aria-label="要看哪一種版本"><button data-v="live" class="on" role="tab">現場版</button><button data-v="strip" role="tab">線上版</button></div>
+  </div>
   <div class="undo"><button class="btn iconbtn" id="btnUndo" title="復原（⌘Z／Ctrl+Z）" aria-label="復原" disabled>復原</button><button class="btn iconbtn" id="btnRedo" title="重做（⇧⌘Z／Ctrl+Y）" aria-label="重做" disabled>重做</button></div>
   <button class="btn" id="btnOpen" aria-label="上傳文字檔" title="上傳文字檔">上傳文字檔</button>
   <div class="expwrap">
@@ -579,7 +611,7 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
         <div class="cap"><span class="onair"><i class="tally" id="capTally"></i><b id="capName">現場版</b><span id="capPage"></span></span><span id="viewHint"></span><span id="capLive"></span><div class="svAlign capAlign" id="capAlign" hidden role="group" aria-label="字條對齊"><button class="pill" data-a="auto" title="標題靠左、內文往右退">錯開</button><button class="pill" data-a="left">靠左</button><button class="pill" data-a="center">置中</button></div><div class="pages" id="pages"></div></div>
         <div class="frame" id="frameLive"><canvas id="cvLive" width="1920" height="1080"></canvas>
           <div id="paraBox" hidden></div>
-          <div id="paraBar" hidden role="toolbar" aria-label="這一段文字"><input id="tbText" hidden aria-label="文字框的內容" placeholder="輸入文字"><button class="pill" id="paraMinus" title="縮小" aria-label="縮小">A−</button><output id="paraK">100%</output><button class="pill" id="paraPlus" title="這一段放大" aria-label="這一段放大">A＋</button><button class="pill" id="paraUp" title="這一段往上移">上移</button><button class="pill" id="paraDown" title="這一段往下移">下移</button><button class="pill" id="paraJoin" title="把這一段接到上一段後面">併到上一段</button><button class="pill" id="paraReset" title="這一段的位置和大小還原">還原</button><button class="pill" id="tbDel" hidden>刪除</button></div>
+          <div id="paraBar" hidden role="toolbar" aria-label="這一段文字"><input id="tbText" hidden aria-label="文字框的內容" placeholder="輸入文字"><button class="pill" id="paraMinus" title="字小一點">字小</button><output id="paraK" hidden>100%</output><button class="pill" id="paraPlus" title="字大一點">字大</button><span class="bsep"></span><button class="dot" data-pc="" title="一般顏色" aria-label="一般顏色"><i class="d0"></i></button><button class="dot" data-pc="red" title="紅色" aria-label="紅色"><i style="background:#D6453D"></i></button><button class="dot" data-pc="accent" title="主題色" aria-label="主題色"><i class="dA"></i></button><label class="dot" title="自己挑顏色" aria-label="自己挑顏色"><i class="dP"></i><input type="color" id="paraPick" value="#D9822B"></label><span class="bsep"></span><button class="pill" id="paraBold" title="粗體">粗體</button><button class="pill" id="paraAlign" title="對齊">置中</button><button class="pill" id="paraDelete" title="刪除這一段">刪除</button><button class="pill" id="paraUp" hidden>上移</button><button class="pill" id="paraDown" hidden>下移</button><button class="pill" id="paraJoin" hidden>併到上一段</button><button class="pill" id="paraReset" hidden>還原</button><button class="pill" id="tbDel" hidden>刪除</button></div>
         </div>
         <div class="frame video" id="frameStrip" hidden><canvas id="cvStrip" width="1920" height="1080"></canvas></div>
       </div>
@@ -588,14 +620,25 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
   <aside id="side">
     <div id="sideEmpty">上傳檔案後，這裡可以改文字、調位置、換背景</div>
     <div id="sideBody" hidden>
-      <div class="tabs" role="tablist">
+      <div class="pane" id="pPage">
+        <div class="row mobonly" style="margin-bottom:16px"><button class="btn small" id="mAddTB">加文字</button><button class="btn small" id="mAddPic">加圖片</button><button class="btn small" id="mOpen">開新檔案</button></div>
+        <div class="sec">
+          <h3>這一頁的背景</h3>
+          <div class="row pgbg" id="pgBg"></div>
+          <div class="row" style="margin-top:8px"><button class="btn small" id="pgPhoto">換成照片</button><button class="btn small" id="pgAll">套用到所有頁</button></div>
+        </div>
+        <div id="pgMove"></div>
+        <div class="sec"><button class="btn small" id="moreOpen">更多設定</button></div>
+      </div>
+      <div class="morebar" id="moreBar" hidden><button class="btn small" id="moreClose">← 回到這一頁</button></div>
+      <div class="tabs" role="tablist" id="moreTabs" hidden>
         <button class="on" data-pane="pText" role="tab">文字</button>
         <button data-pane="pBg" role="tab">模板</button>
         <button data-pane="pLook" role="tab">字型</button>
         <button data-pane="pPos" role="tab">大小位置</button>
       </div>
 
-      <div class="pane" id="pText">
+      <div class="pane" id="pText" hidden>
         <div class="sec">
           <h3>這一頁的文字</h3>
           <div class="colorbar" id="colorBar">
@@ -834,12 +877,20 @@ select:focus,input[type=text]:focus{outline:0;border-color:rgba(255,255,255,.32)
 <script src="themes2.js?v=20"></script>
 <script src="themes3.js?v=52"></script>
 <script src="template.js?v=2"></script>
-<script src="app.js?v=125"></script>
+<script src="app.js?v=128"></script>
 <script>
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('#sideBody .pane').forEach(p => p.hidden = p.id !== b.dataset.pane);
 });
+// 右邊平常只有「這一頁」；按「更多設定」才出現原本的分頁
+function showMore(on) {
+  document.getElementById('moreTabs').hidden = document.getElementById('moreBar').hidden = !on;
+  const cur = document.querySelector('.tabs button.on') || document.querySelector('.tabs button');
+  document.querySelectorAll('#sideBody .pane').forEach(p => p.hidden = on ? p.id !== cur.dataset.pane : p.id !== 'pPage');
+}
+document.getElementById('moreOpen').onclick = () => showMore(true);
+document.getElementById('moreClose').onclick = () => showMore(false);
 </script>
 </body>
 </html>

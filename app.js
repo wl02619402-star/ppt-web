@@ -310,7 +310,8 @@ function drawLines(c, lines, x, y, o, T, align = 'left', boxW = 0) {
     const d = o.off ? o.off(l.gid) : null;
     let px = (align === 'center' ? x + (boxW - l.w) / 2 : align === 'right' ? x + boxW - l.w : x) + (d ? d.x || 0 : 0);
     const cy = y + l.h / 2 + (d ? d.y || 0 : 0);
-    if (o.rec) o.rec.push({ gid: l.gid, x: px, y: cy - l.h / 2, w: l.w, h: l.h });
+    if (o.rec) o.rec.push({ gid: l.gid, x: px, y: cy - l.h / 2, w: l.w, h: l.h, size: l.size, head: l.head, scr: l.scr });
+    if (o.hide && l.gid >= o.hide[0] && l.gid < o.hide[0] + o.hide[1]) return;   // 正在投影片上編輯的那一段先不畫
     l.segs.forEach(s => {
       c.font = s.red ? redf : base; c.fillStyle = (l.head && o.headColor) ? o.headColor : runColor(s, T);
       if (shadowOn) { c.shadowColor = 'rgba(0,0,0,.6)'; c.shadowBlur = 12; c.shadowOffsetY = 3; }
@@ -328,7 +329,7 @@ const gapOf = slide => (slide && slide.lg) || S.lineGap || 1.1 * LN;
 function liveOpts(isTitle, v, slide) {
   return {
     headRule: (pi, ps) => (v === 'spark' || v === 'solid' || (v === 'spot' && slide && isShort(slide))) ? false : isTitle ? pi === 0 : (pi === 0 && ps.length > 1 && plain(ps[0]).length <= 28),
-    headScale: isTitle ? 1.9 : 1.16, lineGap: gapOf(slide), paraGap: .45, shadow: S.shadow || v === 'spot', rec: [], ...ppOpts(slide, 'l'),
+    headScale: isTitle ? 1.9 : 1.16, lineGap: gapOf(slide), paraGap: .45, shadow: S.shadow || v === 'spot', rec: [], ...ppOpts(slide, 'l'), hide: slide && slide._editP,
   };
 }
 function liveCfg(slide, isTitle, v) {
@@ -501,7 +502,10 @@ function origEdApply(sl, root = ed, only = null) {   // only＝只改這一個�
       return Object.assign({}, op, { runs });
     });
   });
-  // 線上版字條跟著更新：用同一套閱讀順序規則
+  origRebuild(sl);
+}
+// 線上版字條跟著更新：用同一套閱讀順序規則
+function origRebuild(sl) {
   const items = [], main = origColors(sl).mc;
   sl.orig.items.forEach((it, order) => { if (it.k !== 'text') return; const ps = it.paras.filter(p => p.runs.some(r => r.t.trim())).map(p => { const rs = []; p.runs.forEach(r => { const red = !!(main && r.c.toLowerCase() !== main.toLowerCase()), t = r.t.replace(/\n/g, '↵'), l = rs[rs.length - 1]; if (l && l.red === red && l.c === (red ? r.c : undefined)) l.t += t; else rs.push(red ? { t, red, c: r.c } : { t, red }); }); return rs; }); if (ps.length) items.push({ x: it.x, y: it.y, h: it.h || 60, order, paras: ps }); });
   const paras = arrangeItems(items); sl.paras = paras.length ? paras : [[{ t: ' ', red: false }]]; sl.origSig = JSON.stringify(sl.paras);
@@ -509,6 +513,7 @@ function origEdApply(sl, root = ed, only = null) {   // only＝只改這一個�
 function drawOrig(cv, slide, idx, noText) {
   const c = cv.getContext('2d'), O = slide.orig, k = W / (O.sw || 1920), rec = [], otext = [];
   c.clearRect(0, 0, W, H); c.fillStyle = O.bg || '#FFFFFF'; c.fillRect(0, 0, W, H);
+  if (O.bgImg) { const im = origImg(O.bgImg); if (im) coverDraw(c, im, 0, 0, W, H, null); }   // 這一頁換成照片背景
   const rot = (it, fn) => { c.save(); const cx = (it.x + it.w / 2) * k, cy = (it.y + it.h / 2) * k; c.translate(cx, cy); if (it.rot) c.rotate(-it.rot * Math.PI / 180); c.translate(-it.w * k / 2, -it.h * k / 2); fn(it.w * k, it.h * k); c.restore(); };
   O.items.forEach((it, n) => {
     if (it.k === 'shape') rot(it, (w, h) => {
@@ -1195,7 +1200,7 @@ function renderMain() {
   $('miniLive').getContext('2d').drawImage($('cvLive'), 0, 0, 320, 180); const mc = $('miniStrip').getContext('2d'); mc.clearRect(0, 0, 320, 180); mc.drawImage($('cvStrip'), 0, 0, 320, 180);
   const pg = $('pages'); pg.innerHTML = '';
   if (S.view === 'strip' && n > 1) for (let i = 0; i < n; i++) { const b = document.createElement('button'); b.className = 'pill' + (i === S.page ? ' sel' : ''); b.textContent = `第${i + 1}張`; b.onclick = () => { S.page = i; renderMain(); }; pg.appendChild(b); }
-  renderThumb(S.sel); syncVariantUI(); syncParaBar();
+  renderThumb(S.sel); syncVariantUI(); syncParaBar(); syncPage();
 }
 function syncVariantUI() {
   const sl = S.slides[S.sel], sel = $('variantSel'); if (!sl || !sel) return;
@@ -1234,6 +1239,7 @@ function buildList() {
 }
 function select(i) {
   if ($('inEd') && !$('inEd').hidden) inlineClose();
+  if (typeof pEdClose === 'function') pEdClose();
   S.sel = i; S.page = 0; paraSel = null; if (typeof picSel !== 'undefined') { picSel.hidden = true; picPinned = false; }
   document.querySelectorAll('.thumb').forEach((d, k) => d.classList.toggle('sel', k === i));
   const sl = S.slides[i];
@@ -1242,12 +1248,13 @@ function select(i) {
   const th = document.querySelectorAll('.thumb')[i]; if (th) th.scrollIntoView({ block: 'nearest' });
 }
 const VIEW_HINT = {
-  live: '按住一段文字可以拖動，點一下調大小，點兩下直接改字',
-  strip: '按住一段文字可以拖動，點一下可以調大小；拖空白處移動字條',
+  live: '點一下選取，點兩下改字',
+  strip: '點一下選取，拖曳可以移動字條',
 };
 function setView(v) {
   S.view = v; paraSel = null; if (typeof picSel !== 'undefined') { picSel.hidden = true; picPinned = false; }
-  document.querySelectorAll('.view').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  document.querySelectorAll('.view, #hView button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  if (typeof pEdClose === 'function') pEdClose(); syncPage();
   $('frameLive').hidden = v !== 'live'; $('frameStrip').hidden = v !== 'strip';
   $('posLive').hidden = v !== 'live'; $('posStrip').hidden = v !== 'strip';
   $('viewHint').textContent = VIEW_HINT[v]; if (typeof edRender === 'function' && S.slides.length) edRender(); $('capAlign').hidden = v !== 'strip'; $('stripLookSec').hidden = v !== 'strip';   // 字條的設定只在看線上版時出現 renderMain();
@@ -1659,9 +1666,9 @@ document.addEventListener('selectionchange', () => { const s = getSelection(); i
 function colorText(c) {
   const s = getSelection(); let r = s.rangeCount && ed.contains(s.anchorNode) && !s.isCollapsed ? s.getRangeAt(0) : edRange;
   if (!r || r.collapsed || !ed.contains(r.commonAncestorContainer)) { toast('先在文字框裡選取要改顏色的字'); return; }
-  const slO = S.slides[S.sel], ov = $('inEd');
-  if (ov && !ov.hidden && ov.contains(getSelection().anchorNode)) {   // 投影片上直接編輯時
-    const hex = origHex(slO, c);
+  const slO = S.slides[S.sel], ov = [$('inEd'), $('pEd')].find(x => x && !x.hidden && x.contains(getSelection().anchorNode));
+  if (ov) {   // 投影片上直接編輯時
+    const Tt = curTheme(slO), hex = ov.id === 'inEd' ? origHex(slO, c) : c === 'red' ? Tt.red : c === 'accent' ? Tt.accent : c ? c : Tt.text;
     document.execCommand('styleWithCSS', false, true); document.execCommand('foreColor', false, hex); ov.dispatchEvent(new Event('input')); return;
   }
   if (useOrig(slO)) {   // 原樣頁面：直接把選取的字換顏色；「一般」＝那一段原本最多字的顏色
@@ -1949,7 +1956,7 @@ function drawTplSlide(cv, slide, idx, noText, dry) {
   const cap = dry ? 0 : tplDeckSize();
   const place = (pp, r, head, maxS, body) => {
     if (body && cap) maxS = Math.min(maxS, Math.round(cap * 1.12 / scale));
-    const o = { headRule: head ? (pi2, all) => pi2 === 0 && all.length > 1 : () => false, headScale: 1.2, lineGap: gap, paraGap: .45, shadow: S.shadow, rec, ...ppo };
+    const o = { headRule: head ? (pi2, all) => pi2 === 0 && all.length > 1 : () => false, headScale: 1.2, lineGap: gap, paraGap: .45, shadow: S.shadow, rec, ...ppo, hide: slide._editP };
     let f = fitRegion(pp, r, o, Math.round(maxS * scale), 40);
     if (!f.fit) { const g = grow(r), f2 = fitRegion(pp, g, o, Math.round(maxS * scale), 32); if (f2.size > f.size || f2.fit) { f = f2; r = g; } }
     const h = blockH(f.lines, o), y = r.anchor === 'middle' ? r.y + (r.h - h) / 2 : r.anchor === 'bottom' ? r.y + r.h - h : r.y;
@@ -2214,11 +2221,13 @@ function inlineOpen(n, cx, cy) {
   if (rg && ov.contains(rg.startContainer)) { s2.removeAllRanges(); s2.addRange(rg); } else { const r2 = document.createRange(); r2.selectNodeContents(ov); r2.collapse(false); s2.removeAllRanges(); s2.addRange(r2); }
   return true;
 }
-$('cvStrip').addEventListener('dblclick', () => { const sl = S.slides[S.sel]; if (useOrig(sl)) { setView('live'); toast('在現場版的投影片上點兩下改字，字條會跟著改'); } });
+$('cvStrip').addEventListener('dblclick', () => { const sl = S.slides[S.sel]; if (sl) { setView('live'); toast('在投影片上點兩下改字，字條會跟著改'); } });
 $('cvLive').addEventListener('dblclick', e => {
   const r = $('cvLive').getBoundingClientRect(), k = W / r.width, cx = (e.clientX - r.left) * k, cy = (e.clientY - r.top) * k, sl = S.slides[S.sel];
   const b = useOrig(sl) && (S.liveGeo.rec || []).find(q => typeof q.gid === 'string' && cy >= q.y && cy <= q.y + q.h && cx >= q.x - 24 && cx <= q.x + q.w + 24);
   if (b && inlineOpen(+b.gid.slice(1), e.clientX, e.clientY)) { selPara(null); return; }
+  const pb = !useOrig(sl) && (S.liveGeo.rec || []).find(q => typeof q.gid === 'number' && cy >= q.y && cy <= q.y + q.h && cx >= q.x - 24 && cx <= q.x + q.w + 24);
+  if (pb && pEdOpen(pb.gid, e.clientX, e.clientY)) { selPara(null); return; }
   const sec = ed.querySelector('section.hot'); if (!sec) return;   // 其他情況：游標跳到右邊對應的卡片
   ed.focus(); const rg = document.createRange(); rg.selectNodeContents(sec.lastElementChild || sec); rg.collapse(false); const s2 = getSelection(); s2.removeAllRanges(); s2.addRange(rg);
 });
@@ -2373,3 +2382,116 @@ function syncStripLook() {
 })();
 
 (function wireEdSimple() { if (!$('edToggle')) return; $('edToggle').onclick = () => { S.edCards = !S.edCards; edRender(); }; })();
+
+// ================= 簡化後的操作：上方工具、浮動工具列、投影片上直接改字、右邊「這一頁」 =================
+$('hAddTB').onclick = $('mAddTB').onclick = () => addTextBox();
+$('mOpen').onclick = () => $('btnOpen').click();
+$('hAddPic').onclick = $('mAddPic').onclick = () => $('addPicFile').click();
+document.querySelectorAll('#hView button').forEach(b => b.onclick = () => setView(b.dataset.v));
+// 原本分散在「文字」分頁的區塊，搬到「這一頁」
+(function movePageBlocks() {
+  const box = $('pgMove'); if (!box) return;
+  [$('stripLookSec'), $('btnAdd') && $('btnAdd').closest('.sec')].forEach(x => x && box.appendChild(x));
+  const addSec = $('btnAddTB') && $('btnAddTB').closest('.sec'); if (addSec) addSec.hidden = true;
+})();
+// ---- 這一頁的背景 ----
+const PG_BG = [['', '原本'], ['#FFFFFF', '白'], ['#F3EEE3', '米白'], ['#24262B', '深灰'], ['#1F3A36', '墨綠']];
+(function buildPgBg() {
+  const box = $('pgBg'); if (!box) return;
+  PG_BG.forEach(([c, name]) => { const b = document.createElement('button'); b.dataset.c = c; b.title = name; b.setAttribute('aria-label', name + '背景'); if (c) b.style.background = c; else { b.className = 'orig'; b.textContent = '原本'; } b.onclick = () => setPageBg(c); box.appendChild(b); });
+})();
+function setPageBg(c) {
+  const sl = S.slides[S.sel]; if (!sl) return;
+  if (useOrig(sl)) { const O = sl.orig; if (O.bg0 == null) O.bg0 = O.bg; O.bg = c || O.bg0; delete O.bgImg; }
+  else if (c) setSlideBg({ t: 'color', c }); else { delete sl.bg; }
+  bgCache.clear(); _scCache.clear(); renderMain(); renderThumb(S.sel); save(); syncPage();
+}
+function syncPage() {
+  const sl = S.slides[S.sel]; if (!sl || !$('pgBg')) return;
+  const cur = useOrig(sl) ? (sl.orig.bgImg ? 'img' : sl.orig.bg0 != null && sl.orig.bg !== sl.orig.bg0 ? sl.orig.bg : '') : sl.bg && sl.bg.t === 'color' ? sl.bg.c : sl.bg ? 'img' : '';
+  document.querySelectorAll('#pgBg button').forEach(b => b.classList.toggle('sel', (b.dataset.c || '') === cur));
+}
+$('pgPhoto').onclick = () => {
+  const sl = S.slides[S.sel]; if (!sl) return;
+  if (!useOrig(sl)) { $('slBgFile').click(); return; }
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = async () => { const f = inp.files[0]; if (!f) return; const raw = await new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result); r.readAsDataURL(f); }); const src = await shrinkImg(raw, f.type); await loadBgImg(src); sl.orig.bgImg = src; renderMain(); renderThumb(S.sel); save(); syncPage(); };
+  inp.click();
+};
+$('pgAll').onclick = () => {
+  const sl = S.slides[S.sel]; if (!sl) return; let n = 0;
+  S.slides.forEach((x, i) => { if (i === S.sel) return;
+    if (useOrig(sl) && useOrig(x)) { if (x.orig.bg0 == null) x.orig.bg0 = x.orig.bg; x.orig.bg = sl.orig.bg; if (sl.orig.bgImg) x.orig.bgImg = sl.orig.bgImg; else delete x.orig.bgImg; n++; }
+    else if (!useOrig(sl) && !useOrig(x)) { if (sl.bg) x.bg = JSON.parse(JSON.stringify(sl.bg)); else delete x.bg; n++; } });
+  bgCache.clear(); _scCache.clear(); buildList(); renderMain(); save(); toast(n ? `已經套用到其他 ${n} 頁` : '沒有其他同類型的頁面');
+};
+// ---- 浮動工具列：顏色、粗體、對齊、刪除 ----
+function paraTarget() { const sl = S.slides[S.sel]; return paraSel && sl ? { sl, gid: paraSel.gid, tb: paraSel.tb, orig: typeof paraSel.gid === 'string' } : null; }
+function paraColor(c) {
+  const sel = getSelection(), ov = [$('inEd'), $('pEd')].find(x => x && !x.hidden && x.contains(sel.anchorNode));
+  if (ov && !sel.isCollapsed) return colorText(c);
+  const t = paraTarget(); if (!t) return; const T = curTheme(t.sl);
+  if (t.tb) { const b = (t.sl.tb || []).find(z => z.id === t.tb); if (b) b.c = c === 'red' ? T.red : c === 'accent' ? T.accent : c || undefined; }
+  else if (t.orig) { const it = t.sl.orig.items[+t.gid.slice(1)], hex = origHex(t.sl, c); it.paras.forEach(p => p.runs.forEach(r => { r.c = hex; })); origRebuild(t.sl); }
+  else { const p = t.sl.paras[t.gid]; if (!p) return; const txt = plain(p), ps = p[0] && p[0].ps, run = !c ? { t: txt, red: false } : c === 'red' ? { t: txt, red: true } : { t: txt, red: true, c }; if (ps) run.ps = ps; t.sl.paras[t.gid] = [run]; }
+  edRender(); redrawSoon();
+}
+document.querySelectorAll('#paraBar [data-pc]').forEach(b => { b.onmousedown = e => e.preventDefault(); b.onclick = () => paraColor(b.dataset.pc); });
+$('paraPick').onchange = () => paraColor($('paraPick').value.toUpperCase());
+$('paraBold').onmousedown = e => e.preventDefault();
+$('paraBold').onclick = () => {
+  const t = paraTarget(); if (!t || t.tb) return;
+  if (t.orig) { const it = t.sl.orig.items[+t.gid.slice(1)], bold = it.paras.some(p => p.runs.some(r => r.w >= 700)); it.paras.forEach(p => p.runs.forEach(r => { r.w = bold ? 400 : 700; })); origRebuild(t.sl); }
+  else { const p = t.sl.paras[t.gid]; if (!p || !p[0]) return; const v = autoVariant(t.sl, S.sel), hr = liveOpts(v === 'title', v, t.sl).headRule, isH = p[0].ps ? p[0].ps === 'h' : hr(t.gid, t.sl.paras); p[0].ps = isH ? 'b' : 'h'; }
+  _deck.sig = ''; edRender(); redrawSoon(); syncParaBar();
+};
+const ALIGNS = ['left', 'center', 'right'], ALIGN_NAME = { left: '靠左', center: '置中', right: '靠右' };
+function curAlign(t) { if (t.orig) { const it = t.sl.orig.items[+t.gid.slice(1)], a = it.paras[0] ? it.paras[0].align : 0; return a === 2 ? 'center' : a === 1 ? 'right' : 'left'; } const vv = autoVariant(t.sl, S.sel); return liveCfg(t.sl, vv === 'title', vv).align || t.sl._autoAlign || 'left'; }
+$('paraAlign').onclick = () => {
+  const t = paraTarget(); if (!t || t.tb) return; const next = ALIGNS[(ALIGNS.indexOf(curAlign(t)) + 1) % 3];
+  if (t.orig) { const it = t.sl.orig.items[+t.gid.slice(1)]; it.paras.forEach(p => { p.align = next === 'center' ? 2 : next === 'right' ? 1 : 0; }); }
+  else t.sl.lv = Object.assign({}, t.sl.lv, { align: next });
+  redrawSoon(); setTimeout(syncParaBar, 120);
+};
+$('paraDelete').onclick = () => {
+  const t = paraTarget(); if (!t) return;
+  if (t.tb) { t.sl.tb = (t.sl.tb || []).filter(z => z.id !== t.tb); if (!t.sl.tb.length) delete t.sl.tb; }
+  else if (t.orig) { t.sl.orig.items[+t.gid.slice(1)].paras = []; origRebuild(t.sl); }
+  else { t.sl.paras.splice(t.gid, 1); if (!t.sl.paras.length) t.sl.paras = [[{ t: ' ', red: false }]]; delete t.sl.pp; }
+  selPara(null); edRender(); redrawSoon();
+};
+// 工具列：依選到的東西顯示需要的按鈕
+const _syncParaBar0 = syncParaBar;
+syncParaBar = function () {
+  _syncParaBar0();
+  const t = paraTarget(); if (!t || $('paraBar').hidden) return;
+  const strip = paraSel.view === 's', A = curTheme(t.sl).accent;
+  document.querySelectorAll('#paraBar .dot, #paraBar .bsep').forEach(x => x.hidden = strip);
+  $('paraBold').hidden = $('paraAlign').hidden = strip || !!t.tb; $('paraDelete').hidden = strip || !!t.tb;
+  ['paraUp', 'paraDown', 'paraJoin', 'paraReset'].forEach(id => $(id).hidden = true);
+  const dA = $('paraBar').querySelector('.dA'); if (dA) dA.style.background = t.orig ? (origColors(t.sl).ac || A) : A;
+  if (!strip && !t.tb) $('paraAlign').textContent = ALIGN_NAME[curAlign(t)];
+};
+// ---- 網站排版的頁面：一樣可以在投影片上點兩下改字 ----
+function pEdClose() { const ov = $('pEd'); if (!ov || ov.hidden) return; ov.hidden = true; ov.innerHTML = ''; const sl = S.slides[S.sel]; if (sl) delete sl._editP; renderMain(); edRender(); save(); }
+function pEdOpen(gid, cx, cy) {
+  const sl = S.slides[S.sel], rec = ((S.liveGeo && S.liveGeo.rec) || []).filter(q => q.gid === gid); if (!sl || !rec.length || !sl.paras[gid]) return false;
+  const frame = $('frameLive'), disp = frame.clientWidth / W, T = curTheme(sl), g = S.liveGeo;
+  const ov = $('pEd') || (() => { const d = document.createElement('div'); d.id = 'pEd'; d.contentEditable = 'true'; d.spellcheck = false; frame.appendChild(d);
+    d.addEventListener('input', () => { const s2 = S.slides[S.sel]; if (!s2 || !s2._editP) return; const [a, n] = s2._editP, T2 = curTheme(s2), ps = [];
+      [...d.children].forEach(div => { const runs = []; const walk = (node, col) => { if (node.nodeType === 3) { const t = node.nodeValue.replace(/ /g, ' '); if (!t) return; const hex = col && col.toUpperCase(), red = !!(hex && hex !== String(T2.text).toUpperCase()), cc = red && hex !== String(T2.red).toUpperCase() ? (hex === String(T2.accent).toUpperCase() ? 'accent' : hex) : undefined, last = runs[runs.length - 1]; if (last && last.red === red && last.c === cc) last.t += t; else runs.push(cc ? { t, red, c: cc } : { t, red }); return; } if (node.nodeType !== 1) return; if (node.nodeName === 'BR') { if (node.nextSibling) { const l = runs[runs.length - 1]; if (l) l.t += '↵'; } return; } const st = node.style && node.style.color ? rgbHex(node.style.color) : null; node.childNodes.forEach(k => walk(k, st || col)); }; div.childNodes.forEach(k => walk(k, null)); if (runs.length) { if (div.dataset.ps) runs[0].ps = div.dataset.ps; ps.push(runs); } });
+      s2.paras.splice(a, n, ...(ps.length ? ps : [])); if (!s2.paras.length) s2.paras = [[{ t: ' ', red: false }]]; s2._editP = [a, Math.max(1, ps.length)]; delete s2.pp; _deck.sig = ''; renderMain(); redrawSoon(); });
+    d.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); d.blur(); } e.stopPropagation(); });
+    d.addEventListener('blur', () => setTimeout(() => { if (!d.contains(document.activeElement)) pEdClose(); }, 120));
+    d.addEventListener('paste', e => { e.preventDefault(); const t = (e.clipboardData || window.clipboardData).getData('text/plain').replace(/\r/g, ''); t.split('\n').forEach((line, i) => { if (i) document.execCommand('insertParagraph'); if (line) document.execCommand('insertText', false, line); }); });
+    return d; })();
+  const p = sl.paras[gid], l0 = rec[0], col = r => !r.red ? T.text : !r.c || r.c === 'red' ? T.red : r.c === 'accent' ? T.accent : r.c;
+  const x0 = Math.min(...rec.map(q => q.x)), y0 = Math.min(...rec.map(q => q.y)), x1 = Math.max(...rec.map(q => q.x + q.w)), al = g.align || 'left';
+  const left = al === 'center' || al === 'right' ? (g.x || x0) : x0, width = al === 'center' || al === 'right' ? (g.maxW || (x1 - x0)) : Math.max(x1 - x0, (g.maxW || 0) - (x0 - (g.x || x0)));
+  ov.innerHTML = `<div${p[0] && p[0].ps ? ` data-ps="${p[0].ps}"` : ''}>` + p.map(r => `<span style="color:${col(r)}">${escH(r.t).replace(/↵/g, '<br>')}</span>`).join('') + '</div>';
+  Object.assign(ov.style, { left: left / W * 100 + '%', top: (y0 - 4) / W * 100 * (W / H) + '%', width: (width + 8) * disp + 'px', font: fnt(l0.head ? 700 : 500, Math.round(l0.size * disp), l0.head, false, l0.scr), lineHeight: (l0.h || l0.size * 1.4) * disp + 'px', textAlign: al, color: T.text });
+  ov.hidden = false; sl._editP = [gid, 1]; renderMain(); ov.focus();
+  const rg = document.caretRangeFromPoint && cx != null ? document.caretRangeFromPoint(cx, cy) : null, s2 = getSelection();
+  if (rg && ov.contains(rg.startContainer)) { s2.removeAllRanges(); s2.addRange(rg); } else { const r2 = document.createRange(); r2.selectNodeContents(ov); r2.collapse(false); s2.removeAllRanges(); s2.addRange(r2); }
+  return true;
+}
