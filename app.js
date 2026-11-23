@@ -52,8 +52,11 @@ function drawBand(c, slide) {
 function drawPic(c, p) {
   const e = imgCache.get(p.src); if (!e) { loadBgImg(p.src).then(x => x && redrawSoon()); return; }
   const im = e.im, cr = p.crop || { l: 0, t: 0, r: 0, b: 0 };
+  const x = p.x * W, y = p.y * H, w = p.w * W, h = p.h * H, rad = (p.rr || 0) * Math.min(w, h) / 2;   // rr：0 直角、1 圓形
   c.save(); if (!p.free) { c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = 26; c.shadowOffsetY = 8; }
-  c.drawImage(im, im.width * cr.l, im.height * cr.t, Math.max(1, im.width * (1 - cr.l - cr.r)), Math.max(1, im.height * (1 - cr.t - cr.b)), p.x * W, p.y * H, p.w * W, p.h * H); c.restore();
+  if (rad > 0) { c.beginPath(); c.roundRect(x, y, w, h, rad); c.clip(); }
+  c.drawImage(im, im.width * cr.l, im.height * cr.t, Math.max(1, im.width * (1 - cr.l - cr.r)), Math.max(1, im.height * (1 - cr.t - cr.b)), x, y, w, h); c.restore();
+  if (p.bd) { const lw = Math.max(2, Math.min(w, h) * .025); c.save(); c.strokeStyle = p.bd; c.lineWidth = lw; c.beginPath(); c.roundRect(x + lw / 2, y + lw / 2, w - lw, h - lw, Math.max(0, rad - lw / 2)); c.stroke(); c.restore(); }   // 邊框畫在照片裡面一圈
 }
 function tagParas(slide) { slide.paras.forEach((p, i) => { p._i = i; }); }
 const measureCtx = mk(10, 10).getContext('2d');
@@ -2021,7 +2024,7 @@ async function loadSavedTpl() { try { const t = await tplDB.get('tpl'); if (t &&
 
 // ---------- 圖片：直接在畫面上選取，拖曳移動、拉四個角縮放（像 PowerPoint） ----------
 const picSel = document.createElement('div'); picSel.className = 'picsel'; picSel.hidden = true;
-picSel.innerHTML = '<i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i><span class="picbtns"><button class="pb" data-pa="crop" type="button">裁切</button><button class="pb" data-pa="fill" type="button" title="放大到整頁，當成背景">鋪滿整頁</button><button class="pb" data-pa="front" type="button" title="放到文字上面">上層</button><button class="pb" data-pa="back" type="button" title="放到最下面">下層</button><button class="pb" data-pa="swap" type="button" title="換成另一張照片">換圖</button><button class="picall" type="button" title="把這張圖放到每一頁的同一個位置">每頁都放</button><button class="picdel" type="button">刪除</button></span>';
+picSel.innerHTML = '<i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i><span class="picbtns"><button class="pb" data-pa="crop" type="button">裁切</button><button class="pb" data-pa="fill" type="button" title="放大到整頁，當成背景">鋪滿整頁</button><button class="pb" data-pa="front" type="button" title="放到文字上面">上層</button><button class="pb" data-pa="back" type="button" title="放到最下面">下層</button><button class="pb" data-pa="round" type="button" title="直角、小圓角、大圓角、圓形輪流換">圓角</button><button class="pb" data-pa="border" type="button" title="沒有、白、黑、主題色輪流換">邊框</button><button class="pb" data-pa="swap" type="button" title="換成另一張照片">換圖</button><button class="picall" type="button" title="把這張圖放到每一頁的同一個位置">每頁都放</button><button class="picdel" type="button">刪除</button></span>';
 $('frameLive').appendChild(picSel);
 let selPic = -1, picPinned = false;
 const picKey = () => S.view === 'strip' ? 'spics' : 'pics', curPics = () => (S.slides[S.sel] || {})[picKey()] || [], curCv = () => $(S.view === 'strip' ? 'cvStrip' : 'cvLive');
@@ -2031,6 +2034,7 @@ function placePicSel(i) {
   if (picSel.parentElement !== fr) fr.appendChild(picSel);
   picSel.querySelector('.picall').hidden = !p.free;
   const bb = picSel.querySelector('.picbtns'); if (bb) { const right = p.x + p.w / 2 > .5; bb.style.left = right ? 'auto' : '0'; bb.style.right = right ? '0' : 'auto'; const low = p.y + p.h > .82; bb.style.top = low ? 'auto' : '100%'; bb.style.bottom = low ? '100%' : 'auto'; bb.style.marginTop = low ? '0' : '10px'; bb.style.marginBottom = low ? '10px' : '0'; }
+  picSel.style.borderRadius = p.rr ? (p.rr >= 1 ? '50%' : p.rr * 50 + '%') : '';
   selPic = i; Object.assign(picSel.style, { left: p.x * 100 + '%', top: p.y * 100 + '%', width: p.w * 100 + '%', height: p.h * 100 + '%' }); picSel.hidden = false;
 }
 function picAt(cx, cy) { const ps = curPics(); for (let i = ps.length - 1; i >= 0; i--) { const p = ps[i]; if (cx >= p.x * W && cx <= (p.x + p.w) * W && cy >= p.y * H && cy <= (p.y + p.h) * H) return i; } return -1; }
@@ -2568,6 +2572,8 @@ picSel.querySelectorAll('[data-pa]').forEach(b => b.onclick = async e => {
   }
   if (act === 'front') { p.z = 'front'; const ps = curPics(); ps.push(ps.splice(selPic, 1)[0]); selPic = ps.length - 1; }
   if (act === 'back') { p.z = 'back'; const ps = curPics(); ps.unshift(ps.splice(selPic, 1)[0]); selPic = 0; }
+  if (act === 'round') { const steps = [0, .12, .3, 1], i = steps.indexOf(p.rr || 0); p.rr = steps[(i + 1) % steps.length]; if (!p.rr) delete p.rr; toast(['直角', '小圓角', '大圓角', '圓形'][steps.indexOf(p.rr || 0)]); }
+  if (act === 'border') { const sl = S.slides[S.sel], acc = sl && sl.orig ? (origColors(sl).ac || curTheme(sl).accent) : curTheme(sl).accent, steps = [null, '#FFFFFF', '#1F1A17', acc], i = Math.max(0, steps.indexOf(p.bd || null)); p.bd = steps[(i + 1) % steps.length]; if (!p.bd) delete p.bd; toast(['沒有邊框', '白色邊框', '黑色邊框', '主題色邊框'][steps.indexOf(p.bd || null)]); }
   if (act === 'swap') {
     const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
     inp.onchange = async () => { const f = inp.files[0]; if (!f) return; const raw = await new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result); r.readAsDataURL(f); }); const src = await shrinkImg(raw, f.type), e3 = await loadBgImg(src); if (!e3) return;
